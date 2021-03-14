@@ -21,8 +21,9 @@ LOCAL_FLAGS  =  -std=$(CXX_STANDARD) -nostdlib
 
 # Sources
 CPP_SRCS    = src/Linux.cpp
-CPP_SRCS   += src/LinuxStorage.cpp
-CPP_SRCS   += src/I2CAdapter.cpp
+#CPP_SRCS   += src/LinuxStorage.cpp
+#CPP_SRCS   += src/I2CAdapter.cpp
+#CPP_SRCS   += src/SPIAdapter.cpp
 
 #CPP_SRCS   += Cryptographic/Cryptographic.cpp
 #CPP_SRCS   += Cryptographic/MbedTLS.cpp

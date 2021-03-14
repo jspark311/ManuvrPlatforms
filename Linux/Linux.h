@@ -24,11 +24,12 @@ This file forms the catch-all for linux platforms that have no support.
 
 #ifndef __PLATFORM_VANILLA_LINUX_H__
 #define __PLATFORM_VANILLA_LINUX_H__
+#include <AbstractPlatform.h>
+
 #include <pthread.h>
 #include <signal.h>
 #include <sys/time.h>
 
-#include <AbstractPlatform.h>
 
 #if defined(CONFIG_MANUVR_STORAGE)
   #include "LinuxStorage.h"
@@ -39,16 +40,37 @@ This file forms the catch-all for linux platforms that have no support.
 #endif
 
 
-// If we were built with CryptoBurrito, we have some additional ratchet-straps.
-#if defined(__HAS_CRYPT_WRAPPER)
-  int8_t internal_integrity_check(uint8_t* test_buf, int test_len);
-  int8_t hash_self();
-#endif
-
-void   init_rng();
-void _close_open_threads();
 int8_t _load_config();       // Called during boot to load configuration.
 
 
+class LinuxPlatform : public AbstractPlatform {
+  public:
+    LinuxPlatform() : AbstractPlatform("Generic") {};
+    ~LinuxPlatform() {};
+
+    /* Obligatory overrides from AbstrctPlatform. */
+    void firmware_reset(uint8_t);
+    void firmware_shutdown(uint8_t);
+    int8_t init();
+    void printDebug(StringBuilder* out);
+
+    /* Threading */
+    int createThread(unsigned long*, void*, ThreadFxnPtr, void*, PlatformThreadOpts*);
+    int deleteThread(unsigned long*);
+    int wakeThread(unsigned long);
+
+    inline int  yieldThread() {    return pthread_yield();   };
+    inline void suspendThread() {  sleep_ms(100);            };   // TODO
+
+
+  private:
+    void   _close_open_threads();
+    void   _init_rng();
+    #if defined(__HAS_CRYPT_WRAPPER)
+      // Additional ratchet-straps (if we were built with CryptoBurrito).
+      int8_t internal_integrity_check(uint8_t* test_buf, int test_len);
+      int8_t hash_self();
+    #endif
+};
 
 #endif  // __PLATFORM_VANILLA_LINUX_H__

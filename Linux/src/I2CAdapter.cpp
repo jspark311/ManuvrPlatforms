@@ -1,9 +1,8 @@
+#include "../Linux.h"
 #include <stdlib.h>
 #include <unistd.h>
+#include <AbstractPlatform.h>
 
-#include "I2CAdapter.h"
-#include <Platform/Platform.h>
-#include <Kernel.h>
 
 #if defined(CONFIG_MANUVR_I2C)
 #include <linux/i2c-dev.h>

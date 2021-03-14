@@ -29,7 +29,9 @@ For instance: On a RasPi v1 with the kernel driver loaded we have...
   ...for CS0 and CS1.
 */
 
-#include <Platform/Peripherals/SPI/SPIAdapter.h>
+#include "../Linux.h"
+#include <AbstractPlatform.h>
+#include <SPIAdapter.h>
 
 #include <stdint.h>
 #include <unistd.h>

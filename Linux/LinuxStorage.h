@@ -27,7 +27,6 @@ Implemented as a CBOR object within a single file. This feature therefore
 #ifndef __MANUVR_LINUX_STORAGE_H__
 #define __MANUVR_LINUX_STORAGE_H__
 
-#include <EventReceiver.h>
 #include <Storage.h>
 
 #ifndef MANUVR_CBOR
