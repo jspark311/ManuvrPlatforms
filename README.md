@@ -14,8 +14,9 @@ The notion of "Platform" was cut back down to basics and moved to CppPotpourri, 
 
 ### On Arduino
 
-I admire Arduino for having made their API as general and portable as they have managed to do, despite hating the choices sometimes. Some of the things I think they nailed, and which I want to replicate....
+I admire Arduino for having made their API as general and portable as they have managed to do, despite hating the choices sometimes. Some of the things I think they nailed, and which I want to perpetuate...
 
+* Board-level abstractions as being distinct from the deeper abstractions associated with MCUs or software environments.
 
 
 
@@ -34,7 +35,7 @@ For now, all build systems and strategies are treated isomorphically. That is: T
 Suffer.
 
 
-### And now, a list a values that Nature will allow us the luxery of holding....
+### And now, a list a values that Nature will allow us the luxury of holding....
 
 #### ...some of the time
 
