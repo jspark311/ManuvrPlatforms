@@ -32,6 +32,8 @@ CBOR data begins at offset 4. The first uint32 is broken up this way:
   3       | LSB of free-space (max, 2044)
 */
 
+#if defined(__MK20DX256__) || defined(__MK20DX128__)
+
 #include <Platform/Platform.h>
 #include <Platform/Targets/Teensy3/TeensyStorage.h>
 
@@ -306,3 +308,5 @@ int8_t TeensyStorage::notify(ManuvrMsg* active_event) {
 //}
 //#endif   // MANUVR_CONSOLE_SUPPORT
 #endif   // __MANUVR_LINUX & CONFIG_MANUVR_STORAGE
+
+#endif   // defined(__MK20DX256__) || defined(__MK20DX128__)

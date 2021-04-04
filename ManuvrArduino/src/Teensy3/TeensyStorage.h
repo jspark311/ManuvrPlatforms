@@ -21,6 +21,8 @@ limitations under the License.
 Data-persistence layer for Teensy.
 */
 
+#if defined(__MK20DX256__) || defined(__MK20DX128__)
+
 #ifndef __MANUVR_TEENSY_STORAGE_H__
 #define __MANUVR_TEENSY_STORAGE_H__
 
@@ -60,3 +62,6 @@ class TeensyStorage : public EventReceiver, public Storage {
 };
 
 #endif // __MANUVR_TEENSY_STORAGE_H__
+
+
+#endif   // defined(__MK20DX256__) || defined(__MK20DX128__)

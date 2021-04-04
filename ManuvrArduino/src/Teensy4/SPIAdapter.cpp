@@ -6,7 +6,8 @@ Date:   2016.12.17
 Hardware-specific SPI implementation for Teensy4.
 */
 
-// TODO: Hax.... Cmake should be making this unnecessary.
+#if defined(__IMXRT1052__) || defined(__IMXRT1062__)
+
 #include <AbstractPlatform.h>
 #include <SPIAdapter.h>
 #include <SPI.h>
@@ -155,3 +156,5 @@ int8_t SPIAdapter::bus_init() {
 int8_t SPIAdapter::bus_deinit() {
   return 0;
 }
+
+#endif // defined(__IMXRT1052__) || defined(__IMXRT1062__)

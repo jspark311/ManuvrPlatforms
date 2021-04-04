@@ -1,7 +1,12 @@
-// TODO: Hax.... Cmake should be making this unnecessary.
+/*
+* Teensy4
+*/
+#if defined(__IMXRT1052__) || defined(__IMXRT1062__)
+
 #include <AbstractPlatform.h>
 #include <I2CAdapter.h>
 #include <Wire.h>
+
 
 #define ACK_CHECK_EN   0x01     /*!< I2C master will check ack from slave*/
 #define ACK_CHECK_DIS  0x00     /*!< I2C master will not check ack from slave */
@@ -205,3 +210,7 @@ XferFault I2CBusOp::begin() {
 XferFault I2CBusOp::advance(uint32_t status_reg) {
   return getFault();
 }
+
+
+
+#endif // defined(__IMXRT1052__) || defined(__IMXRT1062__)

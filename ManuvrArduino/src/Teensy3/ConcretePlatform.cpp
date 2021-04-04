@@ -26,12 +26,12 @@ This file is meant to contain a set of common functions that are typically platf
     * Access a true RNG (if it exists)
 */
 
+#if defined(__MK20DX256__) || defined(__MK20DX128__)
 
-#include <CommonConstants.h>
-#include <Platform/Platform.h>
+#include "../ManuvrPlatform.h"
 
 #if defined(CONFIG_MANUVR_STORAGE)
-#include <Platform/Targets/Teensy3/TeensyStorage.h>
+#include "TeensyStorage.h"
 #endif
 
 #include <wiring.h>
@@ -77,8 +77,7 @@ volatile uint32_t next_random_int[PLATFORM_RNG_CARRY_CAPACITY];
 * @return   A 32-bit unsigned random number. This can be cast as needed.
 */
 uint32_t randomUInt32() {
-  uint32_t return_value = rand();
-  return return_value;
+  return ((uint32_t) random(2147483647)) ^ (((uint32_t) random(2147483647)) << 1);
 }
 
 /**
@@ -432,3 +431,6 @@ int8_t Teensy3::platformPostInit() {
   #endif
   return 0;
 }
+
+
+#endif   // defined(__MK20DX256__) || defined(__MK20DX128__)

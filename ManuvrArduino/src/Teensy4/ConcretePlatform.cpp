@@ -1,6 +1,9 @@
 /*
 * This is the platform abstraction for the Teensyduino environment.
 */
+
+#if defined(__IMXRT1052__) || defined(__IMXRT1062__)
+
 #include <AbstractPlatform.h>
 #include <StringBuilder.h>
 
@@ -19,7 +22,7 @@ static volatile uint32_t tick_count = 0;   // The timebase for the rest of the p
 *******************************************************************************/
 
 uint32_t randomUInt32() {
-  return ((uint32_t) random(2147483647)) | ((uint32_t) random(2147483647)) << 1;
+  return ((uint32_t) random(2147483647)) ^ (((uint32_t) random(2147483647)) << 1);
 }
 
 /*******************************************************************************
@@ -216,3 +219,6 @@ void currentDateTime(StringBuilder* output) {
 int8_t platform_init() {
   return 0;
 }
+
+
+#endif // defined(__IMXRT1052__) || defined(__IMXRT1062__)
