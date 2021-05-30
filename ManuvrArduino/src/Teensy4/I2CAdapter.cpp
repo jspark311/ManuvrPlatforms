@@ -5,7 +5,7 @@
 
 #include <AbstractPlatform.h>
 #include <I2CAdapter.h>
-#include <Wire.h>
+#include "ManuvrArduino.h"
 
 
 #define ACK_CHECK_EN   0x01     /*!< I2C master will check ack from slave*/
@@ -28,18 +28,18 @@
 int8_t I2CAdapter::bus_init() {
   switch (ADAPTER_NUM) {
     case 0:
-      Wire.setSDA(_bus_opts.sda_pin);
-      Wire.setSCL(_bus_opts.scl_pin);
-      Wire.setClock(_bus_opts.freq);
-      Wire.begin();
-      busOnline(true);
+      if ((18 == _bus_opts.sda_pin) && (19 == _bus_opts.scl_pin)) {
+        Wire.setClock(_bus_opts.freq);
+        Wire.begin();
+        busOnline(true);
+      }
       break;
     case 1:
-      Wire1.setSDA(_bus_opts.sda_pin);
-      Wire1.setSCL(_bus_opts.scl_pin);
-      Wire1.setClock(_bus_opts.freq);
-      Wire1.begin();
-      busOnline(true);
+      if ((17 == _bus_opts.sda_pin) && (16 == _bus_opts.scl_pin)) {
+        Wire1.setClock(_bus_opts.freq);
+        Wire1.begin();
+        busOnline(true);
+      }
       break;
     default:
       break;

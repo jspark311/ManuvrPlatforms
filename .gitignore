@@ -1,0 +1,16 @@
+.directory
+*.gch
+*.o
+*.a
+*.d
+*.map
+
+# Example binaries
+
+# cmake artifacts
+CMakeCache.txt
+CMakeFiles/
+
+# Generated doc
+extras/doc/doxygen/
+extras/unit_tests/build/

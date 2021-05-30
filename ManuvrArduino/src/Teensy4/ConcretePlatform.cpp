@@ -4,11 +4,11 @@
 
 #if defined(__IMXRT1052__) || defined(__IMXRT1062__)
 
-#include <AbstractPlatform.h>
+#include "../ManuvrArduino.h"
 #include <StringBuilder.h>
 
-
-static volatile uint32_t tick_count = 0;   // The timebase for the rest of the program.
+ArduinoPlatform platform;
+AbstractPlatform* platformObj() {   return (AbstractPlatform*) &platform;   }
 
 
 /*******************************************************************************
@@ -17,13 +17,71 @@ static volatile uint32_t tick_count = 0;   // The timebase for the rest of the p
 
 
 /*******************************************************************************
-* Platform interrupts that we handle in a uniform manner.
-* These are not exposed in the header file.
+* RNG                                                                          *
 *******************************************************************************/
 
+
+/**
+* Dead-simple interface to the RNG.
+*
+* @return   A 32-bit unsigned random number. This can be cast as needed.
+*/
 uint32_t randomUInt32() {
   return ((uint32_t) random(2147483647)) ^ (((uint32_t) random(2147483647)) << 1);
 }
+
+/**
+* Fills the given buffer with random bytes.
+* Blocks if there is nothing random available.
+*
+* @param uint8_t* The buffer to fill.
+* @param size_t The number of bytes to write to the buffer.
+* @return 0, always.
+*/
+int8_t random_fill(uint8_t* buf, size_t len) {
+  int written_len = 0;
+  while (4 <= (len - written_len)) {
+    // If we have slots for them, just up-cast and write 4-at-a-time.
+    *((uint32_t*) (buf + written_len)) = randomUInt32();
+    written_len += 4;
+  }
+  uint32_t slack = randomUInt32();
+  while (0 < (len - written_len)) {
+    *(buf + written_len) = (uint8_t) 0xFF & slack;
+    slack = slack >> 8;
+    written_len++;
+  }
+  return 0;
+}
+
+
+/**
+* Init the RNG. Short and sweet.
+*/
+void ArduinoPlatform::_init_rng() {
+  // TODO: Seed the PRNG...
+  _alter_flags(true, ABSTRACT_PF_FLAG_RNG_READY);
+}
+
+
+/*******************************************************************************
+*  ___   _           _      ___
+* (  _`\(_ )        ( )_  /'___)
+* | |_) )| |    _ _ | ,_)| (__   _    _ __   ___ ___
+* | ,__/'| |  /'_` )| |  | ,__)/'_`\ ( '__)/' _ ` _ `\
+* | |    | | ( (_| || |_ | |  ( (_) )| |   | ( ) ( ) |
+* (_)   (___)`\__,_)`\__)(_)  `\___/'(_)   (_) (_) (_)
+* These are overrides and additions to the platform class.
+*******************************************************************************/
+
+void ArduinoPlatform::printDebug(StringBuilder* output) {
+  output->concatf(
+    "==< Arduino [%s] >=============================\n",
+    _board_name
+  );
+  _print_abstract_debug(output);
+}
+
 
 /*******************************************************************************
 * Time and date                                                                *
@@ -103,8 +161,24 @@ uint32_t randomUInt32() {
 
 
 /*******************************************************************************
-* Clock handling
+* Process control                                                              *
 *******************************************************************************/
+
+/*
+* Terminate this running process, along with any children it may have forked() off.
+*/
+void ArduinoPlatform::firmware_reset(uint8_t reason) {
+  while(true);  // TODO: This
+}
+
+/*
+* On linux, we take this to mean: scheule a program restart with the OS,
+*   and then terminate this one.
+*/
+void ArduinoPlatform::firmware_shutdown(uint8_t reason) {
+  while(true);  // TODO: This
+}
+
 
 
 /*******************************************************************************
@@ -212,13 +286,24 @@ void currentDateTime(StringBuilder* output) {
 /*******************************************************************************
 * Platform initialization.                                                     *
 *******************************************************************************/
+#define  DEFAULT_PLATFORM_FLAGS   0
 
-/*
-* Do the boilerplate setup of the MCU that all applications will require.
+/**
+* Init that needs to happen prior to kernel bootstrap().
+* This is the final function called by the kernel constructor.
 */
-int8_t platform_init() {
+int8_t ArduinoPlatform::init() {
+  _discover_alu_params();
+
+  uint32_t default_flags = DEFAULT_PLATFORM_FLAGS;
+  _alter_flags(true, default_flags);
+
+  _init_rng();
+
+  #if defined(__HAS_CRYPT_WRAPPER)
+  #endif
+
   return 0;
 }
-
 
 #endif // defined(__IMXRT1052__) || defined(__IMXRT1062__)

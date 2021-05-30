@@ -717,7 +717,7 @@ int8_t LinuxPlatform::init() {
   #endif
 
   #if defined(__HAS_CRYPT_WRAPPER)
-  hash_self();
+  _hash_self();
   //internal_integrity_check(nullptr, 0);
   #endif
 
@@ -726,6 +726,4 @@ int8_t LinuxPlatform::init() {
 }
 
 
-int8_t platform_init() {
-  return platform.init();
-}
+AbstractPlatform* platformObj() {   return (AbstractPlatform*) &platform;   }

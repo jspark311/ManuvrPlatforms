@@ -69,8 +69,13 @@ class LinuxPlatform : public AbstractPlatform {
     #if defined(__HAS_CRYPT_WRAPPER)
       // Additional ratchet-straps (if we were built with CryptoBurrito).
       int8_t internal_integrity_check(uint8_t* test_buf, int test_len);
-      int8_t hash_self();
+      int8_t _hash_self();
     #endif
 };
+
+// Any source file that needs platform member functions should be able to access
+//   them this way.
+extern LinuxPlatform platform;
+
 
 #endif  // __PLATFORM_VANILLA_LINUX_H__
