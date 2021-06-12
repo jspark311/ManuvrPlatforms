@@ -14,7 +14,7 @@
   // Teensy4 support uses a library capable of async operation.
   // https://github.com/Richard-Gemmell/teensy4_i2c
   #include <i2c_driver.h>
-  #include <i2c_driver_wire.h>
+  #include "imx_rt1060/imx_rt1060_i2c_driver.h"
 #elif defined(__MK20DX256__) || defined(__MK20DX128__)
   /* Teensy3 */
   #define __MAPF_ID_STRING  "Teensy3"

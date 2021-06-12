@@ -6,7 +6,11 @@
 #include <AbstractPlatform.h>
 #include <I2CAdapter.h>
 #include "ManuvrArduino.h"
+#include "imx_rt1060/imx_rt1060_i2c_driver.h"
 
+
+I2CMaster& master0 = Master;     // Pins 19 and 18; SCL0 and SDA0
+I2CMaster& master1 = Master1;    // Pins 16 and 17; SCL1 and SDA1
 
 #define ACK_CHECK_EN   0x01     /*!< I2C master will check ack from slave*/
 #define ACK_CHECK_DIS  0x00     /*!< I2C master will not check ack from slave */
@@ -20,7 +24,6 @@
 *                             |              a BusOp as the template param.
 *******************************************************************************/
 
-
 /*
 * Init the hardware for the bus.
 * There is only one correct pin combination for each i2c bus (surprisingly).
@@ -29,15 +32,13 @@ int8_t I2CAdapter::bus_init() {
   switch (ADAPTER_NUM) {
     case 0:
       if ((18 == _bus_opts.sda_pin) && (19 == _bus_opts.scl_pin)) {
-        Wire.setClock(_bus_opts.freq);
-        Wire.begin();
+        master0.begin(_bus_opts.freq);
         busOnline(true);
       }
       break;
     case 1:
       if ((17 == _bus_opts.sda_pin) && (16 == _bus_opts.scl_pin)) {
-        Wire1.setClock(_bus_opts.freq);
-        Wire1.begin();
+        master1.begin(_bus_opts.freq);
         busOnline(true);
       }
       break;
@@ -86,117 +87,47 @@ int8_t I2CAdapter::generateStop() {
 *******************************************************************************/
 
 XferFault I2CBusOp::begin() {
+  I2CMaster* adptr = nullptr;
   uint8_t ord = 0;
-  set_state(XferState::INITIATE);  // Indicate that we now have bus control.
   switch (device->adapterNumber()) {
-    case 0:
-      switch (get_opcode()) {
-        case BusOpcode::TX_CMD:
-          set_state(XferState::TX_WAIT);
-          Wire.beginTransmission(dev_addr);
-          if (0 != Wire.endTransmission()) {
-            abort(XferFault::DEV_NOT_FOUND);
-          }
-          break;
-        case BusOpcode::TX:
-          Wire.beginTransmission(dev_addr);
-          if (need_to_send_subaddr()) {
-            set_state(XferState::ADDR);
-            Wire.write(sub_addr);
-          }
-          set_state(XferState::TX_WAIT);
-          while (ord < _buf_len) {
-            Wire.write(*(_buf + ord++));
-          }
-          set_fault((0 == Wire.endTransmission()) ? XferFault::NONE : XferFault::BUS_FAULT);
-          break;
-        case BusOpcode::RX:
-          {
-            const uint8_t READ_BLOCK_SIZE = 32;
-            uint8_t dev_reg = sub_addr;
-            bool block_continue = true;
-            while (block_continue && (ord < _buf_len)) {
-              const uint8_t THIS_BLK_SIZE = strict_min(READ_BLOCK_SIZE, (_buf_len - ord));
-              uint8_t btr = 0;
-              if (sub_addr != -1) {
-                Wire.beginTransmission(dev_addr);
-                Wire.write(dev_reg);
-                Wire.endTransmission(false);
-              }
-              Wire.requestFrom(dev_addr, THIS_BLK_SIZE);
-              while (Wire.available()) {
-                *(_buf + ord++) = Wire.read();
-                btr++;
-              }
-              block_continue = (0 == Wire.endTransmission()) && (btr == THIS_BLK_SIZE);
-              //block_continue = (btr == THIS_BLK_SIZE);
-              dev_reg += THIS_BLK_SIZE;
-            }
-            set_fault((_buf_len == ord) ? XferFault::NONE : XferFault::BUS_FAULT);
-          }
-          break;
-        default:
-          abort(XferFault::BAD_PARAM);
-          break;
+    case 0:    adptr = &master0;             break;
+    case 1:    adptr = &master1;             break;
+    default:   abort(XferFault::BAD_PARAM);  return getFault();
+  }
+  set_state(XferState::INITIATE);  // Indicate that we now have bus control.
+
+  switch (get_opcode()) {
+    case BusOpcode::TX_CMD:
+      set_state(XferState::TX_WAIT);
+      adptr->write_async(dev_addr, _buf, 0, true);
+      break;
+
+    case BusOpcode::TX:
+      if (need_to_send_subaddr()) {
+        set_state(XferState::ADDR);
+        adptr->write_async(dev_addr, (uint8_t*) &sub_addr, 1, false);
+      }
+      else {
+        set_state(XferState::TX_WAIT);
+        adptr->write_async(dev_addr, _buf, _buf_len, true);
       }
       break;
 
-    case 1:
-      switch (get_opcode()) {
-        case BusOpcode::TX_CMD:
-          set_state(XferState::TX_WAIT);
-          Wire1.beginTransmission(dev_addr);
-          if (0 != Wire1.endTransmission()) {
-            abort(XferFault::DEV_NOT_FOUND);
-          }
-          break;
-        case BusOpcode::TX:
-          Wire1.beginTransmission(dev_addr);
-          if (need_to_send_subaddr()) {
-            set_state(XferState::ADDR);
-            Wire1.write(sub_addr);
-          }
-          set_state(XferState::TX_WAIT);
-          while (ord < _buf_len) {
-            Wire1.write(*(_buf + ord++));
-          }
-          set_fault((0 == Wire1.endTransmission()) ? XferFault::NONE : XferFault::BUS_FAULT);
-          break;
-        case BusOpcode::RX:
-          {
-            const uint8_t READ_BLOCK_SIZE = 32;
-            uint8_t dev_reg = sub_addr;
-            bool block_continue = true;
-            while (block_continue && (ord < _buf_len)) {
-              const uint8_t THIS_BLK_SIZE = strict_min(READ_BLOCK_SIZE, (_buf_len - ord));
-              uint8_t btr = 0;
-              if (sub_addr != -1) {
-                Wire1.beginTransmission(dev_addr);
-                Wire1.write(dev_reg);
-                Wire1.endTransmission(false);
-              }
-              Wire1.requestFrom(dev_addr, THIS_BLK_SIZE);
-              while (Wire1.available()) {
-                *(_buf + ord++) = Wire1.read();
-                btr++;
-              }
-              block_continue = (0 == Wire1.endTransmission()) && (btr == THIS_BLK_SIZE);
-              //block_continue = (btr == THIS_BLK_SIZE);
-              dev_reg += THIS_BLK_SIZE;
-            }
-            set_fault((_buf_len == ord) ? XferFault::NONE : XferFault::BUS_FAULT);
-          }
-          break;
-        default:
-          abort(XferFault::BAD_PARAM);
-          break;
+    case BusOpcode::RX:
+      if (need_to_send_subaddr()) {
+        set_state(XferState::ADDR);
+        adptr->write_async(dev_addr, (uint8_t*) &sub_addr, 1, false);
+      }
+      else {
+        set_state(XferState::RX_WAIT);
+        adptr->read_async(dev_addr, _buf, _buf_len, true);
       }
       break;
+
     default:
       abort(XferFault::BAD_PARAM);
       break;
   }
-  markComplete();
   return getFault();
 }
 
@@ -208,9 +139,82 @@ XferFault I2CBusOp::begin() {
 *   from an I/O thread.
 */
 XferFault I2CBusOp::advance(uint32_t status_reg) {
+  XferFault ret = XferFault::NONE;
+  I2CMaster* adptr = nullptr;
+  switch (device->adapterNumber()) {
+    case 0:    adptr = &master0;             break;
+    case 1:    adptr = &master1;             break;
+    default:   abort(XferFault::BAD_PARAM);  return getFault();
+  }
+  switch (get_state()) {
+    case XferState::UNDEF:
+    case XferState::IDLE:
+    case XferState::QUEUED:
+    case XferState::INITIATE:
+      break;
+    case XferState::ADDR:
+      if (adptr->finished()) {
+        switch (get_opcode()) {
+          case BusOpcode::RX:
+            if (adptr->get_bytes_transferred() == 1) {
+              set_state(XferState::RX_WAIT);
+              adptr->read_async(dev_addr, _buf, _buf_len, true);
+            }
+            else {
+              abort(XferFault::DEV_NOT_FOUND);
+            }
+            break;
+          case BusOpcode::TX:
+            if (adptr->get_bytes_transferred() == 1) {
+              set_state(XferState::TX_WAIT);
+              adptr->write_async(dev_addr, _buf, _buf_len, true);
+            }
+            else {
+              abort(XferFault::DEV_NOT_FOUND);
+            }
+            break;
+          default:
+            abort(XferFault::ILLEGAL_STATE);
+            break;
+        }
+      }
+      break;
+    case XferState::TX_WAIT:
+    case XferState::RX_WAIT:
+      if (adptr->finished()) {
+        switch (get_opcode()) {
+          case BusOpcode::RX:
+          case BusOpcode::TX:
+            if (adptr->get_bytes_transferred() != _buf_len) {
+              abort(XferFault::BUS_FAULT);
+            }
+            else {
+              markComplete();
+            }
+            break;
+          case BusOpcode::TX_CMD:
+            if (adptr->get_bytes_transferred() > 1) {
+              abort(XferFault::DEV_NOT_FOUND);
+            }
+            else {
+              markComplete();
+            }
+            break;
+          default:
+            abort(XferFault::ILLEGAL_STATE);
+            break;
+        }
+      }
+      break;
+    case XferState::STOP:
+      markComplete();
+      break;
+    case XferState::COMPLETE:
+    case XferState::FAULT:
+    default:
+      break;
+  }
   return getFault();
 }
-
-
 
 #endif // defined(__IMXRT1052__) || defined(__IMXRT1062__)

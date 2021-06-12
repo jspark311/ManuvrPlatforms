@@ -168,7 +168,8 @@ void ArduinoPlatform::printDebug(StringBuilder* output) {
 * Terminate this running process, along with any children it may have forked() off.
 */
 void ArduinoPlatform::firmware_reset(uint8_t reason) {
-  while(true);  // TODO: This
+  (*(uint32_t*)0xE000ED0C) = 0x5FA0004;
+  while(true);
 }
 
 /*
