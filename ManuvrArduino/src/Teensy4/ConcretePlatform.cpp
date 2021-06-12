@@ -86,10 +86,6 @@ void ArduinoPlatform::printDebug(StringBuilder* output) {
 /*******************************************************************************
 * Time and date                                                                *
 *******************************************************************************/
-  // Arduino has these.
-  //uint32_t millis();
-  //uint32_t micros();
-
   /* Delay functions */
   // TODO: Install handler and sleep instead of burn the clock?
   void sleep_ms(uint32_t ms) {
@@ -164,20 +160,26 @@ void ArduinoPlatform::printDebug(StringBuilder* output) {
 * Process control                                                              *
 *******************************************************************************/
 
-/*
-* Terminate this running process, along with any children it may have forked() off.
+/**
+* Cause the CPU to reboot.
+* Does not return.
+*
+* @param An app-specific byte to be stored in NVRAM as the restart reason.
 */
 void ArduinoPlatform::firmware_reset(uint8_t reason) {
   (*(uint32_t*)0xE000ED0C) = 0x5FA0004;
   while(true);
 }
 
-/*
-* On linux, we take this to mean: scheule a program restart with the OS,
-*   and then terminate this one.
+/**
+* This doesn't make sense on a platform that has a hardware PMIC. This will
+*   simply reboot the MCU.
+* Does not return.
+*
+* @param An app-specific byte to be stored in NVRAM as the restart reason.
 */
 void ArduinoPlatform::firmware_shutdown(uint8_t reason) {
-  while(true);  // TODO: This
+  firmware_reset(0);
 }
 
 
