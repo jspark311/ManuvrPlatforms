@@ -38,10 +38,9 @@ Noteworth snippit from the ESP-IDF doc:
 > idf.py erase_flash target to erase all contents of the flash chip.
 
 */
-
+#include "../ESP32.h"
 #include "esp_system.h"
-#include "ESP32Storage.h"
-#include <Platform/Platform.h>
+
 
 #if defined(CONFIG_MANUVR_STORAGE)
 

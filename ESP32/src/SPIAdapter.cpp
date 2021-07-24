@@ -18,8 +18,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 */
+#include "../ESP32.h"
 #include <SPIAdapter.h>
-#include <Platform/Platform.h>
 
 #if defined(CONFIG_MANUVR_SUPPORT_SPI)
 

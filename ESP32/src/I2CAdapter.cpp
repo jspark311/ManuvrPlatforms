@@ -1,7 +1,6 @@
+#include "../ESP32.h"
 #include <I2CAdapter.h>
-#include <Platform/Platform.h>
 
-#if defined(CONFIG_MANUVR_I2C)
 #include "driver/i2c.h"
 #include "esp_task_wdt.h"
 
@@ -11,6 +10,7 @@
 static volatile I2CBusOp* _threaded_op[2] = {nullptr, nullptr};
 
 TaskHandle_t static_i2c_thread_id = 0;
+
 
 static void* IRAM_ATTR i2c_worker_thread(void* arg) {
   while (!platform.nominalState()) {
@@ -32,7 +32,6 @@ static void* IRAM_ATTR i2c_worker_thread(void* arg) {
   }
   return nullptr;
 }
-
 
 
 
@@ -211,5 +210,3 @@ XferFault I2CBusOp::advance(uint32_t status_reg) {
 
   return getFault();
 }
-
-#endif  // CONFIG_MANUVR_I2C

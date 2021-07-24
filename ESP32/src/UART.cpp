@@ -1,5 +1,5 @@
-#include <Platform/Platform.h>
-#include <Platform/Peripherals/UART/UART.h>
+#include "../ESP32.h"
+#include <UARTAdapter.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -12,7 +12,7 @@ extern "C" {
 
 static const char* TAG = "uart_drvr";
 QueueHandle_t uart_queues[]  = {nullptr, nullptr, nullptr};
-ManuvrUART* uart_instances[] = {nullptr, nullptr, nullptr};
+UARTAdapter* uart_instances[] = {nullptr, nullptr, nullptr};
 
 
 

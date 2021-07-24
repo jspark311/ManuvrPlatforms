@@ -18,18 +18,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-This file is meant to contain a set of common functions that are typically platform-dependent.
-  The goal is to make a class instance that is pre-processor-selectable for instantiation by the
-  kernel, thereby giving the kernel the ability to...
-    * Access the realtime clock (if applicatble)
-    * Get definitions for GPIO pins.
-    * Access a true RNG (if it exists)
+This file contains platform support for the ESP32.
 */
 
-
-#include <CommonConstants.h>
-#include <Platform/Platform.h>
-#include "ESP32.h"
+#include "../ESP32.h"
 
 #include "sdkconfig.h"
 #include "esp_system.h"
@@ -43,16 +35,33 @@ This file is meant to contain a set of common functions that are typically platf
 #include "esp32/rom/ets_sys.h"
 
 
-#if defined(CONFIG_MANUVR_STORAGE)
-  #include "ESP32Storage.h"
+#if !defined(PLATFORM_RNG_CARRY_CAPACITY)
+  #define PLATFORM_RNG_CARRY_CAPACITY    32
 #endif
 
-#if defined(MANUVR_CONSOLE_SUPPORT)
-  #include <Transports/StandardIO/StandardIO.h>
-  #include <XenoSession/Console/ManuvrConsole.h>
-#endif
 
-volatile PlatformGPIODef gpio_pins[PLATFORM_GPIO_PIN_COUNT];
+/* This is how we conceptualize a GPIO pin. */
+// TODO: I'm fairly sure this sucks. It's too needlessly memory heavy to
+//         define 60 pins this way. Can't add to a list of const's, so it can't
+//         be both run-time definable AND const.
+typedef struct __platform_gpio_def {
+  FxnPointer fxn;
+  uint8_t    pin;
+  GPIOMode   mode;
+  uint8_t    flags;
+  uint8_t    PADDING;
+} PlatformGPIODef;
+
+
+
+volatile PlatformGPIODef gpio_pins[GPIO_PIN_COUNT];
+volatile static uint32_t     randomness_pool[PLATFORM_RNG_CARRY_CAPACITY];
+volatile static unsigned int _random_pool_r_ptr = 0;
+volatile static unsigned int _random_pool_w_ptr = 0;
+static long unsigned int rng_thread_id = 0;
+static bool using_wifi_peripheral = false;
+static bool using_adc1            = false;
+static bool using_adc2            = false;
 
 
 /*******************************************************************************
@@ -63,13 +72,6 @@ volatile PlatformGPIODef gpio_pins[PLATFORM_GPIO_PIN_COUNT];
 /*******************************************************************************
 * Randomness                                                                   *
 *******************************************************************************/
-volatile static uint32_t     randomness_pool[PLATFORM_RNG_CARRY_CAPACITY];
-volatile static unsigned int _random_pool_r_ptr = 0;
-volatile static unsigned int _random_pool_w_ptr = 0;
-static long unsigned int rng_thread_id = 0;
-static bool using_wifi_peripheral = false;
-static bool using_adc1            = false;
-static bool using_adc2            = false;
 
 /**
 * Dead-simple interface to the RNG. Despite the fact that it is interrupt-driven, we may resort
@@ -113,10 +115,9 @@ static void IRAM_ATTR dev_urandom_reader(void* unused_param) {
 * These are overrides and additions to the platform class.
 *******************************************************************************/
 void ESP32Platform::printDebug(StringBuilder* output) {
-  output->concatf("==< ESP32 [%s] >==================================\n", getPlatformStateStr(platformState()));
-  output->concatf("-- ESP-IDF version:    %s\n", esp_get_idf_version());
+  output->concatf("==< ESP32 [IDF version %s] >==================================\n", _board_name);
   output->concatf("-- Heap Free/Minimum:  %u/%u\n", esp_get_free_heap_size(), esp_get_minimum_free_heap_size());
-  ManuvrPlatform::printDebug(output);
+  _print_abstract_debug(output);
 }
 
 
@@ -250,9 +251,6 @@ static void gpio_task_handler(void* arg) {
         if (nullptr != gpio_pins[io_num].fxn) {
           gpio_pins[io_num].fxn();
         }
-        if (nullptr != gpio_pins[io_num].event) {
-          Kernel::isrRaiseEvent(gpio_pins[io_num].event);
-        }
       }
     }
   }
@@ -268,8 +266,7 @@ static void gpio_task_handler(void* arg) {
 */
 void gpioSetup() {
   // Null-out all the pin definitions in preparation for assignment.
-  for (uint8_t i = 0; i < PLATFORM_GPIO_PIN_COUNT; i++) {
-    gpio_pins[i].event = 0;      // No event assigned.
+  for (uint8_t i = 0; i < GPIO_PIN_COUNT; i++) {
     gpio_pins[i].fxn   = 0;      // No function pointer.
     gpio_pins[i].mode  = GPIOMode::INPUT;  // All pins begin as inputs.
     gpio_pins[i].pin   = i;      // The pin number.
@@ -424,19 +421,8 @@ int8_t pinMode(uint8_t pin, GPIOMode mode) {
 void unsetPinIRQ(uint8_t pin) {
   if (GPIO_IS_VALID_GPIO(pin)) {
     gpio_isr_handler_remove((gpio_num_t) pin);
-    gpio_pins[pin].event = 0;      // No event assigned.
     gpio_pins[pin].fxn   = 0;      // No function pointer.
   }
-}
-
-
-
-int8_t setPinEvent(uint8_t pin, IRQCondition condition, ManuvrMsg* isr_event) {
-  if (0 == setPinFxn(pin, condition, gpio_pins[pin].fxn)) {
-    gpio_pins[pin].event = isr_event;
-    return 0;
-  }
-  return -1;
 }
 
 
@@ -501,7 +487,7 @@ int8_t IRAM_ATTR readPin(uint8_t pin) {
 }
 
 
-int8_t setPinAnalog(uint8_t pin, int val) {
+int8_t analogWrite(uint8_t pin, float percentage) {
   return 0;
 }
 
@@ -581,43 +567,21 @@ int readPinAnalog(uint8_t pin) {
 *******************************************************************************/
 
 /*
-* Terminate this running process, along with any children it may have forked() off.
+* Causes immediate reboot.
 * Never returns.
 */
-void ESP32Platform::seppuku() {
-  reboot();
-}
-
-
-/*
-* Jump to the bootloader.
-* Never returns.
-*/
-void ESP32Platform::jumpToBootloader() {
+void ESP32Platform::firmware_reset(uint8_t val) {
   esp_restart();
 }
-
-
-/*******************************************************************************
-* Underlying system control.                                                   *
-*******************************************************************************/
 
 /*
 * This means "Halt" on a base-metal build.
 * Never returns.
 */
-void ESP32Platform::hardwareShutdown() {
+void ESP32Platform::firmware_shutdown(uint8_t) {
   while(true) {
     sleep_ms(60000);
   }
-}
-
-/*
-* Causes immediate reboot.
-* Never returns.
-*/
-void ESP32Platform::reboot() {
-  esp_restart();
 }
 
 
@@ -626,68 +590,55 @@ void ESP32Platform::reboot() {
 * Platform initialization.                                                     *
 *******************************************************************************/
 #define  DEFAULT_PLATFORM_FLAGS ( \
-              MANUVR_PLAT_FLAG_INNATE_DATETIME | \
-              MANUVR_PLAT_FLAG_SERIALED | \
-              MANUVR_PLAT_FLAG_HAS_IDENTITY)
+              ABSTRACT_PF_FLAG_INNATE_DATETIME | \
+              ABSTRACT_PF_FLAG_SERIALED | \
+              ABSTRACT_PF_FLAG_HAS_IDENTITY)
 
 /*
 * Init that needs to happen prior to kernel bootstrap().
 * This is the final function called by the kernel constructor.
 */
-int8_t ESP32Platform::platformPreInit(Argument* root_config) {
-  ManuvrPlatform::platformPreInit(root_config);
+int8_t ESP32Platform::init() {
+  _discover_alu_params();
+
   for (uint8_t i = 0; i < PLATFORM_RNG_CARRY_CAPACITY; i++) randomness_pool[i] = 0;
   _alter_flags(true, DEFAULT_PLATFORM_FLAGS);
 
   rng_thread_id = xTaskCreate(&dev_urandom_reader, "rnd_rdr", 580, nullptr, 1, nullptr);
   if (rng_thread_id) {
-    _alter_flags(true, MANUVR_PLAT_FLAG_RNG_READY);
+    _alter_flags(true, ABSTRACT_PF_FLAG_RNG_READY);
   }
 
   if (init_rtc()) {
-    _alter_flags(true, MANUVR_PLAT_FLAG_RTC_SET);
+    _alter_flags(true, ABSTRACT_PF_FLAG_RTC_SET);
   }
-  _alter_flags(true, MANUVR_PLAT_FLAG_RTC_READY);
+  _alter_flags(true, ABSTRACT_PF_FLAG_RTC_READY);
   gpioSetup();
 
   #if defined(CONFIG_MANUVR_STORAGE)
     _storage_device = (Storage*) &_esp_storage;
     _kernel.subscribe((EventReceiver*) &_esp_storage);
-    _alter_flags(true, MANUVR_PLAT_FLAG_HAS_STORAGE);
+    _alter_flags(true, ABSTRACT_PF_FLAG_HAS_STORAGE);
   #endif
 
-  if (root_config) {
-    char* tz_string = nullptr;
-    if (root_config->getValueAs("tz", &tz_string)) {
-      setenv("TZ", tz_string, 1);
-      tzset();
-    }
-  }
-  #if defined(MANUVR_CONSOLE_SUPPORT)
-    // TODO: This is a leak, for sure. Ref-count EventReceivers.
-    StandardIO* _console_xport = new StandardIO();
-    ManuvrConsole* _console = new ManuvrConsole((BufferPipe*) _console_xport);
-    _kernel.subscribe((EventReceiver*) _console);
-    _kernel.subscribe((EventReceiver*) _console_xport);
-  #endif
+  //if (root_config) {
+  //  char* tz_string = nullptr;
+  //  if (root_config->getValueAs("tz", &tz_string)) {
+  //    setenv("TZ", tz_string, 1);
+  //    tzset();
+  //  }
+  //}
 
   #if defined(MANUVR_SUPPORT_TCPSOCKET) || defined(MANUVR_SUPPORT_UDPSOCKET)
     tcpip_adapter_init();
   #endif
-  return 0;
-}
 
-
-/*
-* Called as a result of kernels bootstrap() fxn.
-*/
-int8_t ESP32Platform::platformPostInit() {
-  #if defined (__BUILD_HAS_FREERTOS)
-  #else
-  // No threads. We are responsible for pinging our own scheduler.
-  // Turn on the periodic interrupts...
-  uint64_t current = micros();
-  esp_sleep_enable_timer_wakeup(current + 10000);
-  #endif
+  // #if defined (__BUILD_HAS_FREERTOS)
+  // #else
+  // // No threads. We are responsible for pinging our own scheduler.
+  // // Turn on the periodic interrupts...
+  // uint64_t current = micros();
+  // esp_sleep_enable_timer_wakeup(current + 10000);
+  // #endif
   return 0;
 }

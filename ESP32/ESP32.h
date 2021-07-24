@@ -22,39 +22,51 @@ limitations under the License.
 #ifndef __PLATFORM_ESP32_H__
 #define __PLATFORM_ESP32_H__
 
-#include "driver/gpio.h"
-#include "esp_system.h"
+#include <AbstractPlatform.h>
 
-#define PLATFORM_GPIO_PIN_COUNT GPIO_PIN_COUNT
+extern "C" {
+  #include "driver/gpio.h"
+  #include "esp_system.h"
+  #include "freertos/FreeRTOS.h"
+  #include "freertos/task.h"
+}
+
+
+#if defined(CONFIG_MANUVR_STORAGE)
+  #include "ESP32Storage.h"
+#endif
 
 extern uint8_t temprature_sens_read();
 
 
-class ESP32Platform : public ManuvrPlatform {
+class ESP32Platform : public AbstractPlatform {
   public:
-    ESP32Platform() : ManuvrPlatform("ESP32") {};
+    ESP32Platform() : AbstractPlatform(esp_get_idf_version()) {};
+    ~ESP32Platform() {};
 
-    inline  int8_t platformPreInit() {   return platformPreInit(nullptr); };
-    virtual int8_t platformPreInit(Argument*);
-    virtual void   printDebug(StringBuilder* out);
+    /* Obligatory overrides from AbstrctPlatform. */
+    int8_t init();
+    void   printDebug(StringBuilder*);
+    void   firmware_reset(uint8_t);
+    void   firmware_shutdown(uint8_t);
 
-    /* Platform state-reset functions. */
-    void seppuku();           // Simple process termination. Reboots if not implemented.
-    void reboot();
-    void hardwareShutdown();
-    void jumpToBootloader();
+    /* Threading */
+    int createThread(unsigned long*, void*, ThreadFxnPtr, void*, PlatformThreadOpts*);
+    int deleteThread(unsigned long*);
+    int wakeThread(unsigned long);
 
-    uint32_t cpu_freq() {
-      return (CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ * 1000000);
-    };
+    inline int  yieldThread() {    taskYIELD();  return 0;   };
+    inline void suspendThread() {  vTaskSuspend(xTaskGetCurrentTaskHandle()); };
 
 
-  protected:
-    virtual int8_t platformPostInit();
-    #if defined(CONFIG_MANUVR_STORAGE)
-      // Called during boot to load configuration.
-      int8_t _load_config();
-    #endif
+  private:
+    void   _close_open_threads();
+    void   _init_rng();
 };
+
+
+// Any source file that needs platform member functions should be able to access
+//   them this way.
+extern ESP32Platform platform;
 
 #endif  // __PLATFORM_ESP32_H__
