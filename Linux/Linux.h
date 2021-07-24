@@ -73,9 +73,9 @@ class LinuxPlatform : public AbstractPlatform {
     #endif
 };
 
+
 // Any source file that needs platform member functions should be able to access
 //   them this way.
 extern LinuxPlatform platform;
-
 
 #endif  // __PLATFORM_VANILLA_LINUX_H__

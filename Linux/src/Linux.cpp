@@ -1,5 +1,5 @@
 /*
-File:   PlatformLinux.cpp
+File:   Linux.cpp
 Author: J. Ian Lindsay
 Date:   2015.11.01
 
@@ -18,7 +18,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-This file forms the catch-all for linux platforms that have no support.
+This file forms the catch-all for linux platforms that have no specific support.
 */
 
 #include "../Linux.h"
