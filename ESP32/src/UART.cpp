@@ -250,12 +250,13 @@ int8_t UARTAdapter::_pf_init() {
                 .rxfifo_full_thresh       = 16
               };
               if (ESP_OK == uart_intr_config((uart_port_t) ADAPTER_NUM, &intr_conf)) {
+                _adapter_set_flag(UART_FLAG_UART_READY | UART_FLAG_FLUSHED);
+                _adapter_clear_flag(UART_FLAG_PENDING_CONF | UART_FLAG_PENDING_RESET);
                 if (spawn_thread) {
                   xTaskCreate(uart_event_task, "uart_task", 3000, NULL, 12, NULL);
                 }
                 uart_enable_tx_intr((uart_port_t) ADAPTER_NUM, 1, 16);
                 uart_enable_rx_intr((uart_port_t) ADAPTER_NUM);
-                _adapter_set_flag(UART_FLAG_UART_READY | UART_FLAG_FLUSHED);
                 return 0;
               }
             }

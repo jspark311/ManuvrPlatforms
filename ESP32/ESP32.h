@@ -23,6 +23,7 @@ limitations under the License.
 #define __PLATFORM_ESP32_H__
 
 #include <AbstractPlatform.h>
+#include <StringBuilder.h>
 
 extern "C" {
   #include "driver/gpio.h"
@@ -37,6 +38,31 @@ extern "C" {
 #endif
 
 extern uint8_t temprature_sens_read();
+
+
+/*
+* The STDIO driver class.
+*/
+class ESP32StdIO : public BufferAccepter {
+  public:
+    ESP32StdIO();
+    ~ESP32StdIO();
+
+    /* Implementation of BufferAccepter. */
+    inline int8_t provideBuffer(StringBuilder* buf) {  _tx_buffer.concatHandoff(buf); return 1;   };
+    inline void readCallback(BufferAccepter* cb) {   _read_cb_obj = cb;   };
+
+    inline void write(const char* str) {  _tx_buffer.concat((uint8_t*) str, strlen(str));  };
+
+    int8_t poll();
+
+
+  private:
+    BufferAccepter* _read_cb_obj = nullptr;
+    StringBuilder   _tx_buffer;
+    StringBuilder   _rx_buffer;
+};
+
 
 
 class ESP32Platform : public AbstractPlatform {

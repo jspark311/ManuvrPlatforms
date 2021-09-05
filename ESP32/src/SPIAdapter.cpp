@@ -64,9 +64,6 @@ spi_device_handle_t spi_handle[2];
 TaskHandle_t static_spi_thread_id = 0;
 
 static void* IRAM_ATTR spi_worker_thread(void* arg) {
-  while (!platform.nominalState()) {
-    sleep_ms(20);
-  }
   SPIAdapter* BUSPTR = (SPIAdapter*) arg;
   uint8_t anum = BUSPTR->adapterNumber();
   while (1) {
@@ -74,10 +71,10 @@ static void* IRAM_ATTR spi_worker_thread(void* arg) {
       SPIBusOp* op = _threaded_op[anum];
       op->advance_operation(0, 0);
 			_threaded_op[anum] = nullptr;
-      yieldThread();
+      platform.yieldThread();
     }
     else {
-      suspendThread();
+      platform.suspendThread();
       //ulTaskNotifyTake(pdTRUE, 10000 / portTICK_RATE_MS);
     }
   }
@@ -175,11 +172,11 @@ int8_t SPIAdapter::bus_init() {
 		ESP_LOGE(LOG_TAG, "spi_bus_add_device(): rc=%d", errRc);
   	return -2;
 	}
-  ManuvrThreadOptions topts;
+  PlatformThreadOpts topts;
   topts.thread_name = "SPI";
   topts.stack_sz    = 2048;
   unsigned long _thread_id = 0;
-	createThread(&_thread_id, nullptr, spi_worker_thread, (void*) this, &topts);
+	platform.createThread(&_thread_id, nullptr, spi_worker_thread, (void*) this, &topts);
   static_spi_thread_id = (TaskHandle_t) _thread_id;
   _adapter_set_flag(SPI_FLAG_SPI_READY);
   return 0;

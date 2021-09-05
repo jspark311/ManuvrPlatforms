@@ -408,7 +408,7 @@ int8_t pinMode(uint8_t pin, GPIOMode mode) {
       break;
 
     default:
-      Kernel::log("Unknown GPIO mode.\n");
+      ESP_LOGW("ESP32Platform", "Unknown GPIO mode for pin %u.\n", pin);
       return -1;
   }
 

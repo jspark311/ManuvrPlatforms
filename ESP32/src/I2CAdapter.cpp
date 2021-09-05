@@ -2,6 +2,8 @@
 #include <I2CAdapter.h>
 
 #include "driver/i2c.h"
+#include "esp_log.h"
+#include "esp_err.h"
 #include "esp_task_wdt.h"
 
 #define ACK_CHECK_EN   0x01     /*!< I2C master will check ack from slave*/
@@ -13,9 +15,6 @@ TaskHandle_t static_i2c_thread_id = 0;
 
 
 static void* IRAM_ATTR i2c_worker_thread(void* arg) {
-  while (!platform.nominalState()) {
-    sleep_ms(20);
-  }
   I2CAdapter* BUSPTR = (I2CAdapter*) arg;
   uint8_t anum = BUSPTR->adapterNumber();
   while (1) {
@@ -23,10 +22,10 @@ static void* IRAM_ATTR i2c_worker_thread(void* arg) {
       I2CBusOp* op = (I2CBusOp*) _threaded_op[anum];
       op->advance(0);
       _threaded_op[anum] = nullptr;
-      yieldThread();
+      platform.yieldThread();
     }
     else {
-      suspendThread();
+      platform.suspendThread();
       //ulTaskNotifyTake(pdTRUE, 10000 / portTICK_RATE_MS);
     }
   }
@@ -56,11 +55,11 @@ int8_t I2CAdapter::bus_init() {
     case 1:
       if (ESP_OK == i2c_param_config(((0 == a_id) ? I2C_NUM_0 : I2C_NUM_1), &conf)) {
         if (ESP_OK == i2c_driver_install(((0 == a_id) ? I2C_NUM_0 : I2C_NUM_1), conf.mode, 0, 0, 0)) {
-          ManuvrThreadOptions topts;
+          PlatformThreadOpts topts;
           topts.thread_name = "I2C";
           topts.stack_sz    = 2048;
           unsigned long _thread_id = 0;
-          createThread(&_thread_id, nullptr, i2c_worker_thread, (void*) this, &topts);
+          platform.createThread(&_thread_id, nullptr, i2c_worker_thread, (void*) this, &topts);
           static_i2c_thread_id = (TaskHandle_t) _thread_id;
           busOnline(true);
         }
@@ -68,7 +67,7 @@ int8_t I2CAdapter::bus_init() {
       break;
 
     default:
-      Kernel::log("I2CAdapter unsupported.\n");
+      ESP_LOGE("I2CAdapter", "Unsupported adapter: %d", a_id);
       break;
   }
   return (busOnline() ? 0:-1);
