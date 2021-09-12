@@ -32,9 +32,9 @@ This file forms the catch-all for linux platforms that have no specific support.
 #endif
 
 
-// Unless otherwise specified, the interval timer will fire at 1Hz.
+// Unless otherwise specified, the interval timer will fire at 10Hz.
 #ifndef CONFIG_MANUVR_INTERVAL_PERIOD_MS
-  #define CONFIG_MANUVR_INTERVAL_PERIOD_MS  1000
+  #define CONFIG_MANUVR_INTERVAL_PERIOD_MS  100
 #endif
 
 #ifndef PLATFORM_RNG_CARRY_CAPACITY
@@ -52,6 +52,13 @@ This file forms the catch-all for linux platforms that have no specific support.
 
 
 /*******************************************************************************
+* Global platform singleton.                                                   *
+*******************************************************************************/
+LinuxPlatform platform;
+AbstractPlatform* platformObj() {   return (AbstractPlatform*) &platform;   }
+
+
+/*******************************************************************************
 * The code under this block is special on this platform,
 *   and will not be available elsewhere.
 *******************************************************************************/
@@ -63,22 +70,50 @@ This file forms the catch-all for linux platforms that have no specific support.
 struct itimerval _interval              = {0};
 struct sigaction _signal_action_SIGALRM = {0};
 
-static uint32_t _last_millis = 0;
-
 char* _binary_name = nullptr;
 static int   _main_pid    = 0;
 
-LinuxPlatform platform;
+
+
+/*******************************************************************************
+* Signal catching code.                                                        *
+*******************************************************************************/
+void _platform_sig_handler(int signo) {
+  switch (signo) {
+    case SIGKILL:
+      printf("Received a SIGKILL signal. Something bad must have happened.\n");
+    case SIGINT:    // CTRL+C will cause an immediate shutdown.
+      platform.firmware_shutdown(1);   // TODO: Would be nice to give this to the application.
+      break;
+    case SIGTERM:
+      printf("Received a SIGTERM signal.\n");
+      platform.firmware_shutdown(1);   // TODO: Would be nice to give this to the application.
+      break;
+    case SIGVTALRM:
+      printf("Received a SIGVTALRM signal.\n");
+      // NOTE: No break;
+    case SIGALRM:
+      // Any periodic platform actions should be done here.
+      break;
+    default:
+      printf("Unhandled signal: %d\n", signo);
+      break;
+  }
+}
+
 
 
 bool set_linux_interval_timer() {
-  _last_millis = millis();
+  _signal_action_SIGALRM.sa_handler = &_platform_sig_handler;
+  //sigaction(SIGVTALRM, &_signal_action_SIGALRM, NULL);
+  sigaction(SIGALRM, &_signal_action_SIGALRM, NULL);
+
   _interval.it_value.tv_sec      = 0;
   _interval.it_value.tv_usec     = CONFIG_MANUVR_INTERVAL_PERIOD_MS * 1000;
   _interval.it_interval.tv_sec   = 0;
   _interval.it_interval.tv_usec  = CONFIG_MANUVR_INTERVAL_PERIOD_MS * 1000;
 
-  int err = setitimer(ITIMER_VIRTUAL, &_interval, nullptr);
+  int err = setitimer(ITIMER_REAL, &_interval, nullptr);
   if (err) {
     printf("Failed to enable interval timer.\n");
   }
@@ -89,19 +124,15 @@ bool set_linux_interval_timer() {
 bool unset_linux_interval_timer() {
   // TODO: We ultimately need to be retaining the values in the struct, as well as
   //   the current system time to calculate the delta in case we get re-enabled.
+  _signal_action_SIGALRM.sa_handler = SIG_IGN;
+  sigaction(SIGALRM, &_signal_action_SIGALRM, NULL);
+
   _interval.it_value.tv_sec      = 0;
   _interval.it_value.tv_usec     = 0;
   _interval.it_interval.tv_sec   = 0;
   _interval.it_interval.tv_usec  = 0;
   return true;
 }
-
-void linux_timer_handler(int sig_num) {
-  unsigned long _this_millis = millis();
-  // ((Kernel*)__kernel)->advanceScheduler(_this_millis - _last_millis);
-  _last_millis = _this_millis;
-}
-
 
 
 // /*
@@ -590,6 +621,7 @@ int LinuxPlatform::wakeThread(unsigned long _thread_id) {
 * Process control                                                              *
 *******************************************************************************/
 void LinuxPlatform::_close_open_threads() {
+  unset_linux_interval_timer();
   //_set_init_state(MANUVR_INIT_STATE_HALTED);
   if (rng_thread_id) {
     if (0 == deleteThread(&rng_thread_id)) {
@@ -597,6 +629,7 @@ void LinuxPlatform::_close_open_threads() {
   }
   sleep_ms(100);
 }
+
 
 // TODO: This
 uint8_t last_restart_reason() {  return 0;  }
@@ -614,10 +647,10 @@ void LinuxPlatform::firmware_reset(uint8_t reason) {
       // TODO: int8_t persistentWrite(const char*, uint8_t*, int, uint16_t);
     }
   #endif
-  _close_open_threads();
   // Whatever the kernel cared to clean up, it better have done so by this point,
   //   as no other platforms return from this function.
   printf("\nfirmware_reset(%d): About to exit().\n\n", reason);
+  _close_open_threads();
   exit(0);
 }
 
@@ -626,8 +659,8 @@ void LinuxPlatform::firmware_reset(uint8_t reason) {
 *   and then terminate this one.
 */
 void LinuxPlatform::firmware_shutdown(uint8_t reason) {
-  _close_open_threads();
   printf("\nfirmware_shutdown(%d): About to exit().\n\n", reason);
+  _close_open_threads();
   exit(0);
 }
 
@@ -699,12 +732,21 @@ int8_t LinuxPlatform::_hash_self() {
 int8_t LinuxPlatform::init() {
   //LinuxPlatform::platformPreInit(root_config);
   // Used for timer and signal callbacks.
-  //__kernel = (volatile Kernel*) &_kernel;
   _discover_alu_params();
+
+  // Bind to the signals that the platform handles.
+  if (signal(SIGINT, _platform_sig_handler) == SIG_ERR) {
+    printf("Failed to bind SIGINT to the signal system. Failing...");
+    return -1;
+  }
+  if (signal(SIGTERM, _platform_sig_handler) == SIG_ERR) {
+    printf("Failed to bind SIGTERM to the signal system. Failing...");
+    return -1;
+  }
+
 
   uint32_t default_flags = DEFAULT_PLATFORM_FLAGS;
   _main_pid = getpid();  // Our PID.
-  //Argument* temp = nullptr;
   _alter_flags(true, default_flags);
 
   _init_rng();
@@ -724,6 +766,3 @@ int8_t LinuxPlatform::init() {
   set_linux_interval_timer();
   return 0;
 }
-
-
-AbstractPlatform* platformObj() {   return (AbstractPlatform*) &platform;   }

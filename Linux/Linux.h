@@ -42,6 +42,30 @@ This file forms the catch-all for linux platforms that have no support.
 
 int8_t _load_config();       // Called during boot to load configuration.
 
+/*
+* The STDIO driver class.
+*/
+class LinuxStdIO : public BufferAccepter {
+  public:
+    LinuxStdIO();
+    ~LinuxStdIO();
+
+    /* Implementation of BufferAccepter. */
+    inline int8_t provideBuffer(StringBuilder* buf) {  _tx_buffer.concatHandoff(buf); return 1;   };
+    inline void readCallback(BufferAccepter* cb) {   _read_cb_obj = cb;   };
+
+    inline void write(const char* str) {  _tx_buffer.concat((uint8_t*) str, strlen(str));  };
+
+    int8_t poll();
+
+
+  private:
+    BufferAccepter* _read_cb_obj = nullptr;
+    StringBuilder   _tx_buffer;
+    StringBuilder   _rx_buffer;
+};
+
+
 
 class LinuxPlatform : public AbstractPlatform {
   public:

@@ -17,87 +17,127 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-    __  ___                             ____  _____
-   /  |/  /___ _____  __  ___   _______/ __ \/ ___/
-  / /|_/ / __ `/ __ \/ / / / | / / ___/ / / /\__ \
- / /  / / /_/ / / / / /_/ /| |/ / /  / /_/ /___/ /
-/_/  /_/\__,_/_/ /_/\__,_/ |___/_/   \____//____/
-
-This is a template for a main.cpp file. This file was meant to be
-  copy-pasta for beginners to create their own applications. It is
-  also meant to serve as documentation for the boot process.
-
 This is a demonstration program, and was meant to be compiled for a
   linux target.
 */
 
 
-/* Mandatory include for Manuvr Kernel.  */
-#include <Kernel.h>
-#include <Platform/Platform.h>
+/* CppPotpourri */
+#include <StringBuilder.h>
+#include <CppPotpourri.h>
+#include <ParsingConsole.h>
 
-/*
-* OPTIONAL:
-* An application will likely want to talk to something in the outside world.
-* For this, we need a transport, and typically a session of some sort.
-*
-* Note that each of these things is optional. Sessionless connections can be
-*   handled with a BufferPipe (see ManuvrGPS) as well.
-*
-* StandardIO and the interactive Console are regarded as a Transport and
-*   XenoSession, respectively.
-*/
-#include <Transports/StandardIO/StandardIO.h>
-#include <XenoSession/Console/ManuvrConsole.h>
+/* ManuvrPlatform for vanilla Linux. */
+#include <Linux.h>
+
+
+/*******************************************************************************
+* Defs and types                                                               *
+*******************************************************************************/
+#define PROGRAM_VERSION        "0.0.4"    // Program version.
+#define MAX_COMMAND_LENGTH         512    // The maximum size of user input.
+
+
+/*******************************************************************************
+* Globals                                                                      *
+*******************************************************************************/
+
+using namespace std;
+
+char* program_name;
+int   continue_running  = 1;
+
+/* Console support... */
+ParsingConsole console(MAX_COMMAND_LENGTH);
+LinuxStdIO console_adapter;
+
+
+/*******************************************************************************
+* Console callbacks
+*******************************************************************************/
+
+int callback_help(StringBuilder* text_return, StringBuilder* args) {
+  text_return->concatf("%s %s\n", program_name, PROGRAM_VERSION);
+  if (0 < args->count()) {
+    console.printHelp(text_return, args->position_trimmed(0));
+  }
+  else {
+    console.printHelp(text_return);
+  }
+  return 0;
+}
+
+int callback_print_history(StringBuilder* text_return, StringBuilder* args) {
+  console.printHistory(text_return);
+  return 0;
+}
+
+int callback_program_quit(StringBuilder* text_return, StringBuilder* args) {
+  continue_running = 0;
+  text_return->concat("Stopping...\n");
+  return 0;
+}
+
 
 
 /*******************************************************************************
 * The main function.                                                           *
 *******************************************************************************/
 int main(int argc, const char* argv[]) {
-  Argument* opts = parseFromArgCV(argc, argv);
-  Argument* temp_arg = nullptr;
-  StringBuilder local_log;
-
-  if (opts) {  // Print the launch arguments.
-    opts->printDebug(&local_log);
-    printf("%s\n\n\n", (char*) local_log.string());
-    local_log.clear();
-  }
+  program_name = argv[0];  // Our name.
+  StringBuilder output;    // Most programs will want a logging buffer.
 
   /*
   * The platform object is created on the stack, but takes no action upon
-  *   construction. The first thing that should be done is to call the preinit
+  *   construction. The first thing that should be done is to call the init
   *   function to setup the defaults of the platform.
   */
-  platform.platformPreInit(opts);
+  platform.init();
 
-  // The platform comes with a messaging kernel. Get a ref to it.
-  Kernel* kernel = platform.kernel();
+  /*
+  * At this point, we should configure our console and define commands.
+  */
+  console.setTXTerminator(LineTerm::CRLF);
+  console.setRXTerminator(LineTerm::LF);
+  console.localEcho(false);                 // This happens naturaly.
+
+  // Mutually connect the console class to STDIO.
+  console_adapter.readCallback(&console);
+  console.setOutputTarget(&console_adapter);
+
+  // We want to have a nice prompt string. Note that the console does not make
+  //   a copy of the string we provide it. So we need to keep its pointer
+  //   constant until...
+  //     1) the console is torn down.
+  //     2) we change it with another call to setPromptString().
+  //     3) we call emitPrompt(false), to prevent it from being used.
+  StringBuilder prompt_string;
+  prompt_string.concatf("%c[36m%s> %c[39m", 0x1B, program_name, 0x1B);
+  console.setPromptString((const char*) prompt_string.string());
+  console.emitPrompt(true);
+  console.hasColor(true);
+
+  // Define the commands for the application. Usually, these are some basics.
+  console.defineCommand("help",        '?', ParsingConsole::tcodes_str_1, "Prints help to console.", "", 0, callback_help);
+  console.defineCommand("history",     ParsingConsole::tcodes_0, "Print command history.", "", 0, callback_print_history);
+  console.defineCommand("quit",        'Q', ParsingConsole::tcodes_0, "Commit sudoku.", "", 0, callback_program_quit);
+
+  // The platform itself comes with a convenient set of console functions.
+  platform.configureConsole(&console);
+
+  console.init();
+
+  output.concatf("%s initialized.\n", argv[0]);
+  console.printToLog(&output);
 
 
   /*
-  * At this point, we should instantiate whatever specific functionality we
-  *   want this Manuvrable to have.
-  *
-  * Parse through all the command line arguments and flags...
-  * Please note that the order matters. Put all the most-general matches at the
-  *   bottom of the loop.
+  * The main loop. Run until told to stop.
   */
-  if (opts->retrieveArgByKey("info")) {
-    platform.printDebug(&local_log);
-    printf("%s", local_log.string());
-    local_log.clear();
+  while (continue_running) {
+    // Polling the adapter will drive the entire program forward.
+    console_adapter.poll();
   }
 
-  // Once we've loaded up all the goodies we want, we finalize everything thusly...
-  platform.bootstrap();
-
-  /*
-  * The main loop. Run forever, as a microcontroller would.
-  * Program exit is handled by the Platform abstraction.
-  */
-  while (1) {
-    kernel->procIdleFlags();
-  }
+  platform.firmware_shutdown(0);     // Clean up the platform.
 }

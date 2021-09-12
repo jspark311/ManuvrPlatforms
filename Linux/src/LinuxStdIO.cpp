@@ -1,5 +1,5 @@
 /*
-File:   ConsoleUART.cpp
+File:   LinuxStdIO.cpp
 Author: J. Ian Lindsay
 Date:   2016.07.23
 
@@ -18,11 +18,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-ConsoleUART is the driver for wrapping the ESP32's presentation of a POSIX-style
-STDIN/STDOUT/STDERR into a BufferAccepter.
+LinuxStdIO is the driver for wrapping STDIN/STDOUT/STDERR into a BufferAccepter.
 */
 
-#include "ESP32.h"
+#include "Linux.h"
 
 /*******************************************************************************
 *   ___ _              ___      _ _              _      _
@@ -35,24 +34,24 @@ STDIN/STDOUT/STDERR into a BufferAccepter.
 /**
 * Constructor.
 */
-ESP32StdIO::ESP32StdIO() {
+LinuxStdIO::LinuxStdIO() {
 }
 
 /**
 * Destructor
 */
-ESP32StdIO::~ESP32StdIO() {
+LinuxStdIO::~LinuxStdIO() {
 }
 
 
 /**
 * Read input from local keyboard.
 */
-int8_t ESP32StdIO::poll() {
-  char* input_text = (char*) alloca(256);  // Buffer to hold user-input.
+int8_t LinuxStdIO::poll() {
+  char* input_text = (char*) alloca(2048);  // Buffer to hold user-input.
   int read_len = 0;
 
-  bzero(input_text, 256);
+  bzero(input_text, 2048);
   while (_tx_buffer.count()) {
     const char* working_chunk = (const char*) _tx_buffer.position(0);
     printf("%s", working_chunk);
