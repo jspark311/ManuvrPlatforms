@@ -7,6 +7,8 @@
 #include <AbstractPlatform.h>
 #include <StringBuilder.h>
 
+#ifndef __PLATFORM_ARDUINO_H__
+#define __PLATFORM_ARDUINO_H__
 
 #if defined(__IMXRT1052__) || defined(__IMXRT1062__)
   /* Teensy4 */
@@ -57,3 +59,5 @@ class ArduinoPlatform : public AbstractPlatform {
 // Any source file that needs platform member functions should be able to access
 //   them this way.
 extern ArduinoPlatform platform;
+
+#endif  // __PLATFORM_ARDUINO_H__

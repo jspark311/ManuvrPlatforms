@@ -7,6 +7,9 @@
 #include "../ManuvrArduino.h"
 #include <StringBuilder.h>
 
+/*******************************************************************************
+* Global platform singleton.                                                   *
+*******************************************************************************/
 ArduinoPlatform platform;
 AbstractPlatform* platformObj() {   return (AbstractPlatform*) &platform;   }
 
