@@ -65,6 +65,13 @@ static bool using_adc2            = false;
 
 
 /*******************************************************************************
+* Global platform singleton.                                                   *
+*******************************************************************************/
+ESP32Platform platform;
+AbstractPlatform* platformObj() {   return (AbstractPlatform*) &platform;   }
+
+
+/*******************************************************************************
 * Watchdog                                                                     *
 *******************************************************************************/
 
@@ -152,6 +159,19 @@ int getSerialNumber(uint8_t *buf) {
 /*******************************************************************************
 * Time and date                                                                *
 *******************************************************************************/
+
+/**
+* Wrapper for causing threads to sleep. This is NOT intended to be used as a delay
+*   mechanism, although that use-case will work. It is more for the sake of not
+*   burning CPU needlessly in polling-loops where it might be better-used elsewhere.
+*
+* If you are interested in delaying without suspending the entire thread, you should
+*   probably use interrupts instead.
+*/
+void sleep_ms(uint32_t millis) {
+  vTaskDelay(millis / portTICK_PERIOD_MS);
+}
+
 /*
 * Taken from:
 * https://github.com/espressif/arduino-esp32

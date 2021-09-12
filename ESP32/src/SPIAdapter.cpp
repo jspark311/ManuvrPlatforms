@@ -21,8 +21,6 @@ limitations under the License.
 #include "../ESP32.h"
 #include <SPIAdapter.h>
 
-#if defined(CONFIG_MANUVR_SUPPORT_SPI)
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -319,6 +317,3 @@ int8_t SPIAdapter::io_op_callahead(BusOp* _op) {
 int8_t SPIAdapter::io_op_callback(BusOp* _op) {
   return BUSOP_CALLBACK_NOMINAL;
 }
-
-
-#endif   // CONFIG_MANUVR_SUPPORT_SPI
