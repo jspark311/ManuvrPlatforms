@@ -78,6 +78,10 @@ static int   _main_pid    = 0;
 /*******************************************************************************
 * Signal catching code.                                                        *
 *******************************************************************************/
+/*
+* This function is the signal handler for the basal platform. All other signals
+*   are left for optional application usage.
+*/
 void _platform_sig_handler(int signo) {
   switch (signo) {
     case SIGKILL:
@@ -102,7 +106,10 @@ void _platform_sig_handler(int signo) {
 }
 
 
-
+/*
+* Used to setup the periodic alarm.
+* Uses a real timer, rather than the PID's execution time.
+*/
 bool set_linux_interval_timer() {
   _signal_action_SIGALRM.sa_handler = &_platform_sig_handler;
   //sigaction(SIGVTALRM, &_signal_action_SIGALRM, NULL);
@@ -121,9 +128,10 @@ bool set_linux_interval_timer() {
 }
 
 
+/*
+* Used to tear down the periodic alarm.
+*/
 bool unset_linux_interval_timer() {
-  // TODO: We ultimately need to be retaining the values in the struct, as well as
-  //   the current system time to calculate the delta in case we get re-enabled.
   _signal_action_SIGALRM.sa_handler = SIG_IGN;
   sigaction(SIGALRM, &_signal_action_SIGALRM, NULL);
 
@@ -288,7 +296,6 @@ static void* dev_urandom_reader(void*) {
 }
 
 
-
 /**
 * Dead-simple interface to the RNG. Despite the fact that it is interrupt-driven, we may resort
 *   to polling if random demand exceeds random supply. So this may block until a random number
@@ -302,6 +309,7 @@ uint32_t randomUInt32() {
   }
   return randomness_pool[_random_pool_r_ptr++ % PLATFORM_RNG_CARRY_CAPACITY];
 }
+
 
 /**
 * Fills the given buffer with random bytes.
@@ -457,7 +465,6 @@ bool getTimeAndDate(uint16_t* y, uint8_t* m, uint8_t* d, uint8_t* h, uint8_t* mi
 }
 
 
-
 /*
 * Returns an integer representing the current datetime.
 */
@@ -532,7 +539,6 @@ int LinuxPlatform::deleteThread(unsigned long* _thread_id) {
   return pthread_cancel(*_thread_id);
 }
 
-
 int LinuxPlatform::wakeThread(unsigned long _thread_id) {
   return 0;
 }
@@ -566,62 +572,25 @@ int LinuxPlatform::wakeThread(unsigned long _thread_id) {
 /*******************************************************************************
 * GPIO and change-notice                                                       *
 *******************************************************************************/
-  /*
-  * Sets the GPIO pin direction, and configure pullups.
-  * Does not yet use the SCU to set pull resistors.
-  * Assumes 8mA pin drive for outputs.
-  *
-  * Returns -1 if pin is out of range.
-  *         -2 if GPIO control of pin isn't possible.
-  *         -3 if pin mode is unsupported.
-  */
-  int8_t pinMode(uint8_t pin, GPIOMode m) {
-    int8_t ret = -1;
-    return ret;
-  }
-
-
-  int8_t setPin(uint8_t pin, bool val) {
-    int8_t ret = -1;
-    return ret;
-  }
-
-
-  int8_t readPin(uint8_t pin) {
-    int8_t ret = -1;
-    return ret;
-  }
-
-
-  /*
-  * TODO: This might be done in a low, assurance manner with a thread and a
-  *   state-tracker. Might-should use a weak reference to allow override by
-  *   board-specific support that would be higher-reliability than reading the
-  *   sysfs interface.
-  */
-  void unsetPinFxn(uint8_t pin) {
-  }
-
-  int8_t setPinFxn(uint8_t pin, IRQCondition condition, FxnPointer fxn) {
-    return -1;
-  }
-
-
-
-  /*
-  * Unsupportable features.
-  */
-  int8_t analogWrite(uint8_t pin, float val) {               return -1;  }
-  int8_t analogWriteFrequency(uint8_t pin, uint32_t freq) {  return -1;  }
-
-
+/*
+* Unsupported features.
+* Weak reference to allow override by board-specific support that would be
+*   higher-reliability than reading the sysfs interface.
+*/
+void   __attribute__((weak)) unsetPinFxn(uint8_t pin) {}
+int8_t __attribute__((weak)) setPinFxn(uint8_t pin, IRQCondition condition, FxnPointer fxn) {   return -1;  }
+int8_t __attribute__((weak)) pinMode(uint8_t pin, GPIOMode m) {    return -1;    }
+int8_t __attribute__((weak)) setPin(uint8_t pin, bool val) {    return -1;    }
+int8_t __attribute__((weak)) readPin(uint8_t pin) {    return -1;    }
+int8_t __attribute__((weak)) analogWrite(uint8_t pin, float val) {               return -1;  }
+int8_t __attribute__((weak)) analogWriteFrequency(uint8_t pin, uint32_t freq) {  return -1;  }
 
 
 /*******************************************************************************
 * Process control                                                              *
 *******************************************************************************/
 void LinuxPlatform::_close_open_threads() {
-  unset_linux_interval_timer();
+  unset_linux_interval_timer();   // Stop the periodic alarm.
   //_set_init_state(MANUVR_INIT_STATE_HALTED);
   if (rng_thread_id) {
     if (0 == deleteThread(&rng_thread_id)) {
@@ -717,7 +686,6 @@ int8_t LinuxPlatform::_hash_self() {
 
 
 
-
 /******************************************************************************
 * Platform initialization.                                                    *
 ******************************************************************************/
@@ -744,7 +712,6 @@ int8_t LinuxPlatform::init() {
     return -1;
   }
 
-
   uint32_t default_flags = DEFAULT_PLATFORM_FLAGS;
   _main_pid = getpid();  // Our PID.
   _alter_flags(true, default_flags);
@@ -755,7 +722,6 @@ int8_t LinuxPlatform::init() {
   #if defined(CONFIG_MANUVR_STORAGE)
     LinuxStorage* sd = new LinuxStorage(root_config);
     _storage_device = (Storage*) sd;
-    _kernel.subscribe((EventReceiver*) sd);
   #endif
 
   #if defined(__HAS_CRYPT_WRAPPER)
