@@ -12,3 +12,9 @@ Static builds are recommended, but that's an aesthetic opinion.
 ### Dependencies
 
 This class relies on [CppPotpourri](https://github.com/jspark311/CppPotpourri).
+
+------------------------
+
+### Building the examples
+
+You will need to either clone CppPotpourri into `examples/lib/CppPotpourri`, or else symlink it there.

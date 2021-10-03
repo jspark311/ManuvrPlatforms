@@ -44,7 +44,7 @@ This is a demonstration program, and was meant to be compiled for a
 
 using namespace std;
 
-char* program_name;
+const char* program_name;
 int   continue_running  = 1;
 
 /* Console support... */
@@ -67,10 +67,94 @@ int callback_help(StringBuilder* text_return, StringBuilder* args) {
   return 0;
 }
 
-int callback_print_history(StringBuilder* text_return, StringBuilder* args) {
-  console.printHistory(text_return);
-  return 0;
+
+int callback_console_tools(StringBuilder* text_return, StringBuilder* args) {
+  //void maxHistoryDepth(uint8_t);
+  //inline void setPromptString(const char* str) {    _prompt_string = (char*) str;   };
+  //inline bool historyFail() {            return _console_flag(CONSOLE_FLAG_HISTORY_FAIL);               };
+  //inline void historyFail(bool x) {      return _console_set_flag(CONSOLE_FLAG_HISTORY_FAIL, x);        };
+  //inline bool hasColor() {               return _console_flag(CONSOLE_FLAG_HAS_ANSI);                   };
+  //inline void hasColor(bool x) {         return _console_set_flag(CONSOLE_FLAG_HAS_ANSI, x);            };
+  //inline bool printHelpOnFail() {        return _console_flag(CONSOLE_FLAG_PRINT_HELP_ON_FAIL);         };
+  //inline void printHelpOnFail(bool x) {  return _console_set_flag(CONSOLE_FLAG_PRINT_HELP_ON_FAIL, x);  };
+  int ret = 0;
+  char* cmd    = args->position_trimmed(0);
+  int   arg1   = args->position_as_int(1);
+  bool  print_term_enum = false;
+  if (0 == StringBuilder::strcasecmp(cmd, "echo")) {
+    if (1 < args->count()) {
+      console.localEcho(0 != arg1);
+    }
+    text_return->concatf("Console RX echo %sabled.\n", console.localEcho()?"en":"dis");
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "prompt")) {
+    if (1 < args->count()) {
+      console.emitPrompt(0 != arg1);
+    }
+    text_return->concatf("Console autoprompt %sabled.\n", console.emitPrompt()?"en":"dis");
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "history")) {
+    if (1 < args->count()) {
+      if (0 == StringBuilder::strcasecmp(cmd, "clear")) {
+        console.clearHistory();
+        text_return->concat("Console history cleared.\n");
+      }
+      else if (0 == StringBuilder::strcasecmp(cmd, "depth")) {
+        text_return->concatf("Console history depth (current/max) %d/%d.\n", console.historyDepth(), console.maxHistoryDepth());
+      }
+      else {
+        ret = -1;
+      }
+    }
+    else {
+      console.printHistory(text_return);
+    }
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "force")) {
+    if (1 < args->count()) {
+      console.forceReturn(0 != arg1);
+    }
+    text_return->concatf("Console force-return %sabled.\n", console.forceReturn()?"en":"dis");
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "rxterm")) {
+    if (1 < args->count()) {
+      switch (arg1) {
+        case 0:  case 1:  case 2:  case 3:
+          console.setRXTerminator((LineTerm) arg1);
+          break;
+        default:
+          print_term_enum = true;
+          break;
+      }
+    }
+    text_return->concatf("Console RX terminator: %s\n", ParsingConsole::terminatorStr(console.getRXTerminator()));
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "txterm")) {
+    if (1 < args->count()) {
+      switch (arg1) {
+        case 0:  case 1:  case 2:  case 3:
+          console.setTXTerminator((LineTerm) arg1);
+          break;
+        default:
+          print_term_enum = true;
+          break;
+      }
+    }
+    text_return->concatf("Console TX terminator: %s\n", ParsingConsole::terminatorStr(console.getTXTerminator()));
+  }
+  else {
+    ret = -1;
+  }
+
+  if (print_term_enum) {
+    text_return->concat("Terminator options:\n");
+    for (uint i = 0; i < 4; i++) {
+      text_return->concatf("\t%d: %s\n", i, ParsingConsole::terminatorStr((LineTerm) i));
+    }
+  }
+  return ret;
 }
+
 
 int callback_program_quit(StringBuilder* text_return, StringBuilder* args) {
   continue_running = 0;
@@ -97,9 +181,9 @@ int main(int argc, const char* argv[]) {
   /*
   * At this point, we should configure our console and define commands.
   */
-  console.setTXTerminator(LineTerm::CRLF);
+  console.setTXTerminator(LineTerm::LF);
   console.setRXTerminator(LineTerm::LF);
-  console.localEcho(false);                 // This happens naturaly.
+  console.localEcho(false);   // This happens naturaly to STDIO.
 
   // Mutually connect the console class to STDIO.
   console_adapter.readCallback(&console);
@@ -118,9 +202,9 @@ int main(int argc, const char* argv[]) {
   console.hasColor(true);
 
   // Define the commands for the application. Usually, these are some basics.
-  console.defineCommand("help",        '?', ParsingConsole::tcodes_str_1, "Prints help to console.", "", 0, callback_help);
-  console.defineCommand("history",     ParsingConsole::tcodes_0, "Print command history.", "", 0, callback_print_history);
-  console.defineCommand("quit",        'Q', ParsingConsole::tcodes_0, "Commit sudoku.", "", 0, callback_program_quit);
+  console.defineCommand("help",     '?', ParsingConsole::tcodes_str_1, "Prints help to console.", "", 0, callback_help);
+  console.defineCommand("console",  '\0', ParsingConsole::tcodes_str_3, "Console conf", "[history|rxterm|txterm|echo|prompt]", 0, callback_console_tools);
+  console.defineCommand("quit",     'Q', ParsingConsole::tcodes_0, "Commit sudoku.", "", 0, callback_program_quit);
 
   // The platform itself comes with a convenient set of console functions.
   platform.configureConsole(&console);
@@ -129,6 +213,7 @@ int main(int argc, const char* argv[]) {
 
   output.concatf("%s initialized.\n", argv[0]);
   console.printToLog(&output);
+  console.printPrompt();
 
 
   /*
