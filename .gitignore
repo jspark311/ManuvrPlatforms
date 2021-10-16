@@ -14,3 +14,6 @@ CMakeFiles/
 # Generated doc
 extras/doc/doxygen/
 extras/unit_tests/build/
+
+# Library softlinks
+Linux/example/CppPotpourri

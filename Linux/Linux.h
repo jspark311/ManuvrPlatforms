@@ -25,6 +25,8 @@ This file forms the catch-all for linux platforms that have no support.
 #ifndef __PLATFORM_VANILLA_LINUX_H__
 #define __PLATFORM_VANILLA_LINUX_H__
 #include <AbstractPlatform.h>
+#include <UARTAdapter.h>
+#include <I2CAdapter.h>
 
 #include <pthread.h>
 #include <signal.h>
@@ -63,6 +65,22 @@ class LinuxStdIO : public BufferAccepter {
     BufferAccepter* _read_cb_obj = nullptr;
     StringBuilder   _tx_buffer;
     StringBuilder   _rx_buffer;
+};
+
+
+/* The UART wrapper class to allow taking a path as a device identifier. */
+class LinuxUART : public UARTAdapter {
+  public:
+    LinuxUART(char* path);
+    ~LinuxUART();
+};
+
+
+/* The UART wrapper class to allow taking a path as a device identifier. */
+class LinuxI2C : public I2CAdapter {
+  public:
+    LinuxI2C(char* path);
+    ~LinuxI2C();
 };
 
 
