@@ -79,7 +79,7 @@ void link_callback(uint32_t tag, ManuvrMsg* msg) {
   msg->printDebug(&log);
   msg->getPayload(&kvps_rxd);
   if (msg->expectsReply()) {
-    log.concatf("\nlink_callback ACK's %d.\n", msg->ack());
+    log.concatf("\nlink_callback ACK'ing returns %d.\n", msg->ack());
   }
   printf("%s\n\n", (const char*) log.string());
 }
@@ -201,8 +201,11 @@ int callback_link_tools(StringBuilder* text_return, StringBuilder* args) {
     }
   }
   else if (0 == StringBuilder::strcasecmp(cmd, "desc")) {
-
-    text_return->concatf("Link hangup() returns %d\n", m_link->hangup());
+    // Send a description request message.
+    KeyValuePair a((uint32_t) millis(), "time_ms");
+    a.append((uint32_t) randomUInt32(), "rand");
+    int8_t ret_local = m_link->send(&a, true);
+    text_return->concatf("Description request send() returns %d\n", ret_local);
   }
   else {
     text_return->concat("Usage: [info|reset|hangup|verbosity|desc]\n");
