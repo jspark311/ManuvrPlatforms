@@ -114,6 +114,8 @@ int callback_link_tools(StringBuilder* text_return, StringBuilder* args) {
 
 int callback_program_quit(StringBuilder* text_return, StringBuilder* args) {
   continue_running = 0;
+  text_return->concat("Stopping...\n");
+  console.emitPrompt(false);  // Avoid a trailing prompt.
   return 0;
 }
 
@@ -208,7 +210,7 @@ int main(int argc, char *argv[]) {
     }
     console.printToLog(&output);
   }
-  output.concat("Stopping...\n");
+  console.emitPrompt(false);  // Avoid a trailing prompt.
   console.printToLog(&output);
 
   if (nullptr != m_link) {
@@ -220,5 +222,5 @@ int main(int argc, char *argv[]) {
   }
   console_adapter.poll();
 
-  exit(exit_value);
+  platform.firmware_shutdown(0);     // Clean up the platform.
 }

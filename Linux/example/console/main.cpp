@@ -172,6 +172,7 @@ int callback_kvp_tools(StringBuilder* text_return, StringBuilder* args) {
 
 int callback_program_quit(StringBuilder* text_return, StringBuilder* args) {
   continue_running = 0;
+  console.emitPrompt(false);  // Avoid a trailing prompt.
   text_return->concat("Stopping...\n");
   return 0;
 }
