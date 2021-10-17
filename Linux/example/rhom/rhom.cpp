@@ -203,11 +203,22 @@ int main(int argc, char *argv[]) {
   // The main loop. Run until told to stop.
   while (continue_running) {
     console_adapter.poll();
-    m_link->poll(&output);
+    if (nullptr != m_link) {
+      m_link->poll(&output);
+    }
     console.printToLog(&output);
   }
-
-  output.concat("Stopping nicely...\n");
+  output.concat("Stopping...\n");
   console.printToLog(&output);
+
+  if (nullptr != m_link) {
+    m_link->hangup();
+    delete m_link;
+  }
+  if (nullptr != uart) {
+    delete uart;
+  }
+  console_adapter.poll();
+
   exit(exit_value);
 }

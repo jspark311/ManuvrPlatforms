@@ -513,12 +513,18 @@ long unsigned micros() {
 /* Delay functions */
 void sleep_ms(uint32_t ms) {
   struct timespec t = {(long) (ms / 1000), (long) ((ms % 1000) * 1000000UL)};
-  nanosleep(&t, &t);
+  struct timespec r;
+  if (0 != nanosleep(&t, &r)) {
+    while (0 != nanosleep(&r, &r)) {}
+  }
 }
 
 void sleep_us(uint32_t us) {
   struct timespec t = {(long) (us / 1000000), (long) ((us % 1000000) * 1000000UL)};
-  nanosleep(&t, &t);
+  struct timespec r;
+  if (0 != nanosleep(&t, &r)) {
+    while (0 != nanosleep(&r, &r)) {}
+  }
 }
 
 
