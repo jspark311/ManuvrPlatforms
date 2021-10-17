@@ -15,31 +15,120 @@
 #include <inttypes.h>
 #include <ctype.h>
 
+/*******************************************************************************
+* Since linux identifies i2c ports by string ("/dev/i2c-x", usually), we need
+*   a small wrapper class to allow instancing this way, and forming the
+*   associated bridge to the CppPotpourri classes.
+*******************************************************************************/
 
-int open_bus_handle = -1;        //TODO: This is a hack. Re-work it.
-int8_t  last_used_bus_addr = 0;  //TODO: This is a hack. Re-work it.
-pthread_t _thread_id = 0;
+typedef struct {
+  I2CAdapter* instance; // Tracks the I2CAdapter representing it to the rest of CppPotpourri.
+  char*       path;     // This tracks the device under Linux.
+  int         sock;     // This tracks the open port under Linux.
+} LinuxI2CLookup;
 
 
-I2CBusOp* _threaded_op = nullptr;
+/*******************************************************************************
+*      _______.___________.    ___   .___________. __    ______     _______.
+*     /       |           |   /   \  |           ||  |  /      |   /       |
+*    |   (----`---|  |----`  /  ^  \ `---|  |----`|  | |  ,----'  |   (----`
+*     \   \       |  |      /  /_\  \    |  |     |  | |  |        \   \
+* .----)   |      |  |     /  _____  \   |  |     |  | |  `----.----)   |
+* |_______/       |__|    /__/     \__\  |__|     |__|  \______|_______/
+*
+* Static members and initializers should be located here.
+*******************************************************************************/
 
-void* i2c_worker_thread(void* arg) {
-  //I2CAdapter* adapter = (I2CAdapter*) arg;
-  while (!platform.nominalState()) {
-    sleep_millis(80);
-  }
-  while (platform.nominalState()) {
-    if (_threaded_op) {
-      _threaded_op->advance(0);
-      _threaded_op = nullptr;
-      yieldThread();
-    }
-    else {
-      suspendThread();
-    }
+unsigned long _i2c_polling_thread_id = 0;
+static LinkedList<LinuxI2CLookup*> i2c_instances;
+
+static LinuxI2CLookup* _i2c_table_get_by_adapter_ref(I2CAdapter* adapter) {
+  for (int i = 0; i < i2c_instances.size(); i++) {
+    LinuxI2CLookup* temp = i2c_instances.get(i);
+    if (temp->instance == adapter) return temp;
   }
   return nullptr;
 }
+
+
+/**
+* This is a thread to keep the UARTs churning.
+*/
+static void* i2c_polling_handler(void*) {
+  bool keep_polling = true;
+  printf("Started i2c polling thread.\n");
+  while (keep_polling) {
+    for (int i = 0; i < i2c_instances.size(); i++) {
+      LinuxI2CLookup* temp = i2c_instances.get(i);
+      if (nullptr != temp) {
+        if (temp->instance->busOnline()) {
+          temp->instance->poll();
+        }
+      }
+    }
+    keep_polling = (0 < i2c_instances.size());
+  }
+  printf("Exiting i2c polling thread...\n");
+  _i2c_polling_thread_id = 0;  // Allow the thread to be restarted later.
+  return NULL;
+}
+
+
+/*******************************************************************************
+* I2C wrapper class
+*******************************************************************************/
+
+/**
+* Constructor will allocate memory for its lookup list item and the path string.
+* Adds itself to the lookup list.
+*
+* NOTE: Because this constructor modifies static data, it can't be relied upon
+*   if an instance of it is ever allocated statically. So don't do that.
+*/
+LinuxI2C::LinuxI2C(char* path, const I2CAdapterOptions* o) : I2CAdapter(o) {
+  const int slen = strlen(path);
+  LinuxI2CLookup* lookup = (LinuxI2CLookup*) malloc(sizeof(LinuxI2CLookup));
+  if (lookup) {
+    bzero(lookup, sizeof(LinuxI2CLookup));
+    lookup->instance = (I2CAdapter*) this;
+    lookup->path     = (char*) malloc(slen+1);
+    lookup->sock     = -1;
+    if (lookup->path) {
+      memcpy(lookup->path, path, slen);
+      *(lookup->path + slen) = '\0';
+      i2c_instances.insert(lookup);
+    }
+    else {
+      free(lookup);
+    }
+  }
+}
+
+
+/**
+* Destructor will de-init the hardware, remove itself from the lookup list,
+*   and free any memory it used to store itself.
+*/
+LinuxI2C::~LinuxI2C() {
+  LinuxI2CLookup* lookup = _i2c_table_get_by_adapter_ref(this);
+  bus_deinit();
+  if (nullptr != lookup) {
+    i2c_instances.remove(lookup);
+    free(lookup->path);
+    lookup->path = nullptr;
+    free(lookup);
+  }
+}
+
+
+/*******************************************************************************
+* Implementation of I2CAdapter.
+*******************************************************************************/
+
+
+int open_bus_handle = -1;        //TODO: This is a hack. Re-work it.
+int8_t  last_used_bus_addr = 0;  //TODO: This is a hack. Re-work it.
+
 
 
 /*

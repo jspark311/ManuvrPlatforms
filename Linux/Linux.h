@@ -44,9 +44,9 @@ This file forms the catch-all for linux platforms that have no support.
 
 int8_t _load_config();       // Called during boot to load configuration.
 
-/*
-* The STDIO driver class.
-*/
+/*******************************************************************************
+* The STDIO driver class
+*******************************************************************************/
 class LinuxStdIO : public BufferAccepter {
   public:
     LinuxStdIO();
@@ -55,11 +55,8 @@ class LinuxStdIO : public BufferAccepter {
     /* Implementation of BufferAccepter. */
     inline int8_t provideBuffer(StringBuilder* buf) {  _tx_buffer.concatHandoff(buf); return 1;   };
     inline void readCallback(BufferAccepter* cb) {   _read_cb_obj = cb;   };
-
     inline void write(const char* str) {  _tx_buffer.concat((uint8_t*) str, strlen(str));  };
-
     int8_t poll();
-
 
   private:
     BufferAccepter* _read_cb_obj = nullptr;
@@ -68,22 +65,25 @@ class LinuxStdIO : public BufferAccepter {
 };
 
 
-/* The UART wrapper class to allow taking a path as a device identifier. */
+/*******************************************************************************
+* Wrapper classes to allow taking a path as a device identifier.
+*******************************************************************************/
 class LinuxUART : public UARTAdapter {
   public:
     LinuxUART(char* path);
     ~LinuxUART();
 };
 
-
-/* The UART wrapper class to allow taking a path as a device identifier. */
 class LinuxI2C : public I2CAdapter {
   public:
-    LinuxI2C(char* path);
+    LinuxI2C(char* path, const I2CAdapterOptions*);
     ~LinuxI2C();
 };
 
 
+/*******************************************************************************
+* Platform object
+*******************************************************************************/
 
 class LinuxPlatform : public AbstractPlatform {
   public:

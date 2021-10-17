@@ -20,9 +20,6 @@ limitations under the License.
 
 This driver fills out the platform-abstracted UARTAdapter class in
   CppPotpourri. On linux, that means /dev/tty<x>.
-
-Platforms that require it should be able to extend this driver for specific
-  kinds of hardware support.
 */
 
 
