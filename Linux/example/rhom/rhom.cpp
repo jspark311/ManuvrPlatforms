@@ -125,7 +125,6 @@ int callback_program_quit(StringBuilder* text_return, StringBuilder* args) {
 * The main function.                                                           *
 *******************************************************************************/
 int main(int argc, char *argv[]) {
-  int exit_value = 0;
   StringBuilder output;
   parent_pid = getpid();    // We will need to know our root PID.
   program_name = argv[0];   // Our name.
@@ -171,7 +170,7 @@ int main(int argc, char *argv[]) {
     }
     else {
       printf("Unhandled argument: %s\n", argv[i]);
-      exit(1);
+      platform.firmware_shutdown(0);     // Clean up the platform.
     }
   }
 
