@@ -72,8 +72,6 @@ int callback_console_tools(StringBuilder* text_return, StringBuilder* args) {
   //inline void setPromptString(const char* str) {    _prompt_string = (char*) str;   };
   //inline bool hasColor() {               return _console_flag(CONSOLE_FLAG_HAS_ANSI);                   };
   //inline void hasColor(bool x) {         return _console_set_flag(CONSOLE_FLAG_HAS_ANSI, x);            };
-  //inline bool printHelpOnFail() {        return _console_flag(CONSOLE_FLAG_PRINT_HELP_ON_FAIL);         };
-  //inline void printHelpOnFail(bool x) {  return _console_set_flag(CONSOLE_FLAG_PRINT_HELP_ON_FAIL, x);  };
   int ret = 0;
   char* cmd    = args->position_trimmed(0);
   int   arg1   = args->position_as_int(1);
@@ -109,6 +107,12 @@ int callback_console_tools(StringBuilder* text_return, StringBuilder* args) {
       else text_return->concat("Valid options are [clear|depth|logerrors]\n");
     }
     else console.printHistory(text_return);
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "help-on-fail")) {
+    if (1 < args->count()) {
+      console.printHelpOnFail(0 != arg1);
+    }
+    text_return->concatf("Console prints command help on failure: %s.\n", console.printHelpOnFail()?"yes":"no");
   }
   else if (0 == StringBuilder::strcasecmp(cmd, "prompt")) {
     if (1 < args->count()) {

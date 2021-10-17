@@ -106,17 +106,108 @@ int callback_print_history(StringBuilder* text_return, StringBuilder* args) {
 }
 
 
-int callback_link_tools(StringBuilder* text_return, StringBuilder* args) {
-  m_link->printDebug(text_return);
-  return 0;
-}
-
-
 int callback_program_quit(StringBuilder* text_return, StringBuilder* args) {
   continue_running = 0;
   text_return->concat("Stopping...\n");
   console.emitPrompt(false);  // Avoid a trailing prompt.
   return 0;
+}
+
+
+int callback_uart_tools(StringBuilder* text_return, StringBuilder* args) {
+  int ret = 0;
+  char* cmd = args->position_trimmed(0);
+  bool print_alloc_fail = false;
+  if (0 == StringBuilder::strcasecmp(cmd, "info")) {
+    if (nullptr != uart) {
+      uart->printDebug(text_return);
+    }
+    else print_alloc_fail = true;
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "reset")) {
+    if (nullptr != uart) {
+      uart->reset();
+      text_return->concat("UART was reset().\n");
+    }
+    else print_alloc_fail = true;
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "bitrate")) {
+    if (nullptr != uart) {
+      switch (args->count()) {
+        case 2:
+          uart->uartOpts()->bitrate = args->position_as_int(1);
+          uart->reset();
+          text_return->concatf("Attempting to set bitrate on UART...\n");
+          break;
+        default:
+          text_return->concatf("UART bitrate is %u\n", uart->uartOpts()->bitrate);
+          break;
+      }
+    }
+    else print_alloc_fail = true;
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "new")) {
+    if (nullptr == uart) {
+      if (2 == args->count()) {
+        // Instance a UART.
+        uart = new LinuxUART(args->position_trimmed(1));
+        if (nullptr != uart) {
+          uart->init(&uart_opts);
+          uart->readCallback(m_link);      // Attach the UART to ManuvrLink...
+          m_link->setOutputTarget(uart);   // ...and ManuvrLink to UART.
+        }
+        else print_alloc_fail = true;
+      }
+      else text_return->concat("Usage:\t uart new [path-to-tty].\n");
+    }
+    else text_return->concat("Program currently only allows one UART at a time.\n");
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "free")) {
+    if (nullptr != uart) {
+      m_link->setOutputTarget(nullptr);   // Remove refs held elsewhere.
+      delete uart;
+      uart = nullptr;
+    }
+    else print_alloc_fail = true;
+  }
+  else text_return->concat("Usage:\t uart [info|reset|bitrate|new|free]\n");
+
+  if (print_alloc_fail) {
+    text_return->concat("UART unallocated.\n");
+  }
+  return ret;
+}
+
+
+int callback_link_tools(StringBuilder* text_return, StringBuilder* args) {
+  int ret = 0;
+  char* cmd = args->position_trimmed(0);
+  if (0 == StringBuilder::strcasecmp(cmd, "info")) {
+    m_link->printDebug(text_return);
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "reset")) {
+    text_return->concatf("Link reset() returns %d\n", m_link->reset());
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "hangup")) {
+    text_return->concatf("Link hangup() returns %d\n", m_link->hangup());
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "verbosity")) {
+    switch (args->count()) {
+      case 2:
+        m_link->verbosity(0x07 & args->position_as_int(1));
+      default:
+        text_return->concatf("Link verbosity is %u\n", m_link->verbosity());
+        break;
+    }
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "desc")) {
+
+    text_return->concatf("Link hangup() returns %d\n", m_link->hangup());
+  }
+  else {
+    text_return->concat("Usage: [info|reset|hangup|verbosity|desc]\n");
+  }
+  return ret;
 }
 
 
@@ -132,6 +223,7 @@ int main(int argc, char *argv[]) {
   platform.init();
 
   m_link = new ManuvrLink(&link_opts);
+  m_link->setCallback(link_callback);
 
   // Parse through all the command line arguments and flags...
   // Please note that the order matters. Put all the most-general matches at the bottom of the loop.
@@ -159,7 +251,6 @@ int main(int argc, char *argv[]) {
         uart->init(&uart_opts);
         uart->readCallback(m_link);      // Attach the UART to ManuvrLink...
         m_link->setOutputTarget(uart);   // ...and ManuvrLink to UART.
-        m_link->setCallback(link_callback);
       }
       else if ((strlen(argv[i]) > 3) && (argv[i][0] == '-') && (argv[i][1] == '-')) {
         i++;
@@ -186,6 +277,7 @@ int main(int argc, char *argv[]) {
   console.defineCommand("help",        '?', ParsingConsole::tcodes_str_1, "Prints help to console.", "", 0, callback_help);
   console.defineCommand("history",     ParsingConsole::tcodes_0, "Print command history.", "", 0, callback_print_history);
   console.defineCommand("link",        'l', ParsingConsole::tcodes_str_4, "Linked device tools.", "", 0, callback_link_tools);
+  console.defineCommand("uart",        'u', ParsingConsole::tcodes_str_4, "UART tools.", "", 0, callback_uart_tools);
   platform.configureConsole(&console);
   console.defineCommand("quit",        'Q', ParsingConsole::tcodes_0, "Commit sudoku.", "", 0, callback_program_quit);
 
@@ -215,9 +307,11 @@ int main(int argc, char *argv[]) {
   if (nullptr != m_link) {
     m_link->hangup();
     delete m_link;
+    m_link = nullptr;
   }
   if (nullptr != uart) {
     delete uart;
+    uart = nullptr;
   }
   console_adapter.poll();
 
