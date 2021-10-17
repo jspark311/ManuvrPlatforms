@@ -63,7 +63,7 @@ UARTOpts uart_opts {
   .padding       = 0
 };
 
-LinuxUART uart("/dev/ttyUSB0");
+LinuxUART*  uart   = nullptr;
 ManuvrLink* m_link = nullptr;
 
 
@@ -130,10 +130,13 @@ int main(int argc, char *argv[]) {
 
   platform.init();
 
+  m_link = new ManuvrLink(&link_opts);
+
   // Parse through all the command line arguments and flags...
   // Please note that the order matters. Put all the most-general matches at the bottom of the loop.
   for (int i = 1; i < argc; i++) {
     if ((strcasestr(argv[i], "--help")) || (strcasestr(argv[i], "-h"))) {
+      printf("-u  --uart <path>   Instance a UART to talk to the hardware.\n");
       printf("-v  --version       Print the version and exit.\n");
       printf("-h  --help          Print this output and exit.\n");
       printf("\n\n");
@@ -143,12 +146,32 @@ int main(int argc, char *argv[]) {
       printf("%s v%s\n\n", argv[0], FP_VERSION);
       exit(0);
     }
+    else if (argc - i >= 2) {    // Compound arguments go in this case block...
+      if ((strcasestr(argv[i], "--uart")) || (strcasestr(argv[i], "-u"))) {
+        if (argc - i < 2) {  // Mis-use of flag...
+          printf("Using --uart means you must supply a path to it.\n");
+          exit(1);
+        }
+        i++;
+        // Instance a UART.
+        uart = new LinuxUART(argv[i++]);
+        uart->init(&uart_opts);
+        uart->readCallback(m_link);      // Attach the UART to ManuvrLink...
+        m_link->setOutputTarget(uart);   // ...and ManuvrLink to UART.
+        m_link->setCallback(link_callback);
+      }
+      else if ((strlen(argv[i]) > 3) && (argv[i][0] == '-') && (argv[i][1] == '-')) {
+        i++;
+      }
+      else {
+        i++;
+      }
+    }
     else {
       printf("Unhandled argument: %s\n", argv[i]);
       exit(1);
     }
   }
-
 
   // Mutually connect the console class to STDIO.
   console_adapter.readCallback(&console);
@@ -176,13 +199,6 @@ int main(int argc, char *argv[]) {
   output.concatf("%s initialized.\n", argv[0]);
   console.printToLog(&output);
   console.printPrompt();
-
-  m_link = new ManuvrLink(&link_opts);
-
-  uart.init(&uart_opts);
-  uart.readCallback(m_link);      // Attach the UART to ManuvrLink...
-  m_link->setOutputTarget(&uart); // ...and ManuvrLink to UART.
-  m_link->setCallback(link_callback);
 
   // The main loop. Run until told to stop.
   while (continue_running) {

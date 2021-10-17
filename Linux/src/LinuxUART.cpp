@@ -39,6 +39,20 @@ Platforms that require it should be able to extend this driver for specific
 
 
 /*******************************************************************************
+* Since linux identifies UARTs by string ("/dev/ttyACMx", or some such), we need
+*   a small wrapper class to allow instancing this way, and forming the
+*   associated bridge to the CppPotpourri classes.
+*******************************************************************************/
+
+typedef struct {
+  UARTAdapter*   instance; // Tracks the UARTAdapter representing it to the rest of CppPotpourri.
+  char*          path;     // This tracks the device under Linux.
+  int            sock;     // This tracks the open port under Linux.
+  struct termios termAttr; // This tracks the port settings under Linux.
+} LinuxUARTLookup;
+
+
+/*******************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.
 *     /       |           |   /   \  |           ||  |  /      |   /       |
 *    |   (----`---|  |----`  /  ^  \ `---|  |----`|  | |  ,----'  |   (----`
@@ -49,86 +63,136 @@ Platforms that require it should be able to extend this driver for specific
 * Static members and initializers should be located here.
 *******************************************************************************/
 
-int           _sock      = 0;
-unsigned long _thread_id = 0;
-char*         dev_path   = nullptr;
-struct termios termAttr;
+unsigned long _uart_polling_thread_id = 0;
+static LinkedList<LinuxUARTLookup*> uart_instances;
 
 
-UARTAdapter* uart_instances[] = {nullptr, nullptr, nullptr};
+static LinuxUARTLookup* _uart_table_get_by_adapter_ref(UARTAdapter* adapter) {
+  for (int i = 0; i < uart_instances.size(); i++) {
+    LinuxUARTLookup* temp = uart_instances.get(i);
+    if (temp->instance == adapter) return temp;
+  }
+  return nullptr;
+}
+
 
 
 /**
-* This is a thread to keep the randomness pool flush.
+* This is a thread to keep the UARTs churning.
 */
 static void* uart_polling_handler(void*) {
   bool keep_polling = true;
+  printf("Started UART polling thread.\n");
   while (keep_polling) {
-    uart_instances[0]->poll();
-    keep_polling = (nullptr != uart_instances[0]);
+    for (int i = 0; i < uart_instances.size(); i++) {
+      LinuxUARTLookup* temp = uart_instances.get(i);
+      if (nullptr != temp) {
+        if (temp->instance->initialized()) {
+          temp->instance->poll();
+        }
+      }
+    }
+    keep_polling = (0 < uart_instances.size());
   }
   printf("Exiting UART polling thread...\n");
+  _uart_polling_thread_id = 0;  // Allow the thread to be restarted later.
   return NULL;
 }
 
 
-/*
-* In-class ISR handler. Be careful about state mutation....
+/*******************************************************************************
+* UART wrapper class
+*******************************************************************************/
+
+/**
+* Constructor will allocate memory for its lookup list item and the path string.
+* Adds itself to the lookup list.
+*
+* NOTE: Because this constructor modifies static data, it can't be relied upon
+*   if an instance of it is ever allocated statically. So don't do that.
 */
-void UARTAdapter::irq_handler() {
+LinuxUART::LinuxUART(char* path) : UARTAdapter(0, 0, 0, 0, 0, 256, 256) {
+  const int slen = strlen(path);
+  LinuxUARTLookup* lookup = (LinuxUARTLookup*) malloc(sizeof(LinuxUARTLookup));
+  if (lookup) {
+    bzero(lookup, sizeof(LinuxUARTLookup));
+    lookup->instance = (UARTAdapter*) this;
+    lookup->path     = (char*) malloc(slen+1);
+    lookup->sock     = -1;
+    if (lookup->path) {
+      memcpy(lookup->path, path, slen);
+      *(lookup->path + slen) = '\0';
+      uart_instances.insert(lookup);
+    }
+    else {
+      free(lookup);
+    }
+  }
 }
+
+
+/**
+* Destructor will de-init the hardware, remove itself from the lookup list,
+*   and free any memory it used to store itself.
+*/
+LinuxUART::~LinuxUART() {
+  LinuxUARTLookup* lookup = _uart_table_get_by_adapter_ref(this);
+  _pf_deinit();
+  if (nullptr != lookup) {
+    uart_instances.remove(lookup);
+    free(lookup->path);
+    lookup->path = nullptr;
+    free(lookup);
+  }
+}
+
+
+/*******************************************************************************
+* Implementation of UARTAdapter.
+*******************************************************************************/
+
+/*
+* This doesn't get used on Linux.
+*/
+void UARTAdapter::irq_handler() {}
 
 
 /**
 * Execute any I/O callbacks that are pending. The function is present because
 *   this class contains the bus implementation.
 *
-* @return 0 on success.
+* @return 0 or greater on success.
 */
 int8_t UARTAdapter::poll() {
   int8_t return_value = 0;
-  int bytes_written = 0;
-  int bytes_received = 0;
-
-  if (txCapable() && (0 < _tx_buffer.length())) {
-    // Refill the TX buffer...
-    int tx_count = strict_min((int32_t) 64, (int32_t) _tx_buffer.length());
-    if (0 < tx_count) {
-      switch (ADAPTER_NUM) {
-        case 0:
-          if (_sock == -1) {
-            #ifdef MANUVR_DEBUG
-              if (getVerbosity() > 2) {
-                local_log.concatf("Unable to write to transport: %s\n", dev_path);
-                Kernel::log(&local_log);
-              }
-            #endif
-            return false;
-          }
-          bytes_written = (int) ::write(_sock, _tx_buffer.string(), tx_count);
+  LinuxUARTLookup* lookup = _uart_table_get_by_adapter_ref(this);
+  if (nullptr != lookup) {
+    if (lookup->sock != -1) {
+      int bytes_written = 0;
+      int bytes_received = 0;
+      if (txCapable() && (0 < _tx_buffer.length())) {
+        // Refill the TX buffer...
+        int tx_count = strict_min((int32_t) 64, (int32_t) _tx_buffer.length());
+        if (0 < tx_count) {
+          bytes_written = (int) ::write(lookup->sock, _tx_buffer.string(), tx_count);
           _tx_buffer.cull(bytes_written);
           _adapter_set_flag(UART_FLAG_FLUSHED, _tx_buffer.isEmpty());
-          break;
+        }
       }
-    }
-  }
-  if (rxCapable()) {
-    uint8_t* buf = (uint8_t*) alloca(255);
-    switch (ADAPTER_NUM) {
-      case 0:
-        int n = ::read(_sock, buf, 255);
-        //size_t n = fread(buf, 1, 255, _sock);
+      if (rxCapable()) {
+        uint8_t* buf = (uint8_t*) alloca(255);
+        int n = ::read(lookup->sock, buf, 255);
         if (n > 0) {
           bytes_received += n;
           _rx_buffer.concat(buf, n);
           return_value = 1;
         }
-        break;
-    }
-    if (0 < _rx_buffer.length()) {
-      if (nullptr != _read_cb_obj) {
-        if (0 == _read_cb_obj->provideBuffer(&_rx_buffer)) {
-          _rx_buffer.clear();
+        if (0 < _rx_buffer.length()) {
+          if (nullptr != _read_cb_obj) {
+            if (0 == _read_cb_obj->provideBuffer(&_rx_buffer)) {
+              _rx_buffer.clear();
+            }
+          }
         }
       }
     }
@@ -139,43 +203,43 @@ int8_t UARTAdapter::poll() {
 
 int8_t UARTAdapter::_pf_init() {
   int8_t ret = -1;
-  switch (ADAPTER_NUM) {
-    case 0:
-      uart_instances[ADAPTER_NUM] = this;
-      if (_sock) {
-        close(_sock);
-      }
-      _sock = open(dev_path, O_RDWR | O_NOCTTY | O_SYNC);
-      if (_sock == -1) {
-        printf("Unable to open port: (%s)\n", dev_path);
-        return -1;
-      }
-      printf("Opened port (%s) at %d\n", dev_path, _opts.bitrate);
-      tcgetattr(_sock, &termAttr);
-      cfsetspeed(&termAttr, _opts.bitrate);
+  LinuxUARTLookup* lookup = _uart_table_get_by_adapter_ref(this);
+  if (nullptr != lookup) {
+    _adapter_clear_flag(UART_FLAG_UART_READY);
+    if (0 < lookup->sock) {
+      close(lookup->sock);
+    }
+    lookup->sock = open(lookup->path, O_RDWR | O_NOCTTY | O_SYNC);
+    if (lookup->sock != -1) {
+      printf("Opened port (%s) at %dbps\n", lookup->path, _opts.bitrate);
+      tcgetattr(lookup->sock, &(lookup->termAttr));
+      cfsetspeed(&(lookup->termAttr), _opts.bitrate);
       // TODO: These choices should come from _options. Find a good API to emulate.
       //    ---J. Ian Lindsay   Thu Dec 03 03:43:12 MST 2015
-      termAttr.c_cflag &= ~PARENB;          // No parity
-      termAttr.c_cflag &= ~CSTOPB;          // 1 stop bit
-      termAttr.c_cflag &= ~CSIZE;           // Enable char size mask
-      termAttr.c_cflag |= CS8;              // 8-bit characters
-      termAttr.c_cflag |= (CLOCAL | CREAD);
-      termAttr.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);
-      termAttr.c_iflag &= ~(IXON | IXOFF | IXANY);
-      termAttr.c_oflag &= ~OPOST;
-
-      if (tcsetattr(_sock, TCSANOW, &termAttr) == 0) {
+      lookup->termAttr.c_cflag &= ~PARENB;          // No parity
+      lookup->termAttr.c_cflag &= ~CSTOPB;          // 1 stop bit
+      lookup->termAttr.c_cflag &= ~CSIZE;           // Enable char size mask
+      lookup->termAttr.c_cflag |= CS8;              // 8-bit characters
+      lookup->termAttr.c_cflag |= (CLOCAL | CREAD);
+      lookup->termAttr.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);
+      lookup->termAttr.c_iflag &= ~(IXON | IXOFF | IXANY);
+      lookup->termAttr.c_oflag &= ~OPOST;
+      if (tcsetattr(lookup->sock, TCSANOW, &(lookup->termAttr)) == 0) {
         _adapter_set_flag(UART_FLAG_HAS_TX | UART_FLAG_HAS_RX);
         _adapter_set_flag(UART_FLAG_UART_READY | UART_FLAG_FLUSHED);
         _adapter_clear_flag(UART_FLAG_PENDING_CONF | UART_FLAG_PENDING_RESET);
-        platform.createThread(&_thread_id, nullptr, uart_polling_handler, (void*) this, nullptr);
+        if (0 == _uart_polling_thread_id) {
+          platform.createThread(&_uart_polling_thread_id, nullptr, uart_polling_handler, nullptr, nullptr);
+        }
         ret = 0;
       }
       else {
-        _adapter_clear_flag(UART_FLAG_UART_READY);
         printf("Failed to tcsetattr...\n");
       }
-      break;
+    }
+    else {
+      printf("Unable to open port: (%s)\n", lookup->path);
+    }
   }
   return ret;
 }
@@ -183,19 +247,16 @@ int8_t UARTAdapter::_pf_init() {
 
 int8_t UARTAdapter::_pf_deinit() {
   int8_t ret = -2;
-  _adapter_clear_flag(UART_FLAG_UART_READY | UART_FLAG_PENDING_RESET | UART_FLAG_PENDING_CONF);
-  if (ADAPTER_NUM < 3) {
-    if (_sock) {
-      close(_sock);  // Close the socket.
-      _sock = 0;
-    }
-    if (dev_path) {
-      free(dev_path);
-      dev_path = nullptr;
-    }
+  LinuxUARTLookup* lookup = _uart_table_get_by_adapter_ref(this);
+  if (nullptr != lookup) {
+    _adapter_clear_flag(UART_FLAG_UART_READY | UART_FLAG_PENDING_RESET | UART_FLAG_PENDING_CONF);
     if (txCapable()) {
       //uart_wait_tx_idle_polling((uart_port_t) ADAPTER_NUM);
       _adapter_set_flag(UART_FLAG_FLUSHED);
+    }
+    if (0 < lookup->sock) {
+      close(lookup->sock);  // Close the socket.
+      lookup->sock = -1;
     }
     ret = 0;
   }
@@ -249,37 +310,4 @@ uint UARTAdapter::read(StringBuilder* buf) {
     buf->concatHandoff(&_rx_buffer);
   }
   return ret;
-}
-
-
-//
-// /**
-// * Debug support method. This fxn is only present in debug builds.
-// *
-// * @param   StringBuilder* The buffer into which this fxn should write its output.
-// */
-// void ManuvrSerial::printDebug(StringBuilder *temp) {
-//   temp->concatf("-- dev_path        %s\n",     dev_path);
-//   temp->concatf("-- _options        0x%08x\n", _options);
-//   temp->concatf("-- _sock           0x%08x\n", _sock);
-//   temp->concatf("-- Baud            %d\n",     _baud_rate);
-//   temp->concatf("-- Class size      %d\n",     sizeof(ManuvrSerial));
-// }
-
-
-LinuxUART::LinuxUART(char* path) : UARTAdapter(0, 0, 0, 0, 0, 256, 256) {
-  int slen = strlen(path);
-  dev_path = (char*) malloc(slen+1);
-  if (dev_path) {
-    memcpy(dev_path, path, slen);
-    *(dev_path + slen) = '\0';
-  }
-}
-
-
-LinuxUART::~LinuxUART() {
-  // if (dev_path) {
-  //   free(dev_path);
-  //   dev_path = nullptr;
-  // }
 }
