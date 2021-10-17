@@ -25,7 +25,7 @@ export OUTPUT_PATH   = $(BUILD_ROOT)/build/
 CXXFLAGS  = -I../CppPotpourri/src -I../../ -Wl,--gc-sections -Wall
 CXXFLAGS += -fsingle-precision-constant -Wdouble-promotion -fno-rtti -fno-exceptions
 CXXFLAGS += $(OPTIMIZATION) -std=$(CXX_STANDARD) -m32
-CXXFLAGS += -DCONFIG_MANUVR_CBOR
+CXXFLAGS += -DCONFIG_MANUVR_CBOR -DCONFIG_MANUVR_M2M_SUPPORT
 
 LIBS	= -L$(OUTPUT_PATH) -lstdc++ -lm -lpthread
 
