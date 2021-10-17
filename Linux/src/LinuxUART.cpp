@@ -211,16 +211,44 @@ int8_t UARTAdapter::_pf_init() {
     }
     lookup->sock = open(lookup->path, O_RDWR | O_NOCTTY | O_SYNC);
     if (lookup->sock != -1) {
-      printf("Opened port (%s) at %dbps\n", lookup->path, _opts.bitrate);
       tcgetattr(lookup->sock, &(lookup->termAttr));
       cfsetspeed(&(lookup->termAttr), _opts.bitrate);
-      // TODO: These choices should come from _options. Find a good API to emulate.
-      //    ---J. Ian Lindsay   Thu Dec 03 03:43:12 MST 2015
-      lookup->termAttr.c_cflag &= ~PARENB;          // No parity
-      lookup->termAttr.c_cflag &= ~CSTOPB;          // 1 stop bit
       lookup->termAttr.c_cflag &= ~CSIZE;           // Enable char size mask
-      lookup->termAttr.c_cflag |= CS8;              // 8-bit characters
-      lookup->termAttr.c_cflag |= (CLOCAL | CREAD);
+      switch (_opts.bit_per_word) {
+        case 5:  lookup->termAttr.c_cflag |= CS5;  break;
+        case 6:  lookup->termAttr.c_cflag |= CS6;  break;
+        case 7:  lookup->termAttr.c_cflag |= CS7;  break;
+        case 8:  lookup->termAttr.c_cflag |= CS8;  break;
+        default:
+          printf("%d bis-per-word is invalid for %s.\n", _opts.bit_per_word, lookup->path);
+          return ret;
+      }
+      switch (_opts.parity) {
+        case UARTParityBit::NONE:  lookup->termAttr.c_cflag &= ~PARENB;            break;
+        case UARTParityBit::EVEN:  lookup->termAttr.c_cflag |= PARENB;             break;
+        case UARTParityBit::ODD:   lookup->termAttr.c_cflag |= (PARENB | PARODD);  break;
+        default:
+          printf("Invalid parity selection for %s.\n", lookup->path);
+          return ret;
+      }
+      switch (_opts.stop_bits) {
+        case UARTStopBit::STOP_1:  lookup->termAttr.c_cflag &= ~CSTOPB;  break;
+        case UARTStopBit::STOP_2:  lookup->termAttr.c_cflag |= CSTOPB;   break;
+        default:
+          printf("Unsupported stop-bit selection for %s.\n", lookup->path);
+          return ret;
+      }
+      switch (_opts.flow_control) {
+        case UARTFlowControl::NONE:     lookup->termAttr.c_cflag |= CLOCAL;   break;
+        case UARTFlowControl::RTS_CTS:  lookup->termAttr.c_cflag |= CRTSCTS;  break;
+        default:
+          printf("Unsupported flow control selection for %s.\n", lookup->path);
+          return ret;
+      }
+      // If an input buffer was desired, we turn on RX.
+      if (0 < _BUF_LEN_RX)   lookup->termAttr.c_cflag |= CREAD;
+
+      printf("Opened port (%s) at %dbps\n", lookup->path, _opts.bitrate);
       lookup->termAttr.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);
       lookup->termAttr.c_iflag &= ~(IXON | IXOFF | IXANY);
       lookup->termAttr.c_oflag &= ~OPOST;
