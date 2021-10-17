@@ -179,13 +179,11 @@ int8_t UARTAdapter::poll() {
   LinuxUARTLookup* lookup = _uart_table_get_by_adapter_ref(this);
   if (nullptr != lookup) {
     if (lookup->sock > 0) {
-      int bytes_written = 0;
-      int bytes_received = 0;
       if (txCapable() && (0 < _tx_buffer.length())) {
         // Refill the TX buffer...
         int tx_count = strict_min((int32_t) 64, (int32_t) _tx_buffer.length());
         if (0 < tx_count) {
-          bytes_written = (int) ::write(lookup->sock, _tx_buffer.string(), tx_count);
+          int bytes_written = (int) ::write(lookup->sock, _tx_buffer.string(), tx_count);
           _tx_buffer.cull(bytes_written);
           _adapter_set_flag(UART_FLAG_FLUSHED, _tx_buffer.isEmpty());
         }
@@ -194,7 +192,6 @@ int8_t UARTAdapter::poll() {
         uint8_t* buf = (uint8_t*) alloca(255);
         int n = ::read(lookup->sock, buf, 255);
         if (n > 0) {
-          bytes_received += n;
           _rx_buffer.concat(buf, n);
           last_byte_rx_time = millis();
           return_value = 1;

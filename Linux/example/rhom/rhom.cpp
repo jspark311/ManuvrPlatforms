@@ -48,7 +48,8 @@ ManuvrLinkOpts link_opts(
   100,   // ACK timeout is 100ms.
   2000,  // Send a KA every 2s.
   2048,  // MTU for this link is 2 kibi.
-  0      // No flags.
+  TCode::CBOR,   // Payloads should be CBOR encoded.
+  (MANUVRLINK_FLAG_SEND_KA)  // This side of the link will send a KA, by default.
 );
 
 UARTOpts uart_opts {
@@ -69,17 +70,29 @@ ManuvrLink* m_link = nullptr;
 
 
 /*******************************************************************************
-* Link callback
+* Link callbacks
 *******************************************************************************/
 
-void link_callback(uint32_t tag, ManuvrMsg* msg) {
+
+void link_callback_state(ManuvrLink* cb_link) {
+  StringBuilder log;
+  log.concatf("Link (0x%x) entered state %s\n", cb_link->linkTag(), ManuvrLink::sessionStateStr(cb_link->getState()));
+  printf("%s\n\n", (const char*) log.string());
+}
+
+
+void link_callback_message(uint32_t tag, ManuvrMsg* msg) {
   StringBuilder log;
   KeyValuePair* kvps_rxd = nullptr;
-  log.concatf("link_callback(0x%x): \n", tag, msg->uniqueId());
+  log.concatf("link_callback_message(0x%x): \n", tag, msg->uniqueId());
   msg->printDebug(&log);
   msg->getPayload(&kvps_rxd);
+  if (kvps_rxd) {
+    //kvps_rxd->printDebug(&log);
+  }
   if (msg->expectsReply()) {
-    log.concatf("\nlink_callback ACK'ing returns %d.\n", msg->ack());
+    int8_t ack_ret = msg->ack();
+    log.concatf("\nlink_callback_message ACK'ing %u returns %d.\n", msg->uniqueId(), ack_ret);
   }
   printf("%s\n\n", (const char*) log.string());
 }
@@ -205,7 +218,7 @@ int callback_link_tools(StringBuilder* text_return, StringBuilder* args) {
     KeyValuePair a((uint32_t) millis(), "time_ms");
     a.append((uint32_t) randomUInt32(), "rand");
     int8_t ret_local = m_link->send(&a, true);
-    text_return->concatf("Description request send() returns %d\n", ret_local);
+    text_return->concatf("Description request send() returns ID %u\n", ret_local);
   }
   else {
     text_return->concat("Usage: [info|reset|hangup|verbosity|desc]\n");
@@ -226,7 +239,8 @@ int main(int argc, char *argv[]) {
   platform.init();
 
   m_link = new ManuvrLink(&link_opts);
-  m_link->setCallback(link_callback);
+  m_link->setCallback(link_callback_state);
+  m_link->setCallback(link_callback_message);
 
   // Parse through all the command line arguments and flags...
   // Please note that the order matters. Put all the most-general matches at the bottom of the loop.
