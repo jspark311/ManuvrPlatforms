@@ -81,6 +81,7 @@ static void* uart_polling_handler(void*) {
   bool keep_polling = true;
   printf("Started UART polling thread.\n");
   while (keep_polling) {
+    sleep_ms(20);
     for (int i = 0; i < uart_instances.size(); i++) {
       LinuxUARTLookup* temp = uart_instances.get(i);
       if (nullptr != temp) {
@@ -154,6 +155,19 @@ LinuxUART::~LinuxUART() {
 void UARTAdapter::irq_handler() {}
 
 
+int8_t UARTAdapter::reset() {
+  int8_t ret = -1;
+  if (0 == _pf_deinit()) {
+    if (0 == _pf_init()) {
+      ret = 0;
+    }
+  }
+  return ret;
+}
+
+
+
+
 /**
 * Execute any I/O callbacks that are pending. The function is present because
 *   this class contains the bus implementation.
@@ -164,7 +178,7 @@ int8_t UARTAdapter::poll() {
   int8_t return_value = 0;
   LinuxUARTLookup* lookup = _uart_table_get_by_adapter_ref(this);
   if (nullptr != lookup) {
-    if (lookup->sock != -1) {
+    if (lookup->sock > 0) {
       int bytes_written = 0;
       int bytes_received = 0;
       if (txCapable() && (0 < _tx_buffer.length())) {
@@ -182,6 +196,7 @@ int8_t UARTAdapter::poll() {
         if (n > 0) {
           bytes_received += n;
           _rx_buffer.concat(buf, n);
+          last_byte_rx_time = millis();
           return_value = 1;
         }
         if (0 < _rx_buffer.length()) {
@@ -243,14 +258,19 @@ int8_t UARTAdapter::_pf_init() {
           return ret;
       }
       // If an input buffer was desired, we turn on RX.
-      if (0 < _BUF_LEN_RX)   lookup->termAttr.c_cflag |= CREAD;
+      if (0 < _BUF_LEN_RX) {
+        lookup->termAttr.c_cflag |= CREAD;
+        _adapter_set_flag(UART_FLAG_HAS_RX);
+      }
 
-      printf("Opened port (%s) at %dbps\n", lookup->path, _opts.bitrate);
+      printf("Opened UART (%s) at %dbps\n", lookup->path, _opts.bitrate);
       lookup->termAttr.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);
       lookup->termAttr.c_iflag &= ~(IXON | IXOFF | IXANY);
       lookup->termAttr.c_oflag &= ~OPOST;
+      lookup->termAttr.c_cc[VMIN]  = 0;
+      lookup->termAttr.c_cc[VTIME] = 0;
       if (tcsetattr(lookup->sock, TCSANOW, &(lookup->termAttr)) == 0) {
-        _adapter_set_flag(UART_FLAG_HAS_TX | UART_FLAG_HAS_RX);
+        _adapter_set_flag(UART_FLAG_HAS_TX);
         _adapter_set_flag(UART_FLAG_UART_READY | UART_FLAG_FLUSHED);
         _adapter_clear_flag(UART_FLAG_PENDING_CONF | UART_FLAG_PENDING_RESET);
         if (0 == _uart_polling_thread_id) {
@@ -282,7 +302,10 @@ int8_t UARTAdapter::_pf_deinit() {
     if (0 < lookup->sock) {
       close(lookup->sock);  // Close the socket.
       lookup->sock = -1;
+      printf("Closed UART (%s)\n", lookup->path);
     }
+    _tx_buffer.clear();
+    _rx_buffer.clear();
     ret = 0;
   }
   return ret;
