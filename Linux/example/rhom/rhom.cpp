@@ -49,7 +49,9 @@ ManuvrLinkOpts link_opts(
   2000,  // Send a KA every 2s.
   2048,  // MTU for this link is 2 kibi.
   TCode::CBOR,   // Payloads should be CBOR encoded.
-  (MANUVRLINK_FLAG_SEND_KA)  // This side of the link will send a KA, by default.
+  // This side of the link will send a KA while IDLE, and
+  //   allows remote log write.
+  (MANUVRLINK_FLAG_SEND_KA | MANUVRLINK_FLAG_ALLOW_LOG_WRITE)
 );
 
 UARTOpts uart_opts {
@@ -213,6 +215,14 @@ int callback_link_tools(StringBuilder* text_return, StringBuilder* args) {
         break;
     }
   }
+  else if (0 == StringBuilder::strcasecmp(cmd, "log")) {
+    //if (1 < args->count()) {
+      StringBuilder tmp_log("This is a remote log test.\n");
+      int8_t ret_local = m_link->writeRemoteLog(&tmp_log, false);
+      text_return->concatf("Remote log write returns %d\n", ret_local);
+    //}
+    //else text_return->concat("Usage: link log <logText>\n");
+  }
   else if (0 == StringBuilder::strcasecmp(cmd, "desc")) {
     // Send a description request message.
     KeyValuePair a((uint32_t) millis(), "time_ms");
@@ -220,9 +230,8 @@ int callback_link_tools(StringBuilder* text_return, StringBuilder* args) {
     int8_t ret_local = m_link->send(&a, true);
     text_return->concatf("Description request send() returns ID %u\n", ret_local);
   }
-  else {
-    text_return->concat("Usage: [info|reset|hangup|verbosity|desc]\n");
-  }
+  else text_return->concat("Usage: [info|reset|hangup|verbosity|desc]\n");
+
   return ret;
 }
 
