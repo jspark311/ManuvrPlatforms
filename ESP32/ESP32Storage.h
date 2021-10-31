@@ -29,7 +29,7 @@ Data-persistence layer for Teensy.
 #include "nvs_flash.h"
 #include "nvs.h"
 
-#if defined(CONFIG_MANUVR_STORAGE) && !defined(MANUVR_CBOR)
+#if defined(CONFIG_MANUVR_STORAGE) && !defined(CONFIG_MANUVR_CBOR)
   #error The ESP32Storage class requires MANUVR_CBOR be enabled.
 #endif
 

@@ -64,7 +64,9 @@ class ESP32StdIO : public BufferAccepter {
 };
 
 
-
+/*
+* The Platform class.
+*/
 class ESP32Platform : public AbstractPlatform {
   public:
     ESP32Platform() : AbstractPlatform(esp_get_idf_version()) {};

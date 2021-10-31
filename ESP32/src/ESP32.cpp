@@ -157,6 +157,40 @@ int getSerialNumber(uint8_t *buf) {
 
 
 /*******************************************************************************
+* Threading                                                                    *
+*******************************************************************************/
+/**
+* On linux, we support pthreads. On microcontrollers, we support FreeRTOS.
+* This is the wrapper to create a new thread.
+*
+* @return The thread's return value.
+*/
+int ESP32Platform::createThread(unsigned long* _thread_id, void* _something, ThreadFxnPtr _fxn, void* _args, PlatformThreadOpts* _thread_opts) {
+  TaskHandle_t taskHandle;
+  uint16_t _stack_sz = (nullptr == _thread_opts) ? 2048 : _thread_opts->stack_sz;
+  const char* _name  = (const char*) (nullptr == _thread_opts) ? "_t" : _thread_opts->thread_name;
+  portBASE_TYPE ret = xTaskCreate((TaskFunction_t) _fxn, _name, _stack_sz, (void*)_args, (tskIDLE_PRIORITY + 1), &taskHandle);
+  if (pdPASS == ret) {
+    *_thread_id = (unsigned long) taskHandle;
+    return 0;
+  }
+  return -1;
+}
+
+int ESP32Platform::deleteThread(unsigned long* _thread_id) {
+  // TODO: Why didn't this work?
+  //vTaskDelete(&_thread_id);
+  return 0;
+}
+
+
+int ESP32Platform::wakeThread(unsigned long _thread_id) {
+  vTaskResume(&_thread_id);
+  return 0;
+}
+
+
+/*******************************************************************************
 * Time and date                                                                *
 *******************************************************************************/
 
