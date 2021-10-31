@@ -33,7 +33,7 @@ Data-persistence layer for Teensy.
   #error The ESP32Storage class requires MANUVR_CBOR be enabled.
 #endif
 
-class ESP32Storage : public EventReceiver, public Storage {
+class ESP32Storage : public Storage {
   public:
     ESP32Storage(Argument*);
     ~ESP32Storage();
@@ -47,10 +47,7 @@ class ESP32Storage : public EventReceiver, public Storage {
     StorageErr persistentWrite(const char*, StringBuilder*, uint16_t);
     StorageErr persistentRead(const char*, StringBuilder*, uint16_t);
 
-    /* Overrides from EventReceiver */
     void printDebug(StringBuilder*);
-    int8_t notify(ManuvrMsg*);
-    int8_t callback_proc(ManuvrMsg*);
 
 
   protected:
