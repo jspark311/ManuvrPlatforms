@@ -4,6 +4,8 @@
 
 #if defined(__IMXRT1052__) || defined(__IMXRT1062__)
 
+#define ANALOG_WRITE_RES_BITS   12
+
 #include "../ManuvrArduino.h"
 #include <StringBuilder.h>
 
@@ -158,6 +160,35 @@ void ArduinoPlatform::printDebug(StringBuilder* output) {
   }
 
 
+  /**
+  * Externally-facing function to set the carrier frequency for the PWM driver.
+  * Enables PWM clocks on first call.
+  *
+  * @param pin The desired pin. Arduino Platform disregards this argument.
+  * @param freq The desired carrier frequency.
+  * @return 0 on success.
+  */
+  int8_t analogWriteFrequency(uint8_t pin, uint32_t freq) {
+    //analogWriteFrequency(freq);   // Shunt to Teensyduino library.
+    return 0;
+  }
+
+
+  /**
+  * The ratio parameter will be clamped to the valid range.
+  *
+  * @param pin The desired pin.
+  * @param ratio The desired duty ratio within the range [0.0, 1.0].
+  * @return
+  *   0  on success.
+  *   -1 on failure.
+  */
+  int8_t analogWrite(uint8_t pin, float ratio) {
+    analogWrite(pin, (int) (((1UL << ANALOG_WRITE_RES_BITS)-1) * ratio));
+    return 0;
+  }
+
+
 
 /*******************************************************************************
 * Process control                                                              *
@@ -300,6 +331,7 @@ void currentDateTime(StringBuilder* output) {
 */
 int8_t ArduinoPlatform::init() {
   _discover_alu_params();
+  analogWriteResolution(ANALOG_WRITE_RES_BITS);
 
   uint32_t default_flags = DEFAULT_PLATFORM_FLAGS;
   _alter_flags(true, default_flags);
