@@ -32,6 +32,7 @@ This file contains platform support for the ESP32.
 #include "esp_system.h"
 #include "esp_log.h"
 #include "driver/adc.h"
+#include "driver/ledc.h"
 #include "esp32/rom/ets_sys.h"
 
 
@@ -51,6 +52,35 @@ typedef struct __platform_gpio_def {
   uint8_t    flags;
   uint8_t    PADDING;
 } PlatformGPIODef;
+
+// Functionality surrounding analogWrite() was taken from:
+// https://github.com/ERROPiX/ESP32_AnalogWrite/blob/master/src/analogWrite.cpp
+// ...also from...
+// https://github.com/espressif/arduino-esp32/blob/master/cores/esp32/esp32-hal-ledc.c
+typedef struct analog_write_channel {
+  uint8_t pin;
+  double frequency;
+  uint8_t resolution;
+} analog_write_channel_t;
+
+analog_write_channel _analog_write_channels[16] = {
+  {255, 5000, 13},
+  {255, 5000, 13},
+  {255, 5000, 13},
+  {255, 5000, 13},
+  {255, 5000, 13},
+  {255, 5000, 13},
+  {255, 5000, 13},
+  {255, 5000, 13},
+  {255, 5000, 13},
+  {255, 5000, 13},
+  {255, 5000, 13},
+  {255, 5000, 13},
+  {255, 5000, 13},
+  {255, 5000, 13},
+  {255, 5000, 13},
+  {255, 5000, 13}
+};
 
 
 
@@ -411,6 +441,31 @@ int8_t _gpio_analog_in_pin_setup(uint8_t pin) {
 }
 
 
+int analogWriteChannel(uint8_t pin) {
+  int channel = -1;
+  // Check if pin already attached to a channel
+  for (uint8_t i = 0; i < 16; i++) {
+    if (_analog_write_channels[i].pin == pin) {
+      channel = i;
+      break;
+    }
+  }
+
+  // If not, attach it to a free channel
+  if (channel == -1) {
+    for (uint8_t i = 0; i < 16; i++) {
+      if (_analog_write_channels[i].pin == -1) {
+        _analog_write_channels[i].pin = pin;
+        channel = i;
+        //ledcSetup(channel, _analog_write_channels[i].frequency, _analog_write_channels[i].resolution);
+        //ledcAttachPin(pin, channel);
+        break;
+      }
+    }
+  }
+  return channel;
+}
+
 
 int8_t pinMode(uint8_t pin, GPIOMode mode) {
   gpio_config_t io_conf;
@@ -440,6 +495,15 @@ int8_t pinMode(uint8_t pin, GPIOMode mode) {
     case GPIOMode::ANALOG_IN:
       return _gpio_analog_in_pin_setup(pin);
 
+    case GPIOMode::ANALOG_OUT:
+      if (!GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
+        return -1;
+      }
+      else if (-1 == analogWriteChannel(pin)) {
+        return -2;
+      }
+      break;
+
     case GPIOMode::BIDIR_OD_PULLUP:
       if (!GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
         return -1;
@@ -452,7 +516,7 @@ int8_t pinMode(uint8_t pin, GPIOMode mode) {
       if (!GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
         return -1;
       }
-      io_conf.mode = (gpio_mode_t) mode;
+      io_conf.mode = GPIO_MODE_OUTPUT;
       break;
 
     case GPIOMode::INPUT_PULLUP:
@@ -531,6 +595,28 @@ int8_t setPinFxn(uint8_t pin, IRQCondition condition, FxnPointer fxn) {
 }
 
 
+/*
+*/
+void unsetPinFxn(uint8_t pin) {
+  if (GPIO_IS_VALID_GPIO(pin)) {
+    switch (gpio_pins[pin].mode) {
+      case GPIOMode::INPUT_PULLUP:
+      case GPIOMode::INPUT_PULLDOWN:
+      case GPIOMode::INPUT:
+        gpio_pins[pin].fxn = nullptr;
+        gpio_intr_disable((gpio_num_t) pin);
+        gpio_set_intr_type((gpio_num_t) pin, GPIO_INTR_DISABLE);
+        gpio_isr_handler_remove((gpio_num_t) pin);
+        return;
+      default:
+        ESP_LOGE("ESP32Platform", "GPIO %u is not an input.\n", pin);
+        break;
+    }
+  }
+  else ESP_LOGW("ESP32Platform", "GPIO %u is invalid\n", pin);
+}
+
+
 int8_t IRAM_ATTR setPin(uint8_t pin, bool val) {
   return (int8_t) gpio_set_level((gpio_num_t) pin, val?1:0);
 }
@@ -542,7 +628,19 @@ int8_t IRAM_ATTR readPin(uint8_t pin) {
 
 
 int8_t analogWrite(uint8_t pin, float percentage) {
-  return 0;
+  int8_t ret = -1;
+  int channel = analogWriteChannel(pin);
+  if (channel != -1 && channel < 16) {
+    uint8_t resolution = _analog_write_channels[channel].resolution;
+    uint32_t levels = (1 << resolution) - 1;
+    //uint32_t duty = ((levels - 1) / valueMax) * strict_min(strict_max(percentage, 0.0), 1.0);
+    uint32_t duty = (levels - 1) * strict_min(strict_max(percentage, 0.0), 1.0);
+    // write duty to LEDC
+    //ledc_set_duty(LEDC_HIGH_SPEED_MODE, channel, duty);
+    //ledc_update_duty(LEDC_HIGH_SPEED_MODE, channel);
+    ret = 0;
+  }
+  return ret;
 }
 
 

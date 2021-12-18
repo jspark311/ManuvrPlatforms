@@ -9,24 +9,27 @@
 #define ACK_CHECK_EN   0x01     /*!< I2C master will check ack from slave*/
 #define ACK_CHECK_DIS  0x00     /*!< I2C master will not check ack from slave */
 
-static volatile I2CBusOp* _threaded_op[2] = {nullptr, nullptr};
+//static volatile I2CBusOp* _threaded_op[2] = {nullptr, nullptr};
 
-TaskHandle_t static_i2c_thread_id = 0;
+TaskHandle_t static_i2c_thread_id[2] = {0, 0};
 
 
 static void* IRAM_ATTR i2c_worker_thread(void* arg) {
   I2CAdapter* BUSPTR = (I2CAdapter*) arg;
   uint8_t anum = BUSPTR->adapterNumber();
   while (1) {
-    if (nullptr != _threaded_op[anum]) {
-      I2CBusOp* op = (I2CBusOp*) _threaded_op[anum];
-      op->advance(0);
-      _threaded_op[anum] = nullptr;
+    //if (nullptr != _threaded_op[anum]) {
+    //  I2CBusOp* op = (I2CBusOp*) _threaded_op[anum];
+    //  op->advance(0);
+    //  _threaded_op[anum] = nullptr;
+    //  platform.yieldThread();
+    //}
+    //else {
+    //  platform.suspendThread();
+    //  //ulTaskNotifyTake(pdTRUE, 10000 / portTICK_RATE_MS);
+    //}
+    if (0 == BUSPTR->poll()) {
       platform.yieldThread();
-    }
-    else {
-      platform.suspendThread();
-      //ulTaskNotifyTake(pdTRUE, 10000 / portTICK_RATE_MS);
     }
   }
   return nullptr;
@@ -60,7 +63,8 @@ int8_t I2CAdapter::bus_init() {
           topts.stack_sz    = 2048;
           unsigned long _thread_id = 0;
           platform.createThread(&_thread_id, nullptr, i2c_worker_thread, (void*) this, &topts);
-          static_i2c_thread_id = (TaskHandle_t) _thread_id;
+          static_i2c_thread_id[a_id] = (TaskHandle_t) _thread_id;
+          ESP_LOGI("I2CAdapter", "Spawned i2c thread: %lu", _thread_id);
           busOnline(true);
         }
       }
@@ -108,20 +112,20 @@ XferFault I2CBusOp::begin() {
     switch (device->adapterNumber()) {
       case 0:
       case 1:
-        if (nullptr == _threaded_op[device->adapterNumber()]) {
+        //if (nullptr == _threaded_op[device->adapterNumber()]) {
           if ((nullptr == callback) || (0 == callback->io_op_callahead(this))) {
             set_state(XferState::INITIATE);
-            _threaded_op[device->adapterNumber()] = this;
-            vTaskResume(static_i2c_thread_id);
+            //_threaded_op[device->adapterNumber()] = this;
+            vTaskResume(static_i2c_thread_id[device->adapterNumber()]);
             return XferFault::NONE;
           }
           else {
             abort(XferFault::IO_RECALL);
           }
-        }
-        else {
-          abort(XferFault::DEV_NOT_FOUND);
-        }
+        //}
+        //else {
+        //  abort(XferFault::DEV_NOT_FOUND);
+        //}
         break;
       default:
         abort(XferFault::BAD_PARAM);
@@ -144,13 +148,12 @@ XferFault I2CBusOp::advance(uint32_t status_reg) {
   if (ESP_OK == i2c_master_start(cmd)) {
     switch (get_opcode()) {
       case BusOpcode::RX:
+        i2c_master_write_byte(cmd, ((uint8_t) (dev_addr & 0x00FF) << 1) | I2C_MASTER_WRITE, ACK_CHECK_EN);
         if (need_to_send_subaddr()) {
-          i2c_master_write_byte(cmd, ((uint8_t) (dev_addr & 0x00FF) << 1) | I2C_MASTER_WRITE, ACK_CHECK_EN);
           i2c_master_write_byte(cmd, (uint8_t) (sub_addr & 0x00FF), ACK_CHECK_EN);
           set_state(XferState::ADDR);
           i2c_master_start(cmd);
         }
-        i2c_master_write_byte(cmd, ((uint8_t) (dev_addr & 0x00FF) << 1) | I2C_MASTER_READ, ACK_CHECK_EN);
         i2c_master_read(cmd, _buf, (size_t) _buf_len, I2C_MASTER_LAST_NACK);
         set_state(XferState::RX_WAIT);
         break;
