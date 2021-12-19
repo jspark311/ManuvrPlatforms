@@ -29,6 +29,7 @@ static void* IRAM_ATTR i2c_worker_thread(void* arg) {
     //  //ulTaskNotifyTake(pdTRUE, 10000 / portTICK_RATE_MS);
     //}
     if (0 == BUSPTR->poll()) {
+      // TODO: For some reason, taskYIELD() doesn't allow the IDLE thread to run.
       platform.yieldThread();
     }
   }
@@ -61,6 +62,8 @@ int8_t I2CAdapter::bus_init() {
           PlatformThreadOpts topts;
           topts.thread_name = "I2C";
           topts.stack_sz    = 2048;
+          topts.priority    = 0;
+          topts.core        = 1;   // TODO: Is this the best choice? Might use a preprocessor define.
           unsigned long _thread_id = 0;
           platform.createThread(&_thread_id, nullptr, i2c_worker_thread, (void*) this, &topts);
           static_i2c_thread_id[a_id] = (TaskHandle_t) _thread_id;
