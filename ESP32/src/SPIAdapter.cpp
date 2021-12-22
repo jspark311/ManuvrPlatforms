@@ -117,24 +117,24 @@ int8_t SPIAdapter::bus_init() {
     bus_config.sclk_io_num = (gpio_num_t) _CLK_PIN;
   }
   else {
-    bus_config.sclk_io_num = (gpio_num_t) -1;
+    bus_config.sclk_io_num = GPIO_NUM_NC;
   }
   if (255 != _MOSI_PIN) {
     b_flags |= SPICOMMON_BUSFLAG_MOSI;
     bus_config.mosi_io_num = (gpio_num_t) _MOSI_PIN;
   }
   else {
-    bus_config.mosi_io_num = (gpio_num_t) -1;
+    bus_config.mosi_io_num = GPIO_NUM_NC;
   }
   if (255 != _MISO_PIN) {
     b_flags |= SPICOMMON_BUSFLAG_MISO;
     bus_config.miso_io_num = (gpio_num_t) _MISO_PIN;
   }
   else {
-    bus_config.miso_io_num = (gpio_num_t) -1;
+    bus_config.miso_io_num = GPIO_NUM_NC;
   }
-	bus_config.quadwp_io_num   = -1;      // Not used
-	bus_config.quadhd_io_num   = -1;      // Not used
+	bus_config.quadwp_io_num   = GPIO_NUM_NC;    // Not used
+	bus_config.quadhd_io_num   = GPIO_NUM_NC;    // Not used
 	bus_config.max_transfer_sz = 65535;   // 0 means use default.
   bus_config.flags           = b_flags;
   bus_config.intr_flags      = ESP_INTR_FLAG_IRAM;

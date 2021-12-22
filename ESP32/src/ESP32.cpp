@@ -443,97 +443,137 @@ int8_t _gpio_analog_in_pin_setup(uint8_t pin) {
 
 
 int analogWriteChannel(uint8_t pin) {
-  int channel = -1;
+  int ret = -1;
+  uint8_t channel = 255;
   // Check if pin already attached to a channel
   for (uint8_t i = 0; i < 16; i++) {
     if (_analog_write_channels[i].pin == pin) {
       channel = i;
+      ret = i;
       break;
     }
   }
 
   // If not, attach it to a free channel
-  if (channel == -1) {
+  if (channel == 255) {
     for (uint8_t i = 0; i < 16; i++) {
-      if (_analog_write_channels[i].pin == -1) {
-        _analog_write_channels[i].pin = pin;
+      if (_analog_write_channels[i].pin == 255) {
+        //uint8_t group = (channel >> 3);
+        uint8_t timer = ((channel >> 1) % 4);
         channel = i;
-        //ledcSetup(channel, _analog_write_channels[i].frequency, _analog_write_channels[i].resolution);
-        //ledcAttachPin(pin, channel);
+
+        ledc_timer_config_t ledc_timer = {
+          .speed_mode       = LEDC_HIGH_SPEED_MODE,
+          .duty_resolution  = (ledc_timer_bit_t) _analog_write_channels[i].resolution,
+          .timer_num        = (ledc_timer_t)     timer,
+          .freq_hz          = (uint32_t)         _analog_write_channels[i].frequency,
+          .clk_cfg          = LEDC_AUTO_CLK
+        };
+        if (ESP_OK == ledc_timer_config(&ledc_timer)) {
+          //return ledc_get_freq(group,timer);
+          ledc_channel_config_t ledc_channel = {
+            .gpio_num       = pin,
+            .speed_mode     = LEDC_HIGH_SPEED_MODE,
+            .channel        = (ledc_channel_t) (channel & 0x07),
+            .intr_type      = (ledc_intr_type_t) LEDC_INTR_DISABLE,
+            .timer_sel      = (ledc_timer_t)  timer,
+            .duty           = 0,
+            .hpoint         = 0,
+            //.output_invert  = 0
+          };
+          if (ESP_OK == ledc_channel_config(&ledc_channel)) {
+            _analog_write_channels[i].pin = pin;
+            ret = channel;
+          }
+          else {
+            ESP_LOGE("ESP32Platform", "analogWriteChannel() failed to enable channel for pin %d\n", pin);
+          }
+        }
+        else {
+          ESP_LOGE("ESP32Platform", "analogWriteChannel() failed to setup timer for pin %d\n", pin);
+        }
         break;
       }
     }
   }
-  return channel;
+  return ret;
 }
 
 
 int8_t pinMode(uint8_t pin, GPIOMode mode) {
+  int8_t ret = -1;
+  bool uses_gpio_peripheral = true;
   gpio_config_t io_conf;
-  if (!GPIO_IS_VALID_GPIO(pin)) {
-    return -1;
+  if (GPIO_IS_VALID_GPIO(pin)) {
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    io_conf.pull_up_en   = GPIO_PULLUP_DISABLE;
+    io_conf.intr_type    = (gpio_int_type_t) GPIO_PIN_INTR_DISABLE;
+    io_conf.pin_bit_mask = (uint64_t) ((uint64_t)1 << pin);
+
+    // Handle the pull-up/down stuff first.
+    switch (mode) {
+      case GPIOMode::BIDIR_OD_PULLUP:
+      case GPIOMode::INPUT_PULLUP:
+        io_conf.pull_up_en   = GPIO_PULLUP_ENABLE;
+        break;
+      case GPIOMode::INPUT_PULLDOWN:
+        io_conf.pull_down_en = GPIO_PULLDOWN_ENABLE;
+        break;
+      default:
+        break;
+    }
+
+    switch (mode) {
+      case GPIOMode::ANALOG_IN:
+        uses_gpio_peripheral = false;
+        ret = _gpio_analog_in_pin_setup(pin);
+        break;
+
+      case GPIOMode::ANALOG_OUT:
+        if (GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
+          uses_gpio_peripheral = false;
+          ret = (0 > analogWriteChannel(pin)) ? -2 : 0;
+        }
+        break;
+
+      case GPIOMode::BIDIR_OD_PULLUP:
+        if (GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
+          io_conf.mode = GPIO_MODE_INPUT_OUTPUT_OD;
+          ret = 0;
+        }
+        break;
+
+      case GPIOMode::BIDIR_OD:
+      case GPIOMode::OUTPUT_OD:
+      case GPIOMode::OUTPUT:
+        if (GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
+          io_conf.mode = GPIO_MODE_INPUT_OUTPUT;   // Allows readback of output states.
+          ret = 0;
+        }
+        break;
+
+      case GPIOMode::INPUT_PULLUP:
+      case GPIOMode::INPUT_PULLDOWN:
+      case GPIOMode::INPUT:
+        io_conf.mode = GPIO_MODE_INPUT;
+        ret = 0;
+        break;
+
+      default:
+        ESP_LOGW("ESP32Platform", "Unknown GPIO mode for pin %u.\n", pin);
+        return -1;
+    }
   }
 
-  io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
-  io_conf.pull_up_en   = GPIO_PULLUP_DISABLE;
-  io_conf.intr_type    = (gpio_int_type_t) GPIO_PIN_INTR_DISABLE;
-  io_conf.pin_bit_mask = (uint64_t) ((uint64_t)1 << pin);
-
-  // Handle the pull-up/down stuff first.
-  switch (mode) {
-    case GPIOMode::BIDIR_OD_PULLUP:
-    case GPIOMode::INPUT_PULLUP:
-      io_conf.pull_up_en   = GPIO_PULLUP_ENABLE;
-      break;
-    case GPIOMode::INPUT_PULLDOWN:
-      io_conf.pull_down_en = GPIO_PULLDOWN_ENABLE;
-      break;
-    default:
-      break;
+  if (0 == ret) {
+    if (uses_gpio_peripheral) {
+      gpio_config(&io_conf);
+      gpio_pins[pin].mode = mode;
+    }
   }
+  else ESP_LOGE("ESP32Platform", "pinMode(%u, %s) returned %d.\n", pin, getPinModeStr(mode), ret);
 
-  switch (mode) {
-    case GPIOMode::ANALOG_IN:
-      return _gpio_analog_in_pin_setup(pin);
-
-    case GPIOMode::ANALOG_OUT:
-      if (!GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
-        return -1;
-      }
-      else if (-1 == analogWriteChannel(pin)) {
-        return -2;
-      }
-      break;
-
-    case GPIOMode::BIDIR_OD_PULLUP:
-      if (!GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
-        return -1;
-      }
-      io_conf.mode = GPIO_MODE_INPUT_OUTPUT_OD;
-      break;
-    case GPIOMode::BIDIR_OD:
-    case GPIOMode::OUTPUT_OD:
-    case GPIOMode::OUTPUT:
-      if (!GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
-        return -1;
-      }
-      io_conf.mode = GPIO_MODE_OUTPUT;
-      break;
-
-    case GPIOMode::INPUT_PULLUP:
-    case GPIOMode::INPUT_PULLDOWN:
-    case GPIOMode::INPUT:
-      io_conf.mode = GPIO_MODE_INPUT;
-      break;
-
-    default:
-      ESP_LOGW("ESP32Platform", "Unknown GPIO mode for pin %u.\n", pin);
-      return -1;
-  }
-
-  gpio_config(&io_conf);
-  gpio_pins[pin].mode = mode;
-  return 0;
+  return ret;
 }
 
 
@@ -635,11 +675,13 @@ int8_t analogWrite(uint8_t pin, float percentage) {
     uint8_t resolution = _analog_write_channels[channel].resolution;
     uint32_t levels = (1 << resolution) - 1;
     //uint32_t duty = ((levels - 1) / valueMax) * strict_min(strict_max(percentage, 0.0), 1.0);
-    uint32_t duty = (levels - 1) * strict_min(strict_max(percentage, 0.0), 1.0);
-    // write duty to LEDC
-    //ledc_set_duty(LEDC_HIGH_SPEED_MODE, channel, duty);
-    //ledc_update_duty(LEDC_HIGH_SPEED_MODE, channel);
+    uint32_t duty = (levels - 1) * strict_min(strict_max(percentage, 0.0f), 1.0f);
+    ledc_set_duty(LEDC_HIGH_SPEED_MODE, (ledc_channel_t) channel, duty);
+    ledc_update_duty(LEDC_HIGH_SPEED_MODE, (ledc_channel_t) channel);
     ret = 0;
+  }
+  if (0 != ret) {
+    ESP_LOGE("ESP32Platform", "analogWrite(%u, %.2f) returned %d.\n", pin, percentage, ret);
   }
   return ret;
 }
