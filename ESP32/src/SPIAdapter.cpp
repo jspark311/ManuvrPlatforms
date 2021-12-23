@@ -56,10 +56,11 @@ static const char* LOG_TAG = "SPIAdapter";
 *   executes under an ISR. Keep it brief...
 *******************************************************************************/
 
-static lldesc_t _ll_tx;
+//static lldesc_t _ll_tx;
 static SPIBusOp* _threaded_op[2]  = {nullptr, nullptr};
 spi_device_handle_t spi_handle[2];
 TaskHandle_t static_spi_thread_id = 0;
+
 
 static void* IRAM_ATTR spi_worker_thread(void* arg) {
   SPIAdapter* BUSPTR = (SPIAdapter*) arg;
@@ -170,12 +171,17 @@ int8_t SPIAdapter::bus_init() {
 		ESP_LOGE(LOG_TAG, "spi_bus_add_device(): rc=%d", errRc);
   	return -2;
 	}
+
+  unsigned long _thread_id = 0;
   PlatformThreadOpts topts;
   topts.thread_name = "SPI";
   topts.stack_sz    = 2048;
-  unsigned long _thread_id = 0;
+  topts.priority    = 0;
+  topts.core        = 1;   // TODO: Is this the best choice? Might use a preprocessor define.
+
 	platform.createThread(&_thread_id, nullptr, spi_worker_thread, (void*) this, &topts);
   static_spi_thread_id = (TaskHandle_t) _thread_id;
+  ESP_LOGI("SPIAdapter", "Spawned SPI thread: %lu", _thread_id);
   _adapter_set_flag(SPI_FLAG_SPI_READY);
   return 0;
 }
@@ -278,6 +284,10 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
       spi_transaction_t* pending_txn;
       if (ESP_OK == spi_device_get_trans_result(spi_handle[anum], &pending_txn, portMAX_DELAY)) {
         ret = XferFault::NONE;
+      }
+      else {
+        // portMAX_DELAY used in the calls above will cause the op to never timeout.
+        //ESP_LOGE(LOG_TAG, "spi_device_get_trans_result() gave us a bad outcome.");
       }
     }
     if (XferFault::NONE != ret) {
