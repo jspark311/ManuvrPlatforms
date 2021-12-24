@@ -6,8 +6,7 @@
 #include "esp_err.h"
 #include "esp_task_wdt.h"
 
-#define ACK_CHECK_EN   0x01     /*!< I2C master will check ack from slave*/
-#define ACK_CHECK_DIS  0x00     /*!< I2C master will not check ack from slave */
+static const char* LOG_TAG = "I2CAdapter";
 
 //static volatile I2CBusOp* _threaded_op[2] = {nullptr, nullptr};
 
@@ -29,7 +28,6 @@ static void* IRAM_ATTR i2c_worker_thread(void* arg) {
     //  //ulTaskNotifyTake(pdTRUE, 10000 / portTICK_RATE_MS);
     //}
     if (0 == BUSPTR->poll()) {
-      // TODO: For some reason, taskYIELD() doesn't allow the IDLE thread to run.
       platform.yieldThread();
     }
   }
@@ -67,14 +65,14 @@ int8_t I2CAdapter::bus_init() {
           unsigned long _thread_id = 0;
           platform.createThread(&_thread_id, nullptr, i2c_worker_thread, (void*) this, &topts);
           static_i2c_thread_id[a_id] = (TaskHandle_t) _thread_id;
-          ESP_LOGI("I2CAdapter", "Spawned i2c thread: %lu", _thread_id);
+          ESP_LOGI(LOG_TAG, "Spawned i2c thread: %lu", _thread_id);
           busOnline(true);
         }
       }
       break;
 
     default:
-      ESP_LOGE("I2CAdapter", "Unsupported adapter: %d", a_id);
+      ESP_LOGE(LOG_TAG, "Unsupported adapter: %d", a_id);
       break;
   }
   return (busOnline() ? 0:-1);
@@ -120,7 +118,7 @@ XferFault I2CBusOp::begin() {
             set_state(XferState::INITIATE);
             //_threaded_op[device->adapterNumber()] = this;
             vTaskResume(static_i2c_thread_id[device->adapterNumber()]);
-            return XferFault::NONE;
+            return advance(0);
           }
           else {
             abort(XferFault::IO_RECALL);
@@ -147,30 +145,36 @@ XferFault I2CBusOp::begin() {
 *   from an I/O thread.
 */
 XferFault I2CBusOp::advance(uint32_t status_reg) {
+  if (XferState::INITIATE != get_state()) {
+    ESP_LOGW(LOG_TAG, "BusOp %p to dev 0x%02x wrong state", this, dev_addr);
+    return XferFault::NONE;  // TODO: Unconfuse API
+  }
   i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+
   if (ESP_OK == i2c_master_start(cmd)) {
     switch (get_opcode()) {
       case BusOpcode::RX:
-        i2c_master_write_byte(cmd, ((uint8_t) (dev_addr & 0x00FF) << 1) | I2C_MASTER_WRITE, ACK_CHECK_EN);
         if (need_to_send_subaddr()) {
-          i2c_master_write_byte(cmd, (uint8_t) (sub_addr & 0x00FF), ACK_CHECK_EN);
+          i2c_master_write_byte(cmd, ((uint8_t) (dev_addr & 0x00FF) << 1) | I2C_MASTER_WRITE, I2C_MASTER_ACK);
+          i2c_master_write_byte(cmd, (uint8_t) (sub_addr & 0x00FF), I2C_MASTER_ACK);
           set_state(XferState::ADDR);
           i2c_master_start(cmd);
         }
+        i2c_master_write_byte(cmd, ((uint8_t) (dev_addr & 0x00FF) << 1) | I2C_MASTER_READ, I2C_MASTER_ACK);
         i2c_master_read(cmd, _buf, (size_t) _buf_len, I2C_MASTER_LAST_NACK);
         set_state(XferState::RX_WAIT);
         break;
       case BusOpcode::TX:
-        i2c_master_write_byte(cmd, ((uint8_t) (dev_addr & 0x00FF) << 1) | I2C_MASTER_WRITE, ACK_CHECK_EN);
+        i2c_master_write_byte(cmd, ((uint8_t) (dev_addr & 0x00FF) << 1) | I2C_MASTER_WRITE, I2C_MASTER_ACK);
         if (need_to_send_subaddr()) {
-          i2c_master_write_byte(cmd, (uint8_t) (sub_addr & 0x00FF), ACK_CHECK_EN);
+          i2c_master_write_byte(cmd, (uint8_t) (sub_addr & 0x00FF), I2C_MASTER_ACK);
           set_state(XferState::ADDR);
         }
-        i2c_master_write(cmd, _buf, (size_t) _buf_len, ACK_CHECK_EN);
+        i2c_master_write(cmd, _buf, (size_t) _buf_len, I2C_MASTER_NACK);
         set_state(XferState::TX_WAIT);
         break;
       case BusOpcode::TX_CMD:
-        i2c_master_write_byte(cmd, ((uint8_t) (dev_addr & 0x00FF) << 1) | I2C_MASTER_WRITE, ACK_CHECK_EN);
+        i2c_master_write_byte(cmd, ((uint8_t) (dev_addr & 0x00FF) << 1) | I2C_MASTER_WRITE, I2C_MASTER_NACK);
         set_state(XferState::TX_WAIT);
         break;
       default:
@@ -178,34 +182,20 @@ XferFault I2CBusOp::advance(uint32_t status_reg) {
         break;
     }
 
-    if (XferFault::NONE == getFault()) {
-      if (ESP_OK == i2c_master_stop(cmd)) {
-        set_state(XferState::STOP);
-        int ret = i2c_master_cmd_begin((i2c_port_t) device->adapterNumber(), cmd, 1000 / portTICK_RATE_MS);
-        switch (ret) {
-          case ESP_OK:
-            markComplete();
-            break;
-          case ESP_ERR_INVALID_ARG:
-            abort(XferFault::BAD_PARAM);
-            break;
-          case ESP_ERR_INVALID_STATE:
-            abort(XferFault::ILLEGAL_STATE);
-            break;
-          case ESP_ERR_TIMEOUT:
-            abort(XferFault::TIMEOUT);
-            break;
-          case ESP_FAIL:
-            abort(XferFault::DEV_FAULT);
-            break;
-          default:
-            abort();
-            break;
-        }
+    if (ESP_OK == i2c_master_stop(cmd)) {
+      set_state(XferState::STOP);
+      int ret = i2c_master_cmd_begin((i2c_port_t) device->adapterNumber(), cmd, 800 / portTICK_RATE_MS);
+      switch (ret) {
+        case ESP_OK:                 markComplete();                   break;
+        case ESP_ERR_INVALID_ARG:    abort(XferFault::BAD_PARAM);      break;
+        case ESP_ERR_INVALID_STATE:  abort(XferFault::ILLEGAL_STATE);  break;
+        case ESP_ERR_TIMEOUT:        abort(XferFault::TIMEOUT);        break;
+        case ESP_FAIL:               abort(XferFault::DEV_FAULT);      break;
+        default:                     abort();                          break;
       }
-      else {
-        abort();
-      }
+    }
+    else {
+      abort();
     }
   }
   else {
@@ -213,5 +203,8 @@ XferFault I2CBusOp::advance(uint32_t status_reg) {
   }
   i2c_cmd_link_delete(cmd);  // Cleanup.
 
+  if (hasFault() & (BusOpcode::TX_CMD != get_opcode())) {
+    ESP_LOGW(LOG_TAG, "BusOp to dev 0x%02x failed: %s", dev_addr, BusOp::getErrorString(getFault()));
+  }
   return getFault();
 }
