@@ -39,7 +39,6 @@ Noteworth snippit from the ESP-IDF doc:
 
 */
 #include "../ESP32.h"
-#include "esp_system.h"
 
 
 #if defined(CONFIG_MANUVR_STORAGE)

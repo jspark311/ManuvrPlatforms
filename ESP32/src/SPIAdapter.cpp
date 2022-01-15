@@ -25,23 +25,7 @@ limitations under the License.
 extern "C" {
 #endif
 
-#include <driver/spi_master.h>
-#include "esp32/rom/ets_sys.h"
-#include "esp32/rom/lldesc.h"
-#include "esp_types.h"
-#include "esp_attr.h"
-#include "esp_intr_alloc.h"
-#include "esp_log.h"
-#include "esp_err.h"
-#include "esp_task_wdt.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/semphr.h"
-#include "freertos/xtensa_api.h"
-#include "freertos/task.h"
-#include "freertos/ringbuf.h"
-#include "driver/gpio.h"
-#include "driver/periph_ctrl.h"
-#include "esp_heap_caps.h"
+#include "driver/spi_master.h"
 
 static const char* LOG_TAG = "SPIAdapter";
 

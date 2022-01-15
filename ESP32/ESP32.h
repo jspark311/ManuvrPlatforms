@@ -25,11 +25,46 @@ limitations under the License.
 #include <AbstractPlatform.h>
 #include <StringBuilder.h>
 
+/* These includes from ESF-IDF need to be under C linkage. */
 extern "C" {
+  #include "driver/adc.h"
   #include "driver/gpio.h"
+  #include "driver/ledc.h"
+  #include "driver/periph_ctrl.h"
+
+  #include "esp_attr.h"
+  #include "esp_err.h"
+  #include "esp_event.h"
+  #include "esp_heap_caps.h"
+  #include "esp_intr_alloc.h"
+  #include "esp_log.h"
+  #include "esp_netif.h"
+  #include "esp_partition.h"
+  #include "esp_sleep.h"
   #include "esp_system.h"
+  #include "esp_task_wdt.h"
+  #include "esp_types.h"
+  #include "esp_wifi.h"
+
+
+  #include "esp32/rom/ets_sys.h"
+  #include "esp32/rom/lldesc.h"
+  #include "nvs_flash.h"
+
+  #include "soc/dport_reg.h"
+  #include "soc/efuse_reg.h"
+  #include "soc/gpio_reg.h"
+  #include "soc/gpio_sig_map.h"
+  #include "soc/io_mux_reg.h"
+  #include "soc/rtc_cntl_reg.h"
+
   #include "freertos/FreeRTOS.h"
   #include "freertos/task.h"
+  #include "freertos/event_groups.h"
+  #include "freertos/semphr.h"
+  #include "freertos/ringbuf.h"
+  #include "freertos/queue.h"
+  #include "freertos/xtensa_api.h"
 }
 
 

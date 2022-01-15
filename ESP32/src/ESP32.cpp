@@ -24,16 +24,7 @@ This file contains platform support for the ESP32.
 #include "../ESP32.h"
 
 #include "sdkconfig.h"
-#include "esp_system.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "soc/efuse_reg.h"
 #include "esp_netif.h"
-#include "esp_system.h"
-#include "esp_log.h"
-#include "driver/adc.h"
-#include "driver/ledc.h"
-#include "esp32/rom/ets_sys.h"
 
 
 #if !defined(PLATFORM_RNG_CARRY_CAPACITY)
