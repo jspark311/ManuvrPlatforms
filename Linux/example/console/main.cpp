@@ -58,112 +58,11 @@ LinuxStdIO console_adapter;
 
 int callback_help(StringBuilder* text_return, StringBuilder* args) {
   text_return->concatf("%s %s\n", program_name, PROGRAM_VERSION);
-  if (0 < args->count()) {
-    console.printHelp(text_return, args->position_trimmed(0));
-  }
-  else {
-    console.printHelp(text_return);
-  }
-  return 0;
+  return console.console_handler_help(text_return, args);
 }
 
-
 int callback_console_tools(StringBuilder* text_return, StringBuilder* args) {
-  //inline void setPromptString(const char* str) {    _prompt_string = (char*) str;   };
-  //inline bool hasColor() {               return _console_flag(CONSOLE_FLAG_HAS_ANSI);                   };
-  //inline void hasColor(bool x) {         return _console_set_flag(CONSOLE_FLAG_HAS_ANSI, x);            };
-  int ret = 0;
-  char* cmd    = args->position_trimmed(0);
-  int   arg1   = args->position_as_int(1);
-  bool  print_term_enum = false;
-  if (0 == StringBuilder::strcasecmp(cmd, "echo")) {
-    if (1 < args->count()) {
-      console.localEcho(0 != arg1);
-    }
-    text_return->concatf("Console RX echo %sabled.\n", console.localEcho()?"en":"dis");
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "history")) {
-    if (1 < args->count()) {
-      console.emitPrompt(0 != arg1);
-      char* subcmd = args->position_trimmed(1);
-      if (0 == StringBuilder::strcasecmp(subcmd, "clear")) {
-        console.clearHistory();
-        text_return->concat("History cleared.\n");
-      }
-      else if (0 == StringBuilder::strcasecmp(subcmd, "depth")) {
-        if (2 < args->count()) {
-          arg1 = args->position_as_int(2);
-          console.maxHistoryDepth(arg1);
-        }
-        text_return->concatf("History depth: %u\n", console.maxHistoryDepth());
-      }
-      else if (0 == StringBuilder::strcasecmp(subcmd, "logerrors")) {
-        if (2 < args->count()) {
-          arg1 = args->position_as_int(2);
-          console.historyFail(0 != arg1);
-        }
-        text_return->concatf("History %scludes failed commands.\n", console.historyFail()?"in":"ex");
-      }
-      else text_return->concat("Valid options are [clear|depth|logerrors]\n");
-    }
-    else console.printHistory(text_return);
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "help-on-fail")) {
-    if (1 < args->count()) {
-      console.printHelpOnFail(0 != arg1);
-    }
-    text_return->concatf("Console prints command help on failure: %s.\n", console.printHelpOnFail()?"yes":"no");
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "prompt")) {
-    if (1 < args->count()) {
-      console.emitPrompt(0 != arg1);
-    }
-    text_return->concatf("Console autoprompt %sabled.\n", console.emitPrompt()?"en":"dis");
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "force")) {
-    if (1 < args->count()) {
-      console.forceReturn(0 != arg1);
-    }
-    text_return->concatf("Console force-return %sabled.\n", console.forceReturn()?"en":"dis");
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "rxterm")) {
-    if (1 < args->count()) {
-      switch (arg1) {
-        case 0:  case 1:  case 2:  case 3:
-          console.setRXTerminator((LineTerm) arg1);
-          break;
-        default:
-          print_term_enum = true;
-          break;
-      }
-    }
-    text_return->concatf("Console RX terminator: %s\n", ParsingConsole::terminatorStr(console.getRXTerminator()));
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "txterm")) {
-    if (1 < args->count()) {
-      switch (arg1) {
-        case 0:  case 1:  case 2:  case 3:
-          console.setTXTerminator((LineTerm) arg1);
-          break;
-        default:
-          print_term_enum = true;
-          break;
-      }
-    }
-    text_return->concatf("Console TX terminator: %s\n", ParsingConsole::terminatorStr(console.getTXTerminator()));
-  }
-  else {
-    ret = -1;
-  }
-
-  if (print_term_enum) {
-    text_return->concat("Terminator options:\n");
-    text_return->concat("\t0: ZEROBYTE\n");
-    text_return->concat("\t1: CR\n");
-    text_return->concat("\t2: LF\n");
-    text_return->concat("\t3: CRLF\n");
-  }
-  return ret;
+  return console.console_handler_conf(text_return, args);
 }
 
 
@@ -221,10 +120,10 @@ int main(int argc, const char* argv[]) {
   console.hasColor(true);
 
   // Define the commands for the application. Usually, these are some basics.
-  console.defineCommand("help",     '?', ParsingConsole::tcodes_str_1, "Prints help to console.", "", 0, callback_help);
+  console.defineCommand("help",     '?',  ParsingConsole::tcodes_str_1, "Prints help to console.", "", 0, callback_help);
   console.defineCommand("console",  '\0', ParsingConsole::tcodes_str_3, "Console conf", "[history|rxterm|txterm|echo|prompt]", 0, callback_console_tools);
-  console.defineCommand("kvp",         'k', ParsingConsole::tcodes_str_4, "Temporary code to test KVP.", "", 0, callback_kvp_tools);
-  console.defineCommand("quit",     'Q', ParsingConsole::tcodes_0, "Commit sudoku.", "", 0, callback_program_quit);
+  console.defineCommand("kvp",      'k',  ParsingConsole::tcodes_str_4, "Temporary code to test KVP.", "", 0, callback_kvp_tools);
+  console.defineCommand("quit",     'Q',  ParsingConsole::tcodes_0, "Commit sudoku.", "", 0, callback_program_quit);
 
   // The platform itself comes with a convenient set of console functions.
   platform.configureConsole(&console);

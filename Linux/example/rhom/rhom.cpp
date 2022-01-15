@@ -106,18 +106,11 @@ void link_callback_message(uint32_t tag, ManuvrMsg* msg) {
 
 int callback_help(StringBuilder* text_return, StringBuilder* args) {
   text_return->concatf("%s %s\n", program_name, FP_VERSION);
-  if (0 < args->count()) {
-    console.printHelp(text_return, args->position_trimmed(0));
-  }
-  else {
-    console.printHelp(text_return);
-  }
-  return 0;
+  return console.console_handler_help(text_return, args);
 }
 
-int callback_print_history(StringBuilder* text_return, StringBuilder* args) {
-  console.printHistory(text_return);
-  return 0;
+int callback_console_tools(StringBuilder* text_return, StringBuilder* args) {
+  return console.console_handler_conf(text_return, args);
 }
 
 
@@ -195,42 +188,18 @@ int callback_uart_tools(StringBuilder* text_return, StringBuilder* args) {
 
 
 int callback_link_tools(StringBuilder* text_return, StringBuilder* args) {
-  int ret = 0;
+  int ret = -1;
   char* cmd = args->position_trimmed(0);
-  if (0 == StringBuilder::strcasecmp(cmd, "info")) {
-    m_link->printDebug(text_return);
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "reset")) {
-    text_return->concatf("Link reset() returns %d\n", m_link->reset());
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "hangup")) {
-    text_return->concatf("Link hangup() returns %d\n", m_link->hangup());
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "verbosity")) {
-    switch (args->count()) {
-      case 2:
-        m_link->verbosity(0x07 & args->position_as_int(1));
-      default:
-        text_return->concatf("Link verbosity is %u\n", m_link->verbosity());
-        break;
-    }
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "log")) {
-    //if (1 < args->count()) {
-      StringBuilder tmp_log("This is a remote log test.\n");
-      int8_t ret_local = m_link->writeRemoteLog(&tmp_log, false);
-      text_return->concatf("Remote log write returns %d\n", ret_local);
-    //}
-    //else text_return->concat("Usage: link log <logText>\n");
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "desc")) {
+  // We interdict if the command is something specific to this application.
+  if (0 == StringBuilder::strcasecmp(cmd, "desc")) {
     // Send a description request message.
     KeyValuePair a((uint32_t) millis(), "time_ms");
     a.append((uint32_t) randomUInt32(), "rand");
     int8_t ret_local = m_link->send(&a, true);
     text_return->concatf("Description request send() returns ID %u\n", ret_local);
+    ret = 0;
   }
-  else text_return->concat("Usage: [info|reset|hangup|verbosity|desc]\n");
+  else ret = m_link->console_handler(text_return, args);
 
   return ret;
 }
@@ -300,11 +269,11 @@ int main(int argc, char *argv[]) {
   prompt_string.concatf("%c[36m%s> %c[39m", 0x1B, argv[0], 0x1B);
   console.setPromptString((const char*) prompt_string.string());
 
-  console.defineCommand("help",        '?', ParsingConsole::tcodes_str_1, "Prints help to console.", "", 0, callback_help);
-  console.defineCommand("history",     ParsingConsole::tcodes_0, "Print command history.", "", 0, callback_print_history);
+  console.defineCommand("help",        '?',  ParsingConsole::tcodes_str_1, "Prints help to console.", "[<specific command>]", 0, callback_help);
+  console.defineCommand("console",     '\0', ParsingConsole::tcodes_str_3, "Console conf.", "[echo|prompt|force|rxterm|txterm]", 0, callback_console_tools);
+  platform.configureConsole(&console);
   console.defineCommand("link",        'l', ParsingConsole::tcodes_str_4, "Linked device tools.", "", 0, callback_link_tools);
   console.defineCommand("uart",        'u', ParsingConsole::tcodes_str_4, "UART tools.", "", 0, callback_uart_tools);
-  platform.configureConsole(&console);
   console.defineCommand("quit",        'Q', ParsingConsole::tcodes_0, "Commit sudoku.", "", 0, callback_program_quit);
 
 
