@@ -1,6 +1,6 @@
 # ManuvrLinux
 
-A library for running Manuvr on top of Linux.
+A collection of shims for running ManuvrDrivers and CppPotpourri on top of Linux.
 
 ## Usage
 
