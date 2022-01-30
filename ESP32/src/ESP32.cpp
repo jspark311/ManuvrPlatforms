@@ -144,8 +144,13 @@ static void IRAM_ATTR dev_urandom_reader(void* unused_param) {
 *******************************************************************************/
 void ESP32Platform::printDebug(StringBuilder* output) {
   output->concatf("==< ESP32 [IDF version %s] >==================================\n", _board_name);
-  output->concatf("-- Heap Free/Minimum:  %u/%u\n", esp_get_free_heap_size(), esp_get_minimum_free_heap_size());
+  output->concatf("\tHeap Free/Minimum:  %u/%u\n", esp_get_free_heap_size(), esp_get_minimum_free_heap_size());
   _print_abstract_debug(output);
+  #if defined(CONFIG_MANUVR_STORAGE)
+    if (nullptr != storage) {
+      storage->printDebug(output);
+    }
+  #endif
 }
 
 

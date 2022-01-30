@@ -50,6 +50,7 @@ extern "C" {
   #include "esp32/rom/ets_sys.h"
   #include "esp32/rom/lldesc.h"
   #include "nvs_flash.h"
+  #include "nvs.h"
 
   #include "soc/dport_reg.h"
   #include "soc/efuse_reg.h"
@@ -97,6 +98,41 @@ class ESP32StdIO : public BufferAccepter {
     StringBuilder   _tx_buffer;
     StringBuilder   _rx_buffer;
 };
+
+
+
+/*
+* Data storage interface for the ESP32's on-board flash.
+*/
+class ESP32Storage : public Storage {
+  public:
+    ESP32Storage(const esp_partition_t*);
+    ~ESP32Storage();
+
+    /* Overrides from Storage. */
+    uint64_t   freeSpace();  // How many bytes are availible for use?
+    StorageErr init();
+    StorageErr wipe(uint32_t offset, uint32_t len);  // Wipe a range.
+    uint8_t    blockAddrSize() {  return DEV_ADDR_SIZE_BYTES;  };
+    int8_t     allocateBlocksForLength(uint32_t, DataRecord*);
+
+    StorageErr flush();          // Blocks until commit completes.
+
+    StorageErr persistentWrite(DataRecord*, StringBuilder* buf);
+    //StorageErr persistentRead(DataRecord*, StringBuilder* buf);
+    StorageErr persistentWrite(uint8_t* buf, unsigned int len, uint32_t offset);
+    StorageErr persistentRead(uint8_t* buf,  unsigned int len, uint32_t offset);
+
+    void printDebug(StringBuilder*);
+
+
+  private:
+    const esp_partition_t* _PART_PTR;
+    nvs_handle store_handle;
+
+    int8_t close();             // Blocks until commit completes.
+};
+
 
 
 /*
