@@ -29,32 +29,31 @@ Data-persistence layer for Teensy.
 #include "nvs_flash.h"
 #include "nvs.h"
 
-#if defined(CONFIG_MANUVR_STORAGE) && !defined(CONFIG_MANUVR_CBOR)
-  #error The ESP32Storage class requires MANUVR_CBOR be enabled.
-#endif
 
 class ESP32Storage : public Storage {
   public:
-    ESP32Storage(Argument*);
+    ESP32Storage(const esp_partition_t*);
     ~ESP32Storage();
 
     /* Overrides from Storage. */
-    uint64_t freeSpace();  // How many bytes are availible for use?
-    StorageErr wipe();          // Call to wipe the data store.
-    StorageErr flush();         // Blocks until commit completes.
-    StorageErr persistentWrite(const char*, uint8_t*, unsigned int, uint16_t);
-    StorageErr persistentRead(const char*, uint8_t*, unsigned int*, uint16_t);
-    StorageErr persistentWrite(const char*, StringBuilder*, uint16_t);
-    StorageErr persistentRead(const char*, StringBuilder*, uint16_t);
+    uint64_t   freeSpace();  // How many bytes are availible for use?
+    StorageErr init();
+    StorageErr wipe(uint32_t offset, uint32_t len);  // Wipe a range.
+    uint8_t    blockAddrSize() {  return DEV_ADDR_SIZE_BYTES;  };
+    int8_t     allocateBlocksForLength(uint32_t, DataRecord*);
+
+    StorageErr flush();          // Blocks until commit completes.
+
+    StorageErr persistentWrite(DataRecord*, StringBuilder* buf);
+    //StorageErr persistentRead(DataRecord*, StringBuilder* buf);
+    StorageErr persistentWrite(uint8_t* buf, unsigned int len, uint32_t offset);
+    StorageErr persistentRead(uint8_t* buf,  unsigned int len, uint32_t offset);
 
     void printDebug(StringBuilder*);
 
 
-  protected:
-    int8_t attached();
-
-
   private:
+    const esp_partition_t* _PART_PTR;
     nvs_handle store_handle;
 
     int8_t close();             // Blocks until commit completes.

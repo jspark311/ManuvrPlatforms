@@ -121,6 +121,11 @@ class ESP32Platform : public AbstractPlatform {
     inline int  yieldThread() {    taskYIELD();  return 0;   };
     inline void suspendThread() {  vTaskSuspend(xTaskGetCurrentTaskHandle()); };
 
+    /* Storage, if applicable */
+    #if defined(CONFIG_MANUVR_STORAGE)
+      ESP32Storage* storage = nullptr;
+    #endif
+
 
   private:
     void   _close_open_threads();

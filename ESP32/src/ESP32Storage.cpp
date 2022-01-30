@@ -43,10 +43,16 @@ Noteworth snippit from the ESP-IDF doc:
 
 #if defined(CONFIG_MANUVR_STORAGE)
 
-// We want this definition isolated to the compilation unit.
-#define STORAGE_PROPS (PL_FLAG_BLOCK_ACCESS | PL_FLAG_MEDIUM_READABLE | \
-                        PL_FLAG_MEDIUM_WRITABLE)
+#if !defined(CONFIG_MANUVR_CBOR)
+  #error Enabling the storage abstraction requires CONFIG_MANUVR_CBOR.
+#endif
 
+// We want this definition isolated to the compilation unit.
+#define STORAGE_PROPS (PL_FLAG_BLOCK_ACCESS | PL_FLAG_MEDIUM_READABLE | PL_FLAG_MEDIUM_WRITABLE)
+
+#if !defined(CONFIG_MANUVR_STORAGE_BLK_SIZE)
+  #define CONFIG_MANUVR_STORAGE_BLK_SIZE  256
+#endif
 
 /*******************************************************************************
 *   ___ _              ___      _ _              _      _
@@ -57,13 +63,31 @@ Noteworth snippit from the ESP-IDF doc:
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
 
-ESP32Storage::ESP32Storage(Argument* opts) : EventReceiver("ESP32Storage"), Storage() {
-  _pl_set_flag(true, STORAGE_PROPS);
-}
+ESP32Storage::ESP32Storage(const esp_partition_t* NVS_PART_PTR)
+  : Storage(NVS_PART_PTR->size, CONFIG_MANUVR_STORAGE_BLK_SIZE), _PART_PTR(NVS_PART_PTR) {}
 
 
 ESP32Storage::~ESP32Storage() {
   close();
+}
+
+
+StorageErr ESP32Storage::init() {
+  StorageErr ret = StorageErr::UNSPECIFIED;
+  esp_err_t err = nvs_flash_init();   // Initialize NVS.
+  if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+    // OTA app partition table has a smaller NVS partition size than the non-OTA
+    // partition table. This size mismatch may cause NVS initialization to fail.
+    // If this happens, we erase NVS partition and initialize NVS again.
+    ESP_ERROR_CHECK(nvs_flash_erase());
+    err = nvs_flash_init();
+  }
+  ESP_ERROR_CHECK(err);
+  if (err == ESP_OK) {
+    _pl_set_flag(STORAGE_PROPS | PL_FLAG_MEDIUM_MOUNTED);
+    ret = StorageErr::NONE;
+  }
+  return ret;
 }
 
 
@@ -72,19 +96,20 @@ ESP32Storage::~ESP32Storage() {
 * (( \ | || |  // \\  || \\ // \\  // \\ ||
 *  \\    ||   ((   )) ||_// ||=|| (( ___ ||==
 * \_))   ||    \\_//  || \\ || ||  \\_|| ||___
+*
 * Storage interface.
 ********************************************************************************/
 uint64_t ESP32Storage::freeSpace() {
   return _free_space;
 }
 
-StorageErr ESP32Storage::wipe() {
+StorageErr ESP32Storage::wipe(uint32_t offset, uint32_t len) {
   StorageErr ret = StorageErr::NOT_MOUNTED;
   if (isMounted()) {
     ret = StorageErr::NOT_WRITABLE;
     if (isWritable()) {
       ret = StorageErr::HW_FAULT;
-      if (ESP_OK == nvs_erase_all(store_handle)) {
+      if (ESP_OK == esp_partition_erase_range(_PART_PTR, offset, len)) {
         ret = StorageErr::NONE;
       }
     }
@@ -108,7 +133,7 @@ StorageErr ESP32Storage::flush() {
 }
 
 
-StorageErr ESP32Storage::persistentWrite(const char* key, uint8_t* buf, unsigned int len, uint16_t opts) {
+StorageErr ESP32Storage::persistentWrite(uint8_t* buf, unsigned int len, uint32_t offset) {
   StorageErr ret = StorageErr::NOT_MOUNTED;
   if (isMounted()) {
     ret = StorageErr::NOT_WRITABLE;
@@ -116,9 +141,9 @@ StorageErr ESP32Storage::persistentWrite(const char* key, uint8_t* buf, unsigned
       ret = StorageErr::NO_FREE_SPACE;
       if (freeSpace() >= len) {
         ret = StorageErr::HW_FAULT;
-        if (ESP_OK == nvs_set_blob(store_handle, key, (const void*) buf, len)) {
+        //if (ESP_OK == nvs_set_blob(store_handle, key, (const void*) buf, len)) {
           ret = StorageErr::NONE;
-        }
+        //}
       }
     }
   }
@@ -126,24 +151,24 @@ StorageErr ESP32Storage::persistentWrite(const char* key, uint8_t* buf, unsigned
 }
 
 
-StorageErr ESP32Storage::persistentRead(const char* key, uint8_t* buf, unsigned int* len, uint16_t opts) {
+StorageErr ESP32Storage::persistentRead(uint8_t* buf, unsigned int len, uint32_t offset) {
   StorageErr ret = StorageErr::NOT_MOUNTED;
   if (isMounted()) {
     ret = StorageErr::NOT_READABLE;
     if (isReadable()) {
       ret = StorageErr::BAD_PARAM;
-      if (0 <= *len) {
+      if (0 <= len) {
         size_t nvs_len = 0;
         ret = StorageErr::KEY_NOT_FOUND;
-        if (ESP_OK == nvs_get_blob(store_handle, key, (void*) buf, &nvs_len)) {
-          if (nvs_len <= *len) {
-            ret = StorageErr::HW_FAULT;
-            if (ESP_OK == nvs_get_blob(store_handle, key, (void*) buf, &nvs_len)) {
-              *len = nvs_len;
-              ret = StorageErr::NONE;
-            }
-          }
-        }
+        //if (ESP_OK == nvs_get_blob(store_handle, key, (void*) buf, &nvs_len)) {
+        //  if (nvs_len <= *len) {
+        //    ret = StorageErr::HW_FAULT;
+        //    if (ESP_OK == nvs_get_blob(store_handle, key, (void*) buf, &nvs_len)) {
+        //      *len = nvs_len;
+        //      ret = StorageErr::NONE;
+        //    }
+        //  }
+        //}
       }
     }
   }
@@ -151,120 +176,23 @@ StorageErr ESP32Storage::persistentRead(const char* key, uint8_t* buf, unsigned 
 }
 
 
-StorageErr ESP32Storage::persistentWrite(const char* key, StringBuilder* out, uint16_t opts) {
+StorageErr ESP32Storage::persistentWrite(DataRecord*, StringBuilder* buf) {
   StorageErr ret = StorageErr::NOT_MOUNTED;
   if (isMounted()) {
     ret = StorageErr::NOT_WRITABLE;
     if (isWritable()) {
       ret = StorageErr::NO_FREE_SPACE;
-      if (freeSpace() >= out->length()) {
+      if (freeSpace() >= buf->length()) {
         ret = StorageErr::HW_FAULT;
-        if (ESP_OK == nvs_set_blob(store_handle, key, (const void*) out->string(), out->length())) {
+        //if (ESP_OK == nvs_set_blob(store_handle, key, (const void*) out->string(), out->length())) {
           ret = StorageErr::NONE;
-        }
+        //}
       }
     }
   }
   return ret;
 }
 
-
-StorageErr ESP32Storage::persistentRead(const char* key, StringBuilder* out, uint16_t opts) {
-  StorageErr ret = StorageErr::NOT_MOUNTED;
-  if (isMounted()) {
-    size_t nvs_len = 0;
-    ret = StorageErr::NOT_READABLE;
-    if (isReadable()) {
-      ret = StorageErr::BAD_PARAM;
-      if (nullptr != out) {
-        ret = StorageErr::KEY_NOT_FOUND;
-        if (ESP_OK == nvs_get_blob(store_handle, key, nullptr, &nvs_len)) {
-          uint8_t* buf = (uint8_t*) alloca(nvs_len);
-          ret = StorageErr::MEM_ALLOC;
-          if (buf) {
-            ret = StorageErr::HW_FAULT;
-            if (ESP_OK == nvs_get_blob(store_handle, key, (void*) buf, &nvs_len)) {
-              out->concat(buf, nvs_len);   // TODO: This API badly needs return codees.
-              ret = StorageErr::NONE;
-            }
-          }
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-
-
-/*******************************************************************************
-* ######## ##     ## ######## ##    ## ########  ######
-* ##       ##     ## ##       ###   ##    ##    ##    ##
-* ##       ##     ## ##       ####  ##    ##    ##
-* ######   ##     ## ######   ## ## ##    ##     ######
-* ##        ##   ##  ##       ##  ####    ##          ##
-* ##         ## ##   ##       ##   ###    ##    ##    ##
-* ########    ###    ######## ##    ##    ##     ######
-*
-* These are overrides from EventReceiver interface...
-*******************************************************************************/
-
-/**
-* Boot done finished-up.
-* Check to ensure that our storage apparatus is initialized.
-*
-* @return 0 on no action, 1 on action, -1 on failure.
-*/
-int8_t ESP32Storage::attached() {
-  if (EventReceiver::attached()) {
-    // TODO: Init the driver and check for an indication that we've written data.
-    if (!isMounted()) {
-      // Try to wipe and set status.
-      if (ESP_OK == nvs_flash_init()) {
-        //const esp_partition_t* partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_NVS, NULL);
-        //_free_space = partition->size;
-        _free_space = 16384;  // TODO: LIES!
-        if (ESP_OK == nvs_open("manuvr", NVS_READWRITE, &store_handle)) {
-          _pl_set_flag(true, PL_FLAG_MEDIUM_MOUNTED);
-        }
-        else {
-          _pl_set_flag((StorageErr::NONE == wipe()), PL_FLAG_MEDIUM_MOUNTED);
-        }
-      }
-    }
-    return 1;
-  }
-  return 0;
-}
-
-
-/**
-* If we find ourselves in this fxn, it means an event that this class built (the argument)
-*   has been serviced and we are now getting the chance to see the results. The argument
-*   to this fxn will never be NULL.
-*
-* Depending on class implementations, we might choose to handle the completed Event differently. We
-*   might add values to event's Argument chain and return RECYCLE. We may also free() the event
-*   ourselves and return DROP. By default, we will return REAP to instruct the Kernel
-*   to either free() the event or return it to it's preallocate queue, as appropriate. If the event
-*   was crafted to not be in the heap in its own allocation, we will return DROP instead.
-*
-* @param  event  The event for which service has been completed.
-* @return A callback return code.
-*/
-int8_t ESP32Storage::callback_proc(ManuvrMsg* event) {
-  /* Setup the default return code. If the event was marked as mem_managed, we return a DROP code.
-     Otherwise, we will return a REAP code. Downstream of this assignment, we might choose differently. */
-  int8_t return_value = (0 == event->refCount()) ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
-
-  /* Some class-specific set of conditionals below this line. */
-  switch (event->eventCode()) {
-    default:
-      break;
-  }
-
-  return return_value;
-}
 
 
 /**
@@ -272,9 +200,8 @@ int8_t ESP32Storage::callback_proc(ManuvrMsg* event) {
 *
 * @param   StringBuilder* The buffer into which this fxn should write its output.
 */
-void ESP32Storage::printDebug(StringBuilder *output) {
-  EventReceiver::printDebug(output);
-  Storage::printStorage(output);
+void ESP32Storage::printDebug(StringBuilder* output) {
+  _print_storage(output);
 }
 
 
@@ -287,7 +214,7 @@ int8_t ESP32Storage::close() {
   if (isMounted()) {
     if (StorageErr::NONE == flush()) {
       nvs_close(store_handle);
-      _pl_set_flag(false, PL_FLAG_MEDIUM_MOUNTED);
+      _pl_set_flag(PL_FLAG_MEDIUM_MOUNTED);
       return 0;
     }
   }
@@ -295,30 +222,59 @@ int8_t ESP32Storage::close() {
 }
 
 
-/*
-* This is the override from EventReceiver.
-*/
-int8_t ESP32Storage::notify(ManuvrMsg* active_event) {
-  int8_t return_value = 0;
+int8_t ESP32Storage::allocateBlocksForLength(uint32_t len, DataRecord* rec) {
+  int8_t ret = -1;
+  //if (0 == _busy_check()) {
+  //  const uint BLOCKS_NEEDED = (len / PAYLOAD_SIZE_BYTES) + ((0 == (len % PAYLOAD_SIZE_BYTES)) ? 0:1);
+  //  LinkedList<StorageBlock*>* blocks = rec->getBlockList();
+  //  uint blocks_found = blocks->size();
+  //  ret--;
 
-  switch (active_event->eventCode()) {
-    /* Things that only this class is likely to care about. */
-    case MANUVR_MSG_SYS_REBOOT:
-    case MANUVR_MSG_SYS_SHUTDOWN:
-    case MANUVR_MSG_SYS_BOOTLOADER:
-      if (isMounted()) {
-        close();
-        return_value++;
-      }
-      break;
-    default:
-      return_value += EventReceiver::notify(active_event);
-      break;
-  }
-
-  flushLocalLog();
-  return return_value;
+  //  if (BLOCKS_NEEDED > blocks_found) {    // Present allocation is too small.
+  //    ret--;
+  //    if (_free_space >= ((BLOCKS_NEEDED - blocks_found) * DEV_BLOCK_SIZE)) {
+  //      // If we have enough free space to allocate the extra needed space, do so.
+  //      ret--;
+  //      uint i = 1;
+  //      uint32_t blk_addr  = 0;
+  //      bool loop_continue = true;
+  //      while (loop_continue) {
+  //        // There is no block holding the root record. Find one from low-to-high.
+  //        const uint32_t TEST_BLK_ADDR = i * DEV_BLOCK_SIZE;
+  //        if (!_is_block_allocated(i)) {
+  //          _mark_block_allocated(i, true);
+  //          blocks_found++;
+  //          if (0 == blk_addr) {
+  //            blk_addr = TEST_BLK_ADDR;
+  //          }
+  //          else {
+  //            blocks->insert(new StorageBlock(blk_addr, TEST_BLK_ADDR));
+  //            blk_addr = TEST_BLK_ADDR;
+  //          }
+  //        }
+  //        i++;
+  //        loop_continue = (blocks_found < BLOCKS_NEEDED) & (i != 0) & (i != DEV_TOTAL_BLOCKS);
+  //      }
+  //      if (0 != blk_addr) {
+  //        blocks->insert(new StorageBlock(blk_addr, 0));
+  //        ret = 0;
+  //      }
+  //    }
+  //  }
+  //  else if (BLOCKS_NEEDED < blocks_found) {    // Present allocation is too large.
+  //    // TODO: add extra blocks to trim list.
+  //    ret = 0;
+  //  }
+  //  else {  // Allocation is ok as it is.
+  //    ret = 0;
+  //  }
+  //}
+  return ret;
 }
+
+
+
+
 
 //#if defined(MANUVR_CONSOLE_SUPPORT)
 //void ESP32Storage::consoleCmdProc(StringBuilder* input) {

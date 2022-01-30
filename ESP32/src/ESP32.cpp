@@ -720,24 +720,6 @@ int readPinAnalog(uint8_t pin) {
 
 
 /*******************************************************************************
-* Persistent configuration                                                     *
-*******************************************************************************/
-#if defined(CONFIG_MANUVR_STORAGE)
-  ESP32Storage _esp_storage(nullptr);
-
-  // Called during boot to load configuration.
-  int8_t ESP32Platform::_load_config() {
-    if (_storage_device) {
-      if (_storage_device->isMounted()) {
-      }
-    }
-    return -1;
-  }
-#endif
-
-
-
-/*******************************************************************************
 * Interrupt-masking                                                            *
 *******************************************************************************/
 
@@ -802,9 +784,20 @@ int8_t ESP32Platform::init() {
   gpioSetup();
 
   #if defined(CONFIG_MANUVR_STORAGE)
-    _storage_device = (Storage*) &_esp_storage;
-    _kernel.subscribe((EventReceiver*) &_esp_storage);
-    _alter_flags(true, ABSTRACT_PF_FLAG_HAS_STORAGE);
+    // If we were compiled with support for the storage layer, try to find an
+    //   NVS partition and instance the driver, if possible.
+    const esp_partition_t* NVS_PART_PTR = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_NVS, NULL);
+    if (nullptr != NVS_PART_PTR) {
+      if (NVS_PART_PTR == esp_partition_verify(NVS_PART_PTR)) {
+        storage = new ESP32Storage(NVS_PART_PTR);
+        if (StorageErr::NONE == storage->init()) {
+          _alter_flags(true, ABSTRACT_PF_FLAG_HAS_STORAGE);
+        }
+        else {
+          ESP_LOGE("ESP32Platform", "Storage init failed.\n");
+        }
+      }
+    }
   #endif
 
   //if (root_config) {
