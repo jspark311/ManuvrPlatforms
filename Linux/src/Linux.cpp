@@ -242,7 +242,12 @@ volatile uint8_t  watchdog_mark      = 42;
 
 
 /*******************************************************************************
-* Randomness                                                                   *
+*     ______      __
+*    / ____/___  / /__________  ____  __  __
+*   / __/ / __ \/ __/ ___/ __ \/ __ \/ / / /
+*  / /___/ / / / /_/ /  / /_/ / /_/ / /_/ /
+* /_____/_/ /_/\__/_/   \____/ .___/\__, /
+*                           /_/    /____/
 *******************************************************************************/
 volatile uint32_t randomness_pool[PLATFORM_RNG_CARRY_CAPACITY];
 volatile unsigned int _random_pool_r_ptr = 0;
@@ -357,16 +362,33 @@ void LinuxPlatform::_init_rng() {
   _alter_flags(true, ABSTRACT_PF_FLAG_RNG_READY);
 }
 
+
 /*******************************************************************************
-*  ___   _           _      ___
-* (  _`\(_ )        ( )_  /'___)
-* | |_) )| |    _ _ | ,_)| (__   _    _ __   ___ ___
-* | ,__/'| |  /'_` )| |  | ,__)/'_`\ ( '__)/' _ ` _ `\
-* | |    | | ( (_| || |_ | |  ( (_) )| |   | ( ) ( ) |
-* (_)   (___)`\__,_)`\__)(_)  `\___/'(_)   (_) (_) (_)
+*     __                      _
+*    / /   ____  ____ _____ _(_)___  ____ _
+*   / /   / __ \/ __ `/ __ `/ / __ \/ __ `/
+*  / /___/ /_/ / /_/ / /_/ / / / / / /_/ /
+* /_____/\____/\__, /\__, /_/_/ /_/\__, /
+*             /____//____/        /____/
+*
+* On vanilla linux, we will defer to the platform object's configuration and
+*   either write to syslog, or STDIO via text-transform.
+* TODO: This
+*******************************************************************************/
+void c3p_log(uint8_t severity, const char* tag, const char* fmt, ...);
+void c3p_log(uint8_t severity, const char* tag, StringBuilder* msg);
+
+
+
+/*******************************************************************************
+*     ____  __      __  ____                        ____  ____      __
+*    / __ \/ /___ _/ /_/ __/___  _________ ___     / __ \/ __ )    / /
+*   / /_/ / / __ `/ __/ /_/ __ \/ ___/ __ `__ \   / / / / __  |_  / /
+*  / ____/ / /_/ / /_/ __/ /_/ / /  / / / / / /  / /_/ / /_/ / /_/ /
+* /_/   /_/\__,_/\__/_/  \____/_/  /_/ /_/ /_/   \____/_____/\____/
+*
 * These are overrides and additions to the platform class.
 *******************************************************************************/
-
 
 void LinuxPlatform::printDebug(StringBuilder* output) {
   output->concatf(
@@ -394,7 +416,11 @@ void LinuxPlatform::printDebug(StringBuilder* output) {
 
 
 /*******************************************************************************
-* Time and date                                                                *
+*   _______                                   __   ____        __
+*  /_  __(_)___ ___  ___     ____ _____  ____/ /  / __ \____ _/ /____
+*   / / / / __ `__ \/ _ \   / __ `/ __ \/ __  /  / / / / __ `/ __/ _ \
+*  / / / / / / / / /  __/  / /_/ / / / / /_/ /  / /_/ / /_/ / /_/  __/
+* /_/ /_/_/ /_/ /_/\___/   \__,_/_/ /_/\__,_/  /_____/\__,_/\__/\___/
 *******************************************************************************/
 
 /*******************************************************************************
@@ -576,20 +602,17 @@ int LinuxPlatform::wakeThread(unsigned long _thread_id) {
 
 
 /*******************************************************************************
-* GPIO and change-notice                                                       *
+*     ____  _          ______            __             __
+*    / __ \(_)___     / ____/___  ____  / /__________  / /
+*   / /_/ / / __ \   / /   / __ \/ __ \/ __/ ___/ __ \/ /
+*  / ____/ / / / /  / /___/ /_/ / / / / /_/ /  / /_/ / /
+* /_/   /_/_/ /_/   \____/\____/_/ /_/\__/_/   \____/_/
 *******************************************************************************/
 /*
-* Unsupported features.
+* TODO: Support this via sysfs.
 * Weak reference to allow override by board-specific support that would be
 *   higher-reliability than reading the sysfs interface.
 */
-void   __attribute__((weak)) unsetPinFxn(uint8_t pin) {}
-int8_t __attribute__((weak)) setPinFxn(uint8_t pin, IRQCondition condition, FxnPointer fxn) {   return -1;  }
-int8_t __attribute__((weak)) pinMode(uint8_t pin, GPIOMode m) {    return -1;    }
-int8_t __attribute__((weak)) setPin(uint8_t pin, bool val) {    return -1;    }
-int8_t __attribute__((weak)) readPin(uint8_t pin) {    return -1;    }
-int8_t __attribute__((weak)) analogWrite(uint8_t pin, float val) {               return -1;  }
-int8_t __attribute__((weak)) analogWriteFrequency(uint8_t pin, uint32_t freq) {  return -1;  }
 
 
 /*******************************************************************************
