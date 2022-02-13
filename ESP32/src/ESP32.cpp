@@ -106,6 +106,14 @@ AbstractPlatform* platformObj() {   return (AbstractPlatform*) &platform;   }
 *
 * ESP-IDF provides logging faculties which we wrap, with some severity mapping.
 *******************************************************************************/
+/**
+* This function is declared in CppPotpourri (AbstractPlatform.h).
+* Log the given message.
+*
+* @param severity is the syslog-style importance of the message.
+* @param tag is the free-form source of the message.
+* @param msg contains the log content.
+*/
 void c3p_log(uint8_t severity, const char* tag, StringBuilder* msg) {
   switch (severity) {
     case LOG_LEV_EMERGENCY:
@@ -127,54 +135,6 @@ void c3p_log(uint8_t severity, const char* tag, StringBuilder* msg) {
       break;
   }
 }
-
-
-void c3p_log(uint8_t severity, const char* tag, const char* fmt, ...) {
-  // TODO: Would prefer to use the commented block below.
-  //va_list args;
-  //switch (severity) {
-  //  case LOG_LEV_EMERGENCY:
-  //  case LOG_LEV_ALERT:
-  //  case LOG_LEV_CRIT:
-  //    esp_log_writev(ESP_LOG_ERROR, tag, fmt, args);
-  //    break;
-  //  case LOG_LEV_ERROR:
-  //  case LOG_LEV_WARN:
-  //    esp_log_writev(ESP_LOG_WARN, tag, fmt, args);
-  //    break;
-  //  case LOG_LEV_NOTICE:
-  //  case LOG_LEV_INFO:
-  //    esp_log_writev(ESP_LOG_INFO, tag, fmt, args);
-  //    esp_log_writev(ESP_LOG_DEBUG, tag, fmt, args);
-  //    break;
-  //  case LOG_LEV_DEBUG:
-  //    esp_log_writev(ESP_LOG_VERBOSE, tag, fmt, args);
-  //    break;
-  //}
-  //va_end(args);
-  int8_t ret = -1;
-  const int FMT_LEN = strlen(fmt);
-  uint8_t f_codes = 0;
-  StringBuilder msg;
-  // Count how many format codes are in use...
-  for (unsigned short i = 0; i < FMT_LEN; i++) {  if (*(fmt+i) == '%') f_codes++; }
-  // Allocate (hopefully) more space than we will need....
-  int est_len = FMT_LEN + 300 + (f_codes * 15);   // TODO: Iterate on failure of vsprintf().
-  va_list args;
-  char* temp = (char *) alloca(est_len);  // Allocate (hopefully) more space than we will need....
-  memset(temp, 0, est_len);
-  va_start(args, fmt);
-  if (0 <= vsprintf(temp, fmt, args)) {
-    msg.concat(temp);
-    ret = 0;
-  }
-  va_end(args);
-
-  if (0 == ret) {
-    c3p_log(severity, tag, &msg);
-  }
-}
-
 
 
 /*******************************************************************************
