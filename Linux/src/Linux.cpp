@@ -26,6 +26,7 @@ This file forms the catch-all for linux platforms that have no specific support.
 #include <sys/time.h>
 #include <unistd.h>
 #include <signal.h>
+#include <syslog.h>
 #if defined(CONFIG_MANUVR_STORAGE)
   #include <fcntl.h>      // Needed for integrity checks.
   #include <sys/stat.h>   // Needed for integrity checks.
@@ -373,10 +374,65 @@ void LinuxPlatform::_init_rng() {
 *
 * On vanilla linux, we will defer to the platform object's configuration and
 *   either write to syslog, or STDIO via text-transform.
-* TODO: This
 *******************************************************************************/
-void c3p_log(uint8_t severity, const char* tag, const char* fmt, ...);
-void c3p_log(uint8_t severity, const char* tag, StringBuilder* msg);
+
+// // Returns 1 if we ought to be logging to the fp_log.
+// //    Since this is our default logging target, we will response 'yes' even if the DB isn't loaded.
+// int shouldLogToSyslog() {
+//   int return_value    = conf.getConfigIntByKey("log-to-syslog");
+//   if (return_value == -1) {
+//     return_value    = 1;
+//   }
+//   return return_value;
+// }
+
+// int shouldLogToStdout() {
+//   int return_value    = conf.getConfigIntByKey("log-to-stdout");
+//   if (return_value == -1) {
+//     return_value    = 0;
+//   }
+//   return return_value;
+// }
+
+bool shouldLogToSyslog() {  return false; }    // TODO: This
+bool shouldLogToStdout() {  return true;  }    // TODO: This
+
+void c3p_log(uint8_t severity, const char* tag, StringBuilder* msg) {
+  bool log_disseminated = false;
+  if (shouldLogToSyslog()) {
+    syslog(severity, "%s", (char*) msg->string());
+    log_disseminated    = true;
+  }
+
+  if (!log_disseminated || shouldLogToStdout()){
+    printf("%s\n", msg->string());
+  }
+}
+
+
+void c3p_log(uint8_t severity, const char* tag, const char* fmt, ...) {
+  int8_t ret = -1;
+  const int FMT_LEN = strlen(fmt);
+  uint8_t f_codes = 0;
+  StringBuilder msg;
+  // Count how many format codes are in use...
+  for (unsigned short i = 0; i < FMT_LEN; i++) {  if (*(fmt+i) == '%') f_codes++; }
+  // Allocate (hopefully) more space than we will need....
+  int est_len = FMT_LEN + 1024 + (f_codes * 15);   // TODO: Iterate on failure of vsprintf().
+  va_list args;
+  char* temp = (char *) alloca(est_len);  // Allocate (hopefully) more space than we will need....
+  memset(temp, 0, est_len);
+  va_start(args, fmt);
+  if (0 <= vsprintf(temp, fmt, args)) {
+    msg.concat(temp);
+    ret = 0;
+  }
+  va_end(args);
+
+  if (0 == ret) {
+    c3p_log(severity, tag, &msg);
+  }
+}
 
 
 
