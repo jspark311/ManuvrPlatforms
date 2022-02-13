@@ -25,6 +25,10 @@ limitations under the License.
 #include <AbstractPlatform.h>
 #include <StringBuilder.h>
 
+#if defined(CONFIG_MANUVR_STORAGE)
+  #include <Storage.h>
+#endif
+
 /* These includes from ESF-IDF need to be under C linkage. */
 extern "C" {
   #include "driver/adc.h"
@@ -45,7 +49,6 @@ extern "C" {
   #include "esp_task_wdt.h"
   #include "esp_types.h"
   #include "esp_wifi.h"
-
 
   #include "esp32/rom/ets_sys.h"
   #include "esp32/rom/lldesc.h"
@@ -68,11 +71,7 @@ extern "C" {
   #include "freertos/xtensa_api.h"
 }
 
-
-#if defined(CONFIG_MANUVR_STORAGE)
-  #include "ESP32Storage.h"
-#endif
-
+// This platform provides an on-die temperature sensor.
 extern uint8_t temprature_sens_read();
 
 

@@ -74,7 +74,6 @@ analog_write_channel _analog_write_channels[16] = {
 };
 
 
-
 volatile PlatformGPIODef gpio_pins[GPIO_PIN_COUNT];
 volatile static uint32_t     randomness_pool[PLATFORM_RNG_CARRY_CAPACITY];
 volatile static unsigned int _random_pool_r_ptr = 0;
@@ -83,6 +82,7 @@ static long unsigned int rng_thread_id = 0;
 static bool using_wifi_peripheral = false;
 static bool using_adc1            = false;
 static bool using_adc2            = false;
+static xQueueHandle gpio_evt_queue = NULL;
 
 
 /*******************************************************************************
@@ -96,11 +96,95 @@ AbstractPlatform* platformObj() {   return (AbstractPlatform*) &platform;   }
 * Watchdog                                                                     *
 *******************************************************************************/
 
+/*******************************************************************************
+*     __                      _
+*    / /   ____  ____ _____ _(_)___  ____ _
+*   / /   / __ \/ __ `/ __ `/ / __ \/ __ `/
+*  / /___/ /_/ / /_/ / /_/ / / / / / /_/ /
+* /_____/\____/\__, /\__, /_/_/ /_/\__, /
+*             /____//____/        /____/
+*
+* ESP-IDF provides logging faculties which we wrap, with some severity mapping.
+*******************************************************************************/
+void c3p_log(uint8_t severity, const char* tag, StringBuilder* msg) {
+  switch (severity) {
+    case LOG_LEV_EMERGENCY:
+    case LOG_LEV_ALERT:
+    case LOG_LEV_CRIT:
+      ESP_LOGE(tag, "%s", msg->string());
+      break;
+    case LOG_LEV_ERROR:
+    case LOG_LEV_WARN:
+      ESP_LOGW(tag, "%s", msg->string());
+      break;
+    case LOG_LEV_NOTICE:
+    case LOG_LEV_INFO:
+      ESP_LOGI(tag, "%s", msg->string());
+      ESP_LOGD(tag, "%s", msg->string());
+      break;
+    case LOG_LEV_DEBUG:
+      ESP_LOGV(tag, "%s", msg->string());
+      break;
+  }
+}
+
+
+void c3p_log(uint8_t severity, const char* tag, const char* fmt, ...) {
+  // TODO: Would prefer to use the commented block below.
+  //va_list args;
+  //switch (severity) {
+  //  case LOG_LEV_EMERGENCY:
+  //  case LOG_LEV_ALERT:
+  //  case LOG_LEV_CRIT:
+  //    esp_log_writev(ESP_LOG_ERROR, tag, fmt, args);
+  //    break;
+  //  case LOG_LEV_ERROR:
+  //  case LOG_LEV_WARN:
+  //    esp_log_writev(ESP_LOG_WARN, tag, fmt, args);
+  //    break;
+  //  case LOG_LEV_NOTICE:
+  //  case LOG_LEV_INFO:
+  //    esp_log_writev(ESP_LOG_INFO, tag, fmt, args);
+  //    esp_log_writev(ESP_LOG_DEBUG, tag, fmt, args);
+  //    break;
+  //  case LOG_LEV_DEBUG:
+  //    esp_log_writev(ESP_LOG_VERBOSE, tag, fmt, args);
+  //    break;
+  //}
+  //va_end(args);
+  int8_t ret = -1;
+  const int FMT_LEN = strlen(fmt);
+  uint8_t f_codes = 0;
+  StringBuilder msg;
+  // Count how many format codes are in use...
+  for (unsigned short i = 0; i < FMT_LEN; i++) {  if (*(fmt+i) == '%') f_codes++; }
+  // Allocate (hopefully) more space than we will need....
+  int est_len = FMT_LEN + 300 + (f_codes * 15);   // TODO: Iterate on failure of vsprintf().
+  va_list args;
+  char* temp = (char *) alloca(est_len);  // Allocate (hopefully) more space than we will need....
+  memset(temp, 0, est_len);
+  va_start(args, fmt);
+  if (0 <= vsprintf(temp, fmt, args)) {
+    msg.concat(temp);
+    ret = 0;
+  }
+  va_end(args);
+
+  if (0 == ret) {
+    c3p_log(severity, tag, &msg);
+  }
+}
+
+
 
 /*******************************************************************************
-* Randomness                                                                   *
+*     ______      __
+*    / ____/___  / /__________  ____  __  __
+*   / __/ / __ \/ __/ ___/ __ \/ __ \/ / / /
+*  / /___/ / / / /_/ /  / /_/ / /_/ / /_/ /
+* /_____/_/ /_/\__/_/   \____/ .___/\__, /
+*                           /_/    /____/
 *******************************************************************************/
-
 /**
 * Dead-simple interface to the RNG. Despite the fact that it is interrupt-driven, we may resort
 *   to polling if random demand exceeds random supply. So this may block until a random number
@@ -134,12 +218,12 @@ static void IRAM_ATTR dev_urandom_reader(void* unused_param) {
 
 
 /*******************************************************************************
-*  ___   _           _      ___
-* (  _`\(_ )        ( )_  /'___)
-* | |_) )| |    _ _ | ,_)| (__   _    _ __   ___ ___
-* | ,__/'| |  /'_` )| |  | ,__)/'_`\ ( '__)/' _ ` _ `\
-* | |    | | ( (_| || |_ | |  ( (_) )| |   | ( ) ( ) |
-* (_)   (___)`\__,_)`\__)(_)  `\___/'(_)   (_) (_) (_)
+*     ____  __      __  ____                        ____  ____      __
+*    / __ \/ /___ _/ /_/ __/___  _________ ___     / __ \/ __ )    / /
+*   / /_/ / / __ `/ __/ /_/ __ \/ ___/ __ `__ \   / / / / __  |_  / /
+*  / ____/ / /_/ / /_/ __/ /_/ / /  / / / / / /  / /_/ / /_/ / /_/ /
+* /_/   /_/\__,_/\__/_/  \____/_/  /_/ /_/ /_/   \____/_____/\____/
+*
 * These are overrides and additions to the platform class.
 *******************************************************************************/
 void ESP32Platform::printDebug(StringBuilder* output) {
@@ -218,9 +302,12 @@ int ESP32Platform::wakeThread(unsigned long _thread_id) {
 
 
 /*******************************************************************************
-* Time and date                                                                *
+*   _______                                   __   ____        __
+*  /_  __(_)___ ___  ___     ____ _____  ____/ /  / __ \____ _/ /____
+*   / / / / __ `__ \/ _ \   / __ `/ __ \/ __  /  / / / / __ `/ __/ _ \
+*  / / / / / / / / /  __/  / /_/ / / / / /_/ /  / /_/ / /_/ / /_/  __/
+* /_/ /_/_/ /_/ /_/\___/   \__,_/_/ /_/\__,_/  /_____/\__,_/\__/\___/
 *******************************************************************************/
-
 /**
 * Wrapper for causing threads to sleep. This is NOT intended to be used as a delay
 *   mechanism, although that use-case will work. It is more for the sake of not
@@ -232,6 +319,14 @@ int ESP32Platform::wakeThread(unsigned long _thread_id) {
 void sleep_ms(uint32_t millis) {
   vTaskDelay(millis / portTICK_PERIOD_MS);
 }
+
+/**
+* Delay execution for such and so many microseconds.
+*/
+void sleep_us(uint32_t udelay) {
+  ets_delay_us(udelay);
+}
+
 
 /*
 * Taken from:
@@ -304,20 +399,14 @@ void currentDateTime(StringBuilder* target) {
 }
 
 
-/**
-* Delay execution for such and so many microseconds.
-*/
-void sleep_us(uint32_t udelay) {
-  ets_delay_us(udelay);
-}
-
-
 
 /*******************************************************************************
-* GPIO and change-notice                                                       *
+*     ____  _          ______            __             __
+*    / __ \(_)___     / ____/___  ____  / /__________  / /
+*   / /_/ / / __ \   / /   / __ \/ __ \/ __/ ___/ __ \/ /
+*  / ____/ / / / /  / /___/ /_/ / / / / /_/ /  / /_/ / /
+* /_/   /_/_/ /_/   \____/\____/_/ /_/\__/_/   \____/_/
 *******************************************************************************/
-static xQueueHandle gpio_evt_queue = NULL;
-
 static void IRAM_ATTR gpio_isr_handler(void* arg) {
   uint32_t gpio_num = (uint32_t) arg;
   xQueueSendFromISR(gpio_evt_queue, &gpio_num, NULL);
