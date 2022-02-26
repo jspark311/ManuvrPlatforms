@@ -9,12 +9,15 @@
 #include "imx_rt1060/imx_rt1060_i2c_driver.h"
 
 
+/*******************************************************************************
+* The code under this block is special on this platform,
+*   and will not be available elsewhere.
+*******************************************************************************/
+
 I2CMaster& master0 = Master;     // Pins 19 and 18; SCL0 and SDA0
 I2CMaster& master1 = Master1;    // Pins 16 and 17; SCL1 and SDA1
 
-#define ACK_CHECK_EN   0x01     /*!< I2C master will check ack from slave*/
-#define ACK_CHECK_DIS  0x00     /*!< I2C master will not check ack from slave */
-
+uint8_t _dead_buf[2][256] = {0, };
 
 
 /*******************************************************************************
@@ -34,14 +37,16 @@ int8_t I2CAdapter::bus_init() {
       if ((18 == _bus_opts.sda_pin) && (19 == _bus_opts.scl_pin)) {
         master0.end();
         master0.begin(_bus_opts.freq);
-        busOnline(true);
+        _bus_online(true);
+        _pf_needs_op_advance(true);
       }
       break;
     case 1:
       if ((17 == _bus_opts.sda_pin) && (16 == _bus_opts.scl_pin)) {
         master1.end();
         master1.begin(_bus_opts.freq);
-        busOnline(true);
+        _bus_online(true);
+        _pf_needs_op_advance(true);
       }
       break;
     default:
@@ -52,7 +57,7 @@ int8_t I2CAdapter::bus_init() {
 
 
 int8_t I2CAdapter::bus_deinit() {
-  busOnline(false);
+  _bus_online(false);
   switch (ADAPTER_NUM) {
     case 0:   master0.end();   break;
     case 1:   master1.end();   break;
@@ -63,19 +68,8 @@ int8_t I2CAdapter::bus_deinit() {
 }
 
 
-
 void I2CAdapter::printHardwareState(StringBuilder* output) {
   output->concatf("-- I2C%d (%sline)\n", adapterNumber(), (_adapter_flag(I2C_BUS_FLAG_BUS_ONLINE)?"on":"OFF"));
-}
-
-
-int8_t I2CAdapter::generateStart() {
-  return busOnline() ? 0 : -1;
-}
-
-
-int8_t I2CAdapter::generateStop() {
-  return busOnline() ? 0 : -1;
 }
 
 
@@ -85,9 +79,6 @@ int8_t I2CAdapter::generateStop() {
 *  |   / / \ o     |  _  |_              from the BusOp class.
 * _|_ /  \_/ o   \_| (_) |_)
 *******************************************************************************/
-
-uint8_t _dead_buf[2][256] = {0, };
-
 
 XferFault I2CBusOp::begin() {
   I2CMaster* adptr = nullptr;

@@ -73,7 +73,7 @@ extern "C" {
 
 // This platform provides an on-die temperature sensor.
 extern uint8_t temprature_sens_read();
-
+int console_callback_esp_storage(StringBuilder*, StringBuilder*);
 
 /*
 * The STDIO driver class.
@@ -123,13 +123,13 @@ class ESP32Storage : public Storage {
     StorageErr persistentRead(uint8_t* buf,  unsigned int len, uint32_t offset);
 
     void printDebug(StringBuilder*);
+    friend int console_callback_esp_storage(StringBuilder*, StringBuilder*);
 
 
   private:
     const esp_partition_t* _PART_PTR;
-    nvs_handle store_handle;
 
-    int8_t close();             // Blocks until commit completes.
+    int8_t _close();             // Blocks until commit completes.
 };
 
 

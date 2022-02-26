@@ -63,12 +63,16 @@ Noteworth snippit from the ESP-IDF doc:
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
 
+static ESP32Storage* INSTANCE = nullptr;
+
 ESP32Storage::ESP32Storage(const esp_partition_t* NVS_PART_PTR)
-  : Storage(NVS_PART_PTR->size, CONFIG_MANUVR_STORAGE_BLK_SIZE), _PART_PTR(NVS_PART_PTR) {}
+  : Storage(NVS_PART_PTR->size, CONFIG_MANUVR_STORAGE_BLK_SIZE), _PART_PTR(NVS_PART_PTR) {
+  INSTANCE = this;
+}
 
 
 ESP32Storage::~ESP32Storage() {
-  close();
+  _close();
 }
 
 
@@ -124,9 +128,9 @@ StorageErr ESP32Storage::flush() {
     ret = StorageErr::NOT_WRITABLE;
     if (isWritable()) {
       ret = StorageErr::HW_FAULT;
-      if (ESP_OK == nvs_commit(store_handle)) {
+      //if (ESP_OK == nvs_commit(store_handle)) {
         ret = StorageErr::NONE;
-      }
+      //}
     }
   }
   return ret;
@@ -206,14 +210,14 @@ void ESP32Storage::printDebug(StringBuilder* output) {
 
 
 /**
-* Debug support method. This fxn is only present in debug builds.
 *
-* @param   StringBuilder* The buffer into which this fxn should write its output.
+*
+* @return
 */
-int8_t ESP32Storage::close() {
+int8_t ESP32Storage::_close() {
   if (isMounted()) {
     if (StorageErr::NONE == flush()) {
-      nvs_close(store_handle);
+      //nvs_close(store_handle);
       _pl_set_flag(PL_FLAG_MEDIUM_MOUNTED);
       return 0;
     }
@@ -274,55 +278,33 @@ int8_t ESP32Storage::allocateBlocksForLength(uint32_t len, DataRecord* rec) {
 
 
 
+int console_callback_esp_storage(StringBuilder* text_return, StringBuilder* args) {
+  int ret = 0;
+  char* cmd    = args->position_trimmed(0);
+  char* subcmd = args->position_trimmed(1);
 
+  if (0 == StringBuilder::strcasecmp(cmd, "info")) {
+    INSTANCE->printDebug(text_return);
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "init")) {
+    text_return->concatf("Storage init returns %d.\n", (int8_t) INSTANCE->init());
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "wipe")) {
+    bool print_fail = true;
+    if (2 == args->count()) {
+      if (0 == StringBuilder::strcasecmp(subcmd, "yes")) {
+        print_fail = false;
+        text_return->concatf("Storage wipe returns %d.\n", (int8_t) ((Storage*) INSTANCE)->wipe());
+      }
+    }
+    if (print_fail) {
+      text_return->concat("You must issue \"wipe yes\" to confirm.\n");
+    }
+  }
+  else {
+    ret = -1;
+  }
+  return ret;
+}
 
-//#if defined(MANUVR_CONSOLE_SUPPORT)
-//void ESP32Storage::consoleCmdProc(StringBuilder* input) {
-//  char* str = input->position(0);
-//
-//  switch (*(str)) {
-//    case 'w':
-//      local_log.concatf("Wipe %s.\n", (0 == wipe()) ? "succeeded" : "failed");
-//      break;
-//
-//    #if defined(MANUVR_DEBUG)
-//      case 's':
-//        if (isMounted()) {
-//          Argument a(randomUInt32());
-//          a.setKey("random_number");
-//          a.append((int8_t) 64)->setKey("number_64");
-//          StringBuilder shuttle;
-//          if (0 <= Argument::encodeToCBOR(&a, &shuttle)) {
-//            if (0 < persistentWrite("test_key", shuttle.string(), shuttle.length(), 0)) {
-//              local_log.concat("Save succeeded.\n");
-//            }
-//          }
-//        }
-//        break;
-//
-//      case 'B':   // Dump binary representation.
-//        if (isMounted()) {
-//          local_log.concat("Key dump:\n");
-//          StringBuilder shuttle;
-//          if (0 < persistentRead("test_key", &shuttle)) {
-//            shuttle.printDebug(&local_log);
-//          }
-//        }
-//        else {
-//          local_log.concat("Storage not mounted.\n");
-//        }
-//        break;
-//
-//      case 'D':   // Platform-specific fxn
-//        //nvs_dump();
-//        break;
-//    #endif  // MANUVR_DEBUG
-//
-//    default:
-//      break;
-//  }
-//
-//  flushLocalLog();
-//}
-//#endif   // MANUVR_CONSOLE_SUPPORT
 #endif   // CONFIG_MANUVR_STORAGE
