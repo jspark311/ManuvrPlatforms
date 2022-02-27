@@ -27,8 +27,6 @@ extern "C" {
 
 #include "driver/spi_master.h"
 
-static const char* LOG_TAG = "SPIAdapter";
-
 
 /*******************************************************************************
 * .-. .----..----.    .-.     .--.  .-. .-..----.
@@ -131,7 +129,7 @@ int8_t SPIAdapter::bus_init() {
 	);
 
 	if (errRc != ESP_OK) {
-		ESP_LOGE(LOG_TAG, "spi_bus_initialize(): rc=%d", errRc);
+		c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "SPI%u: spi_bus_initialize(): rc=%d", ADAPTER_NUM, errRc);
     return -1;
 	}
 
@@ -149,10 +147,10 @@ int8_t SPIAdapter::bus_init() {
 	dev_config.queue_size       = 1;
 	dev_config.pre_cb           = nullptr;
 	dev_config.post_cb          = nullptr;
-	ESP_LOGI(LOG_TAG, "... Adding device bus.");
+	c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "SPI%u: Adding device bus.", ADAPTER_NUM);
 	errRc = spi_bus_add_device(host_id, &dev_config, &spi_handle[anum]);
 	if (errRc != ESP_OK) {
-		ESP_LOGE(LOG_TAG, "spi_bus_add_device(): rc=%d", errRc);
+    c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "SPI%u: spi_bus_add_device(): rc=%d", ADAPTER_NUM, errRc);
   	return -2;
 	}
 
@@ -165,7 +163,7 @@ int8_t SPIAdapter::bus_init() {
 
 	platform.createThread(&_thread_id, nullptr, spi_worker_thread, (void*) this, &topts);
   static_spi_thread_id = (TaskHandle_t) _thread_id;
-  ESP_LOGI("SPIAdapter", "Spawned SPI thread: %lu", _thread_id);
+  c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Spawned SPI thread: %lu", _thread_id);
   _adapter_set_flag(SPI_FLAG_SPI_READY);
   return 0;
 }
@@ -203,16 +201,18 @@ XferFault SPIBusOp::begin() {
           ret = XferFault::NONE;
         }
         else {
-          abort(XferFault::IO_RECALL);
+          ret = XferFault::IO_RECALL;
+          abort(ret);
         }
 			}
 			else {
-        abort(XferFault::BUS_BUSY);
+        ret = XferFault::BUS_BUSY;
 			}
       break;
     case 2:   // SPI workflow
     default:
-      abort(XferFault::BUS_FAULT);
+      ret = XferFault::BUS_FAULT;
+      abort(ret);
       break;
   }
   return ret;
@@ -281,6 +281,8 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
   }
   return 0;
 }
+
+
 
 /*******************************************************************************
 * ___     _       _                      These members are mandatory overrides

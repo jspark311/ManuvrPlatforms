@@ -95,7 +95,6 @@ XferFault I2CBusOp::begin() {
 
   switch (get_opcode()) {
     case BusOpcode::TX_CMD:
-      //set_state(XferState::ADDR);
       set_state(XferState::TX_WAIT);
       adptr->write_async(dev_addr, &_dead_buf[device->adapterNumber()][0], 0, 1);
       break;

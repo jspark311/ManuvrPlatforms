@@ -67,20 +67,20 @@ int8_t I2CAdapter::bus_init() {
         if (ESP_OK == i2c_driver_install(((0 == a_id) ? I2C_NUM_0 : I2C_NUM_1), conf.mode, 0, 0, 0)) {
           PlatformThreadOpts topts;
           topts.thread_name = "I2C";
-          topts.stack_sz    = 2048;
+          topts.stack_sz    = 2560;
           topts.priority    = 0;
           topts.core        = 1;   // TODO: Is this the best choice? Might use a preprocessor define.
           unsigned long _thread_id = 0;
           platform.createThread(&_thread_id, nullptr, i2c_worker_thread, (void*) this, &topts);
           static_i2c_thread_id[a_id] = (TaskHandle_t) _thread_id;
-          ESP_LOGI(LOG_TAG, "Spawned i2c thread: %lu", _thread_id);
+          c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Spawned i2c thread: %lu", _thread_id);
           _bus_online(true);
         }
       }
       break;
 
     default:
-      ESP_LOGE(LOG_TAG, "Unsupported adapter: %d", a_id);
+      c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Unsupported adapter: %d", a_id);
       break;
   }
   return (busOnline() ? 0:-1);
@@ -191,13 +191,11 @@ XferFault I2CBusOp::advance(uint32_t status_reg) {
     i2c_cmd_link_delete(cmd);  // Cleanup.
   }
   else {
-    ESP_LOGW(LOG_TAG, "BusOp %p to dev 0x%02x wrong state", this, dev_addr);
     abort(XferFault::ILLEGAL_STATE);
-    return XferFault::ILLEGAL_STATE;
   }
 
   if (hasFault() & (BusOpcode::TX_CMD != get_opcode())) {
-    ESP_LOGW(LOG_TAG, "BusOp to dev 0x%02x failed: %s", dev_addr, BusOp::getErrorString(getFault()));
+    c3p_log(LOG_LEV_WARN, __PRETTY_FUNCTION__, "BusOp to dev 0x%02x failed: %s", dev_addr, BusOp::getErrorString(getFault()));
   }
   return getFault();
 }
