@@ -54,9 +54,9 @@ static void* IRAM_ATTR spi_worker_thread(void* arg) {
 			_threaded_op[anum] = nullptr;
       platform.yieldThread();
     }
-    else {
-      platform.suspendThread();
-      //ulTaskNotifyTake(pdTRUE, 10000 / portTICK_RATE_MS);
+    else if (0 == BUSPTR->poll()) {
+      //platform.suspendThread();
+      platform.yieldThread();
     }
   }
   return nullptr;
@@ -271,12 +271,18 @@ int8_t SPIBusOp::advance_operation(uint32_t status_reg, uint8_t data_reg) {
       }
       else {
         // portMAX_DELAY used in the calls above will cause the op to never timeout.
-        //ESP_LOGE(LOG_TAG, "spi_device_get_trans_result() gave us a bad outcome.");
+        c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "spi_device_get_trans_result() gave us a bad outcome.");
       }
     }
-    if (XferFault::NONE != ret) {
-      abort(ret);
+    else {
+      c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "spi_device_queue_trans() gave us a bad outcome.");
     }
+  }
+
+  if (XferFault::NONE != ret) {
+    abort(ret);
+  }
+  else {
     markComplete();
   }
   return 0;
