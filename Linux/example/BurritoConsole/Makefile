@@ -83,4 +83,4 @@ mbedtls.a:
 
 clean:
 	$(MAKE) clean -C lib/mbedtls/
-	rm -f $(OBJS) $(FIRMWARE_NAME) *.o
+	rm -f $(OBJS) $(FIRMWARE_NAME) *.a *.o
