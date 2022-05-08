@@ -55,6 +55,9 @@ LIBS     += $(CRYPTO_LIBS)
 CXXFLAGS += -std=$(CXX_STANDARD)
 CXXFLAGS += $(INCLUDES)
 
+OBJS  = $(C_SRCS:.c=.o) $(CXX_SRCS:.cpp=.o)
+
+
 ###########################################################################
 # Rules for building the firmware follow...
 ###########################################################################
@@ -79,6 +82,5 @@ mbedtls.a:
 	cp -RP lib/mbedtls/library/*.a $(OUTPUT_PATH)
 
 clean:
-	$(MAKE) clean -C mbedtls/
-	rm -rf $(OUTPUT_PATH)
-	rm -f $(FIRMWARE_NAME) *.o *~
+	$(MAKE) clean -C lib/mbedtls/
+	rm -f $(OBJS) $(FIRMWARE_NAME) *.o
