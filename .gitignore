@@ -6,6 +6,7 @@
 *.map
 
 # Example binaries
+Linux/example/BurritoConsole/BurritoConsole
 
 # cmake artifacts
 CMakeCache.txt
@@ -17,3 +18,4 @@ extras/unit_tests/build/
 
 # Library softlinks
 Linux/example/CppPotpourri
+Linux/example/BurritoConsole/lib/mbedtls
