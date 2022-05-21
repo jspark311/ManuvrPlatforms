@@ -9,6 +9,11 @@
 #include <fstream>
 #include <iostream>
 
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
+#include <X11/Xos.h>
+#include <sys/utsname.h>
+
 #include "CppPotpourri.h"
 #include "StringBuilder.h"
 #include "ParsingConsole.h"
@@ -30,18 +35,16 @@
 #include <Linux.h>
 
 #define FP_VERSION         "0.0.1"    // Program version.
-#define U_INPUT_BUFF_SIZE     8192    // The maximum size of user input.
+#define U_INPUT_BUFF_SIZE      512    // The maximum size of user input.
 
 /*******************************************************************************
 * Globals
 *******************************************************************************/
-int continue_running  = 1;
-int parent_pid        = 0;            // The PID of the root process (always).
-char* program_name;
+using namespace std;
 
-/* Console junk... */
-ParsingConsole console(U_INPUT_BUFF_SIZE);
-LinuxStdIO console_adapter;
+const char*   program_name;
+bool          continue_running  = true;
+unsigned long gui_thread_id     = 0;
 
 
 ManuvrLinkOpts link_opts(
@@ -70,11 +73,14 @@ LinuxUART*  uart   = nullptr;
 ManuvrLink* m_link = nullptr;
 
 
+/* Console junk... */
+ParsingConsole console(U_INPUT_BUFF_SIZE);
+LinuxStdIO console_adapter;
+
 
 /*******************************************************************************
 * Link callbacks
 *******************************************************************************/
-
 
 void link_callback_state(ManuvrLink* cb_link) {
   StringBuilder log;
@@ -115,7 +121,7 @@ int callback_console_tools(StringBuilder* text_return, StringBuilder* args) {
 
 
 int callback_program_quit(StringBuilder* text_return, StringBuilder* args) {
-  continue_running = 0;
+  continue_running = false;
   text_return->concat("Stopping...\n");
   console.emitPrompt(false);  // Avoid a trailing prompt.
   return 0;
@@ -205,14 +211,113 @@ int callback_link_tools(StringBuilder* text_return, StringBuilder* args) {
 }
 
 
+/**
+* This is a thread to run the GUI.
+*/
+static void* gui_thread_handler(void*) {
+  c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Started GUI thread.");
+  Display* dpy = XOpenDisplay(nullptr);
+  bool keep_polling = (nullptr != dpy);
+  if (keep_polling) {
+    int screen_num = DefaultScreen(dpy);
+    //Colormap color_map = XDefaultColormap(dpy, screen_num);
+    Window win = XCreateSimpleWindow(
+      dpy, RootWindow(dpy, screen_num),
+      10,
+      10,
+      660,
+      200,
+      1,
+      0x9932CC,  // TODO: Use colormap.
+      0x000000   // TODO: Use colormap.
+    );
+
+    GC gc = DefaultGC(dpy, screen_num);
+    XSetForeground(dpy, gc, 0xAAAAAA);
+    XSelectInput(dpy, win, ExposureMask | KeyPressMask);
+    XMapWindow(dpy, win);
+    XStoreName(dpy, win, "Right Hand of Manuvr");
+
+    Atom WM_DELETE_WINDOW = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
+    XSetWMProtocols(dpy, win, &WM_DELETE_WINDOW, 1);
+    bool uname_ok = false;
+    struct utsname sname;
+    int ret = uname(&sname);
+    if (ret != -1) {
+      uname_ok = true;
+    }
+    XEvent e;
+    while (keep_polling) {
+      if (0 < XPending(dpy)) {
+        XNextEvent(dpy, &e);
+        if (e.type == Expose) {
+          XWindowAttributes wa;
+          XGetWindowAttributes(dpy, win, &wa);
+          int width = wa.width;
+          int height = wa.height;
+          char buf[256] = {0, };
+          int y_offset = 10;
+          const char* HEADER_STR_0 = "Right Hand of Manuvr";
+          const char* HEADER_STR_1 = "Build date " __DATE__ " " __TIME__;
+          XDrawString(dpy, win, gc, 4, y_offset, HEADER_STR_0, strlen(HEADER_STR_0));
+          y_offset += 14;
+          XDrawString(dpy, win, gc, 16, y_offset, HEADER_STR_1, strlen(HEADER_STR_1));
+          y_offset += 14;
+
+          if (uname_ok) {
+            sprintf(buf, "%s %s (%s)", sname.sysname, sname.release, sname.machine);
+            XDrawString(dpy, win, gc, 16, y_offset, buf, strlen(buf));
+            y_offset += 14;
+            sprintf(buf, "%s", sname.version);
+            XDrawString(dpy, win, gc, 16, y_offset, buf, strlen(buf));
+            y_offset += 14;
+          }
+
+          sprintf(buf, "Window size: %dx%d", width, height);
+          XDrawString(dpy, win, gc, 4, y_offset, buf, strlen(buf));
+          y_offset += 20;
+        }
+
+        if (e.type == KeyPress) {
+          char buf[128] = {0, };
+          KeySym keysym;
+          int len = XLookupString(&e.xkey, buf, sizeof buf, &keysym, NULL);
+          if (keysym == XK_Escape) {
+            keep_polling = false;
+          }
+        }
+
+        if ((e.type == ClientMessage) && (static_cast<unsigned int>(e.xclient.data.l[0]) == WM_DELETE_WINDOW)) {
+          keep_polling = false;
+        }
+      }
+
+      // If either this thread, or the main thread decided we should terminate,
+      //   don't run another polling loop.
+      keep_polling &= continue_running;
+    }
+    // We are about to end the thread.
+    // Clean up the resources we allocated.
+    XDestroyWindow(dpy, win);
+    XCloseDisplay(dpy);
+  }
+  else {
+    c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Cannot open display.");
+  }
+
+  c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Exiting GUI thread...");
+  gui_thread_id = 0;
+  return nullptr;
+}
+
+
 
 /*******************************************************************************
 * The main function.                                                           *
 *******************************************************************************/
-int main(int argc, char *argv[]) {
-  StringBuilder output;
-  parent_pid = getpid();    // We will need to know our root PID.
+int main(int argc, const char *argv[]) {
   program_name = argv[0];   // Our name.
+  StringBuilder output;
 
   platform.init();
 
@@ -226,6 +331,7 @@ int main(int argc, char *argv[]) {
     if ((strcasestr(argv[i], "--help")) || (strcasestr(argv[i], "-h"))) {
       printf("-u  --uart <path>   Instance a UART to talk to the hardware.\n");
       printf("-v  --version       Print the version and exit.\n");
+      printf("    --gui           Run the GUI.\n");
       printf("-h  --help          Print this output and exit.\n");
       printf("\n\n");
       exit(0);
@@ -233,6 +339,12 @@ int main(int argc, char *argv[]) {
     else if ((strcasestr(argv[i], "--version")) || (strcasestr(argv[i], "-v") == argv[i])) {
       printf("%s v%s\n\n", argv[0], FP_VERSION);
       exit(0);
+    }
+    else if (strcasestr(argv[i], "--gui")) {
+      // Instance an X11 window.
+      if (0 == gui_thread_id) {
+        platform.createThread(&gui_thread_id, nullptr, gui_thread_handler, nullptr, nullptr);
+      }
     }
     else if (argc - i >= 2) {    // Compound arguments go in this case block...
       if ((strcasestr(argv[i], "--uart")) || (strcasestr(argv[i], "-u"))) {
@@ -242,7 +354,7 @@ int main(int argc, char *argv[]) {
         }
         i++;
         // Instance a UART.
-        uart = new LinuxUART(argv[i++]);
+        uart = new LinuxUART((char*) argv[i++]);
         uart->init(&uart_opts);
         uart->readCallback(m_link);      // Attach the UART to ManuvrLink...
         m_link->setOutputTarget(uart);   // ...and ManuvrLink to UART.
@@ -256,9 +368,13 @@ int main(int argc, char *argv[]) {
     }
     else {
       printf("Unhandled argument: %s\n", argv[i]);
-      platform.firmware_shutdown(0);     // Clean up the platform.
+      //platform.firmware_shutdown(0);     // Clean up the platform.
     }
   }
+
+  console.setTXTerminator(LineTerm::LF);
+  console.setRXTerminator(LineTerm::LF);
+  console.localEcho(false);
 
   // Mutually connect the console class to STDIO.
   console_adapter.readCallback(&console);
@@ -268,36 +384,32 @@ int main(int argc, char *argv[]) {
   StringBuilder prompt_string;
   prompt_string.concatf("%c[36m%s> %c[39m", 0x1B, argv[0], 0x1B);
   console.setPromptString((const char*) prompt_string.string());
+  console.emitPrompt(true);
+  console.hasColor(true);
 
-  console.defineCommand("help",        '?',  ParsingConsole::tcodes_str_1, "Prints help to console.", "[<specific command>]", 0, callback_help);
   console.defineCommand("console",     '\0', ParsingConsole::tcodes_str_3, "Console conf.", "[echo|prompt|force|rxterm|txterm]", 0, callback_console_tools);
-  platform.configureConsole(&console);
   console.defineCommand("link",        'l', ParsingConsole::tcodes_str_4, "Linked device tools.", "", 0, callback_link_tools);
   console.defineCommand("uart",        'u', ParsingConsole::tcodes_str_4, "UART tools.", "", 0, callback_uart_tools);
   console.defineCommand("quit",        'Q', ParsingConsole::tcodes_0, "Commit sudoku.", "", 0, callback_program_quit);
+  console.defineCommand("help",        '?',  ParsingConsole::tcodes_str_1, "Prints help to console.", "[<specific command>]", 0, callback_help);
+  platform.configureConsole(&console);
 
-
-  console.setTXTerminator(LineTerm::LF);
-  console.setRXTerminator(LineTerm::LF);
-  console.localEcho(false);
-  console.emitPrompt(true);
-  console.hasColor(true);
   console.init();
-
   output.concatf("%s initialized.\n", argv[0]);
   console.printToLog(&output);
   console.printPrompt();
 
   // The main loop. Run until told to stop.
   while (continue_running) {
-    console_adapter.poll();
     if (nullptr != m_link) {
       m_link->poll(&output);
+      if (!output.isEmpty()) {
+        console.printToLog(&output);
+      }
     }
-    console.printToLog(&output);
+    console_adapter.poll();
   }
   console.emitPrompt(false);  // Avoid a trailing prompt.
-  console.printToLog(&output);
 
   if (nullptr != m_link) {
     m_link->hangup();
@@ -310,5 +422,10 @@ int main(int argc, char *argv[]) {
   }
   console_adapter.poll();
 
+  while (0 != gui_thread_id) {
+    sleep_ms(10);
+  }
+
   platform.firmware_shutdown(0);     // Clean up the platform.
+  return 0;  // Should never execute.
 }

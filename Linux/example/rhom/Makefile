@@ -24,10 +24,10 @@ export OUTPUT_PATH   = $(BUILD_ROOT)/build/
 
 CXXFLAGS  = -I../CppPotpourri/src -I../../ -Wl,--gc-sections -Wall
 CXXFLAGS += -fsingle-precision-constant -Wdouble-promotion -fno-rtti -fno-exceptions
-CXXFLAGS += $(OPTIMIZATION) -std=$(CXX_STANDARD) -m32
+CXXFLAGS += $(OPTIMIZATION) -std=$(CXX_STANDARD)
 CXXFLAGS += -DCONFIG_MANUVR_CBOR -DCONFIG_MANUVR_M2M_SUPPORT
 
-LIBS	= -L$(OUTPUT_PATH) -lstdc++ -lm -lpthread
+LIBS	= -L$(OUTPUT_PATH) -lstdc++ -lm -lpthread -lX11
 
 
 ###########################################################################
@@ -49,7 +49,7 @@ SRCS   += ../CppPotpourri/src/GPSWrapper.cpp
 SRCS   += ../CppPotpourri/src/ParsingConsole.cpp
 SRCS   += ../CppPotpourri/src/Quaternion.cpp
 SRCS   += ../CppPotpourri/src/Storage.cpp
-SRCS   += ../CppPotpourri/src/TripleAxisPipe.cpp
+SRCS   += ../CppPotpourri/src/TripleAxisPipe/*.cpp
 SRCS   += ../CppPotpourri/src/Image/*.cpp
 SRCS   += ../CppPotpourri/src/cbor-cpp/*.cpp
 SRCS   += ../CppPotpourri/src/ManuvrLink/*.cpp
