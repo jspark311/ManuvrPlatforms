@@ -1,3 +1,8 @@
+/*
+* Author:    J. Ian Lindsay
+*
+*/
+
 #include <cstdio>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -15,6 +20,7 @@
 #include <sys/utsname.h>
 
 #include "CppPotpourri.h"
+#include "AbstractPlatform.h"
 #include "StringBuilder.h"
 #include "ParsingConsole.h"
 #include "ElementPool.h"
@@ -31,11 +37,39 @@
 #include "Identity/IdentityUUID.h"
 #include "Identity/Identity.h"
 #include "ManuvrLink/ManuvrLink.h"
+#include <CryptoBurrito/CryptoBurrito.h>
 
 #include <Linux.h>
 
-#define FP_VERSION         "0.0.1"    // Program version.
+
+#define PROGRAM_VERSION    "0.0.2"    // Program version.
 #define U_INPUT_BUFF_SIZE      512    // The maximum size of user input.
+
+
+/*******************************************************************************
+* TODO: Pending mitosis into a header file....
+*******************************************************************************/
+
+class CryptoLogShunt : public CryptOpCallback {
+  public:
+    CryptoLogShunt() {};
+    ~CryptoLogShunt() {};
+
+    /* Mandatory overrides from the CryptOpCallback interface... */
+    int8_t op_callahead(CryptOp* op) {
+      return JOB_Q_CALLBACK_NOMINAL;
+    };
+
+    int8_t op_callback(CryptOp* op) {
+      StringBuilder output;
+      op->printOp(&output);
+      c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, &output);
+      return JOB_Q_CALLBACK_NOMINAL;
+    };
+};
+
+CryptoLogShunt crypto_logger;
+
 
 /*******************************************************************************
 * Globals
@@ -45,7 +79,6 @@ using namespace std;
 const char*   program_name;
 bool          continue_running  = true;
 unsigned long gui_thread_id     = 0;
-
 
 ManuvrLinkOpts link_opts(
   100,   // ACK timeout is 100ms.
@@ -72,8 +105,6 @@ UARTOpts uart_opts {
 LinuxUART*  uart   = nullptr;
 ManuvrLink* m_link = nullptr;
 
-
-/* Console junk... */
 ParsingConsole console(U_INPUT_BUFF_SIZE);
 LinuxStdIO console_adapter;
 
@@ -111,7 +142,7 @@ void link_callback_message(uint32_t tag, ManuvrMsg* msg) {
 *******************************************************************************/
 
 int callback_help(StringBuilder* text_return, StringBuilder* args) {
-  text_return->concatf("%s %s\n", program_name, FP_VERSION);
+  text_return->concatf("RHoM %s\n", PROGRAM_VERSION);
   return console.console_handler_help(text_return, args);
 }
 
@@ -125,6 +156,50 @@ int callback_program_quit(StringBuilder* text_return, StringBuilder* args) {
   text_return->concat("Stopping...\n");
   console.emitPrompt(false);  // Avoid a trailing prompt.
   return 0;
+}
+
+int callback_crypt_tools(StringBuilder* text_return, StringBuilder* args) {
+  int ret = 0;
+  char* cmd = args->position_trimmed(0);
+  if (0 == StringBuilder::strcasecmp(cmd, "info")) {
+    platformObj()->crypto->printDebug(text_return);
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "queue")) {
+    platformObj()->crypto->printQueues(text_return);
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "poll")) {
+    int8_t ret_local = platformObj()->crypto->poll();
+    text_return->concatf("poll() returned %d\n", ret_local);
+  }
+
+  else if (0 == StringBuilder::strcasecmp(cmd, "rng")) {
+    uint depth = (uint) args->position_as_int(1);
+    if (0 == depth) {
+      depth = 10;
+    }
+    CryptOpRNG* rng_op = new CryptOpRNG(&crypto_logger);
+    uint8_t* buf = (uint8_t*) malloc(depth);
+    if (buf) {
+      memset(buf, 0, depth);
+      rng_op->setResBuffer(buf, depth);
+      rng_op->freeResBuffer(true);
+      rng_op->reapJob(true);
+      text_return->concatf("queue_job() returned %d\n", platformObj()->crypto->queue_job(rng_op));
+    }
+  }
+
+  else if (0 == StringBuilder::strcasecmp(cmd, "rng2")) {
+    uint depth = (uint) args->position_as_int(1);
+    if (0 == depth) {
+      depth = 10;
+    }
+    CryptOpRNG* rng_op = new CryptOpRNG(&crypto_logger);
+    rng_op->setResBuffer(nullptr, depth);
+    rng_op->allocResBuffer(true);
+    rng_op->reapJob(true);
+    text_return->concatf("queue_job() returned %d\n", platformObj()->crypto->queue_job(rng_op));
+  }
+  return ret;
 }
 
 
@@ -151,7 +226,7 @@ int callback_uart_tools(StringBuilder* text_return, StringBuilder* args) {
         case 2:
           uart->uartOpts()->bitrate = args->position_as_int(1);
           uart->reset();
-          text_return->concatf("Attempting to set bitrate on UART...\n");
+          text_return->concat("Attempting to set bitrate on UART...\n");
           break;
         default:
           text_return->concatf("UART bitrate is %u\n", uart->uartOpts()->bitrate);
@@ -193,6 +268,27 @@ int callback_uart_tools(StringBuilder* text_return, StringBuilder* args) {
 }
 
 
+int callback_gui_tools(StringBuilder* text_return, StringBuilder* args) {
+  int ret = -1;
+  // NOTE: The GUI is running in a separate thread. It should only be
+  //   manipulated indirectly by an IPC mechanism, or by a suitable stand-ins.
+  char* cmd = args->position_trimmed(0);
+  if (0 == StringBuilder::strcasecmp(cmd, "resize")) {
+    // NOTE: This is against GUI best-practices (according to Xorg). But it
+    //   might be useful later.
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "gravepact")) {
+    // If this is enabled, and the user closes the GUI, the main program will
+    //   also terminate in an orderly manner.
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "detatched-modals")) {
+    // If enabled, this setting causes modals to be spawned off as distinct
+    //   child windows. If disabled, you will get an overlay instead.
+  }
+  return ret;
+}
+
+
 int callback_link_tools(StringBuilder* text_return, StringBuilder* args) {
   int ret = -1;
   char* cmd = args->position_trimmed(0);
@@ -211,9 +307,9 @@ int callback_link_tools(StringBuilder* text_return, StringBuilder* args) {
 }
 
 
-/**
+/*******************************************************************************
 * This is a thread to run the GUI.
-*/
+*******************************************************************************/
 static void* gui_thread_handler(void*) {
   c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Started GUI thread.");
   Display* dpy = XOpenDisplay(nullptr);
@@ -337,7 +433,7 @@ int main(int argc, const char *argv[]) {
       exit(0);
     }
     else if ((strcasestr(argv[i], "--version")) || (strcasestr(argv[i], "-v") == argv[i])) {
-      printf("%s v%s\n\n", argv[0], FP_VERSION);
+      printf("RHoM v%s\n\n", PROGRAM_VERSION);
       exit(0);
     }
     else if (strcasestr(argv[i], "--gui")) {
@@ -388,10 +484,14 @@ int main(int argc, const char *argv[]) {
   console.hasColor(true);
 
   console.defineCommand("console",     '\0', ParsingConsole::tcodes_str_3, "Console conf.", "[echo|prompt|force|rxterm|txterm]", 0, callback_console_tools);
+  if (0 == gui_thread_id) {
+    console.defineCommand("gui",         'G', ParsingConsole::tcodes_str_4, "GUi tools.", "[echo|prompt|force|rxterm|txterm]", 0, callback_gui_tools);
+  }
+  console.defineCommand("crypto",     'C',  ParsingConsole::tcodes_str_4, "Cryptographic tools.", "", 0, callback_crypt_tools);
   console.defineCommand("link",        'l', ParsingConsole::tcodes_str_4, "Linked device tools.", "", 0, callback_link_tools);
   console.defineCommand("uart",        'u', ParsingConsole::tcodes_str_4, "UART tools.", "", 0, callback_uart_tools);
   console.defineCommand("quit",        'Q', ParsingConsole::tcodes_0, "Commit sudoku.", "", 0, callback_program_quit);
-  console.defineCommand("help",        '?',  ParsingConsole::tcodes_str_1, "Prints help to console.", "[<specific command>]", 0, callback_help);
+  console.defineCommand("help",        '?', ParsingConsole::tcodes_str_1, "Prints help to console.", "[<specific command>]", 0, callback_help);
   platform.configureConsole(&console);
 
   console.init();

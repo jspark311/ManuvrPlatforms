@@ -27,11 +27,11 @@ This file forms the catch-all for linux platforms that have no support.
 #include <AbstractPlatform.h>
 #include <UARTAdapter.h>
 #include <I2CAdapter.h>
+#include "CryptoBurrito/CryptoBurrito.h"
 
 #include <pthread.h>
 #include <signal.h>
 #include <sys/time.h>
-
 
 #if defined(CONFIG_MANUVR_STORAGE)
   #include "LinuxStorage.h"

@@ -26,6 +26,8 @@ This is a demonstration program, and was meant to be compiled for a
 #include <StringBuilder.h>
 #include <CppPotpourri.h>
 #include <ParsingConsole.h>
+#include <CryptoBurrito/CryptoBurrito.h>
+
 
 /* ManuvrPlatform for vanilla Linux. */
 #include <Linux.h>
@@ -41,7 +43,6 @@ This is a demonstration program, and was meant to be compiled for a
 /*******************************************************************************
 * Globals                                                                      *
 *******************************************************************************/
-
 using namespace std;
 
 const char* program_name;
@@ -50,7 +51,7 @@ int   continue_running  = 1;
 /* Console support... */
 ParsingConsole console(MAX_COMMAND_LENGTH);
 LinuxStdIO console_adapter;
-
+CryptoProcessor crypto_queue(16);
 
 /*******************************************************************************
 * Console callbacks
@@ -66,9 +67,11 @@ int callback_console_tools(StringBuilder* text_return, StringBuilder* args) {
 }
 
 
-int callback_kvp_tools(StringBuilder* text_return, StringBuilder* args) {
+int callback_pf_crypt_info(StringBuilder* text_return, StringBuilder* args) {
   int ret = 0;
   char* cmd = args->position_trimmed(0);
+  platform.printDebug(text_return);
+  crypto_queue.printDebug(text_return);
   return ret;
 }
 
@@ -122,25 +125,29 @@ int main(int argc, const char* argv[]) {
   // Define the commands for the application. Usually, these are some basics.
   console.defineCommand("help",     '?',  ParsingConsole::tcodes_str_1, "Prints help to console.", "", 0, callback_help);
   console.defineCommand("console",  '\0', ParsingConsole::tcodes_str_3, "Console conf", "[history|rxterm|txterm|echo|prompt]", 0, callback_console_tools);
-  console.defineCommand("kvp",      'k',  ParsingConsole::tcodes_str_4, "Temporary code to test KVP.", "", 0, callback_kvp_tools);
+  console.defineCommand("info",     'i',  ParsingConsole::tcodes_str_4, "Cryptographic and platform info.", "", 0, callback_pf_crypt_info);
   console.defineCommand("quit",     'Q',  ParsingConsole::tcodes_0, "Commit sudoku.", "", 0, callback_program_quit);
 
   // The platform itself comes with a convenient set of console functions.
   platform.configureConsole(&console);
 
   console.init();
-
   output.concatf("%s initialized.\n", argv[0]);
   console.printToLog(&output);
   console.printPrompt();
+
+  crypto_queue.init();
+  crypto_queue.verbosity(7);
 
   /*
   * The main loop. Run until told to stop.
   */
   while (continue_running) {
     // Polling the adapter will drive the entire program forward.
+    crypto_queue.poll();
     console_adapter.poll();
   }
 
+  crypto_queue.deinit();
   platform.firmware_shutdown(0);     // Clean up the platform.
 }

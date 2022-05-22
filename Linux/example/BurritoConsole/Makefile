@@ -6,7 +6,6 @@
 ###########################################################################
 
 FIRMWARE_NAME = BurritoConsole
-
 CXX_STANDARD = gnu++11
 CC	         = g++
 
@@ -67,7 +66,7 @@ default:	$(FIRMWARE_NAME)
 builddir:
 	mkdir -p $(OUTPUT_PATH)
 
-debug:  BurritoConsole.o
+debug:  $(FIRMWARE_NAME).o
 	$(CC) $(CXXFLAGS) -ggdb -g -pg -o $(FIRMWARE_NAME) *.o $(LIBS)
 
 $(FIRMWARE_NAME):	$(FIRMWARE_NAME).o $(LIBS_TO_BUILD)

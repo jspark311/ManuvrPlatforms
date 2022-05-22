@@ -27,20 +27,28 @@ This file forms the catch-all for linux platforms that have no specific support.
 #include <unistd.h>
 #include <signal.h>
 #include <syslog.h>
+#include <sys/utsname.h>
 #if defined(CONFIG_MANUVR_STORAGE)
   #include <fcntl.h>      // Needed for integrity checks.
   #include <sys/stat.h>   // Needed for integrity checks.
 #endif
 
 
-// Unless otherwise specified, the interval timer will fire at 10Hz.
 #ifndef CONFIG_MANUVR_INTERVAL_PERIOD_MS
+  // Unless otherwise specified, the interval timer will fire at 10Hz.
   #define CONFIG_MANUVR_INTERVAL_PERIOD_MS  100
+#endif
+
+#ifndef CONFIG_MANUVR_CRYPTO_QUEUE_MAX_DEPTH
+  // Unless otherwise specified, the cryptographic processing queue depth is 32.
+  #define CONFIG_MANUVR_CRYPTO_QUEUE_MAX_DEPTH  32
 #endif
 
 #ifndef PLATFORM_RNG_CARRY_CAPACITY
   #define PLATFORM_RNG_CARRY_CAPACITY  32
 #endif
+
+
 
 #define MANUVR_INIT_STATE_UNINITIALIZED   0
 #define MANUVR_INIT_STATE_RESERVED_0      1
@@ -66,6 +74,7 @@ AbstractPlatform* platformObj() {   return (AbstractPlatform*) &platform;   }
 
 #if defined(__HAS_CRYPT_WRAPPER)
   uint8_t _binary_hash[32];
+  long unsigned int crypto_thread_id = 0;
 #endif
 
 struct itimerval _interval              = {0};
@@ -180,59 +189,6 @@ bool unset_linux_interval_timer() {
 //   }
 //   return _args;
 // }
-
-
-#if defined(__BUILD_HAS_DIGEST)
-/*
-* Function takes a path and a buffer as arguments. The binary is hashed and the ASCII representation is
-*   placed in the buffer. The number of bytes read is returned on success. 0 is returned on failure.
-*/
-static int hashFileByPath(char* path, uint8_t* h_buf) {
-  int8_t return_value = -1;
-  StringBuilder log;
-  if (nullptr != path) {
-    struct stat st;
-    if(-1 != stat(path, &st)) {
-      size_t self_size = st.st_size;
-      int digest_size = 32;
-      StringBuilder buf;
-
-      int fd = open(path, O_RDONLY);
-      if (fd >= 0) {
-        int r_buf_len = 2 << 15;
-        uint8_t* buffer = (uint8_t*) alloca(r_buf_len);
-        int r_len = read(fd, buffer, r_buf_len);
-        while (0 < r_len) {
-          buf.concat(buffer, r_len);
-          r_len = read(fd, buffer, r_buf_len);
-        }
-        close(fd);
-
-        uint8_t* self_mass = buf.string();
-        log.concatf("%s is %ld bytes.\n", path, self_size);
-
-        int ret = wrapped_hash(self_mass, self_size, h_buf, Hashes::SHA256);
-        if (0 == ret) {
-          return_value = digest_size;
-        }
-        else {
-          log.concat("Failed to run the hash on the input path.\n");
-        }
-      }
-      else {
-        // Failure to read file.
-        log.concat("Failed to read file.\n");
-      }
-    }
-    else {
-      // Failure to stat file.
-      log.concat("Failed to stat file.\n");
-    }
-  }
-  printf("%s\n", (const char*)log.string());
-  return return_value;
-}
-#endif  // __HAS_CRYPT_WRAPPER
 
 
 /*******************************************************************************
@@ -435,6 +391,16 @@ void LinuxPlatform::printDebug(StringBuilder* output) {
     _board_name
   );
   _print_abstract_debug(output);
+
+  struct utsname sname;
+  if (uname(&sname) != -1) {
+    output->concatf("\t%s %s (%s)\n", sname.sysname, sname.release, sname.machine);
+    output->concatf("\t%s\n", sname.version);
+  }
+  else {
+    output->concat("\tFailed to get detailed kernel info.\n");
+  }
+
   #if defined(__HAS_CRYPT_WRAPPER)
     output->concatf("-- Binary hash         %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
       _binary_hash[0],  _binary_hash[1],  _binary_hash[2],  _binary_hash[3],
@@ -664,7 +630,21 @@ void LinuxPlatform::_close_open_threads() {
     if (0 == deleteThread(&rng_thread_id)) {
     }
   }
-  sleep_ms(100);
+
+  #if defined(__HAS_CRYPT_WRAPPER)
+  if (crypto_thread_id) {
+    if (0 == crypto->deinit()) {
+      // Orderly thread termination is preferable.
+      while (0 != crypto_thread_id) {
+        sleep_ms(10);
+      }
+    }
+    else if (0 == deleteThread(&crypto_thread_id)) {
+    }
+  }
+  #endif  // __HAS_CRYPT_WRAPPER
+
+  sleep_ms(10);
 }
 
 
@@ -703,9 +683,25 @@ void LinuxPlatform::firmware_shutdown(uint8_t reason) {
 
 
 /*******************************************************************************
-* INTERNAL INTEGRITY-CHECKS                                                    *
+* Cryptographic                                                                *
 *******************************************************************************/
 #if defined(__HAS_CRYPT_WRAPPER)
+
+/**
+* This is a thread to keep the randomness pool flush.
+*/
+static void* crypto_processor_thread(void*) {
+  printf("Starting CryptoProcessor thread...\n");
+  CryptoProcessor* cproc = platformObj()->crypto;
+  while (cproc->initialized()) {
+    cproc->poll();
+  }
+  printf("Exiting CryptoProcessor thread...\n");
+  crypto_thread_id = 0;
+  return nullptr;
+}
+
+
 int8_t LinuxPlatform::internal_integrity_check(uint8_t* test_buf, int test_len) {
   if ((nullptr != test_buf) && (0 < test_len)) {
     for (int i = 0; i < test_len; i++) {
@@ -740,7 +736,7 @@ int8_t LinuxPlatform::_hash_self() {
   }
   printf("This binary's path is %s\n", exe_path);
   memset(_binary_hash, 0x00, 32);
-  int ret = hashFileByPath(exe_path, _binary_hash);
+  int ret = 1; //hashFileByPath(exe_path, _binary_hash);
   if (0 < ret) {
     return 0;
   }
@@ -749,6 +745,8 @@ int8_t LinuxPlatform::_hash_self() {
   }
   return -1;
 }
+
+
 #endif  // __HAS_CRYPT_WRAPPER
 
 
@@ -792,11 +790,25 @@ int8_t LinuxPlatform::init() {
     _storage_device = (Storage*) sd;
   #endif
 
-  #if defined(__HAS_CRYPT_WRAPPER)
-  _hash_self();
-  //internal_integrity_check(nullptr, 0);
-  #endif
-
   set_linux_interval_timer();
+
+  #if defined(__HAS_CRYPT_WRAPPER)
+    crypto = new CryptoProcessor(CONFIG_MANUVR_CRYPTO_QUEUE_MAX_DEPTH);
+    if (nullptr != crypto) {
+      if (0 != crypto->init()) {
+        return -3;
+      }
+      if (createThread(&crypto_thread_id, nullptr, crypto_processor_thread, nullptr, nullptr)) {
+        printf("Failed to create crypto thread.\n");
+        return -4;
+      }
+      _hash_self();
+      //internal_integrity_check(nullptr, 0);
+    }
+    else {
+      return -2;
+    }
+  #endif // __HAS_CRYPT_WRAPPER
+
   return 0;
 }
