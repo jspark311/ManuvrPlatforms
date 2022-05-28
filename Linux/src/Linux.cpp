@@ -45,7 +45,7 @@ This file forms the catch-all for linux platforms that have no specific support.
 #endif
 
 #ifndef PLATFORM_RNG_CARRY_CAPACITY
-  #define PLATFORM_RNG_CARRY_CAPACITY  32
+  #define PLATFORM_RNG_CARRY_CAPACITY  1024
 #endif
 
 
