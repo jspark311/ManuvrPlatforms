@@ -37,10 +37,10 @@ export OUTPUT_PATH = $(BUILD_ROOT)/build/
 ###########################################################################
 # Source files, includes, and linker directives...
 ###########################################################################
-INCLUDES  = -I../CppPotpourri/src -I../../
+INCLUDES  = -I../CppPotpourri/src -I../../ -Isrc 
 
-CXX_SRCS  = rhom.cpp
-CXX_SRCS += src/*.cpp
+CXX_SRCS  = src/*.cpp
+CXX_SRCS += src/uApp/*.cpp
 CXX_SRCS += ../CppPotpourri/src/*.cpp
 CXX_SRCS += ../CppPotpourri/src/Identity/*.cpp
 CXX_SRCS += ../CppPotpourri/src/cbor-cpp/*.cpp
