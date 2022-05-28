@@ -31,13 +31,16 @@ Display* dpy = nullptr;
 XImage* ximage = nullptr;
 
 Image _main_img(640, 480, ImgBufferFormat::R8_G8_B8_ALPHA);
+UIGfxWrapper ui_gfx(&_main_img);
 
+float scroll_val_0 = 0.5f;
+SensorFilter<float> test_filter_0(150, FilteringStrategy::RAW);
 
 /*******************************************************************************
 * This is a thread to run the GUI.
 *******************************************************************************/
 void* gui_thread_handler(void*) {
-  c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Started GUI thread.");
+  c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "Started GUI thread.");
   Display* dpy = XOpenDisplay(nullptr);
   bool keep_polling = (nullptr != dpy);
   bool window_ready = false;
@@ -54,8 +57,8 @@ void* gui_thread_handler(void*) {
       0x9932CC,  // TODO: Use colormap.
       0x000000   // TODO: Use colormap.
     );
-    //_main_img.reallocate();
-    c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Reallocated %d", _main_img.reallocate());
+    _main_img.reallocate();
+    test_filter_0.init();
 
     GC gc = DefaultGC(dpy, screen_num);
     XSetForeground(dpy, gc, 0xAAAAAA);
@@ -74,7 +77,7 @@ void* gui_thread_handler(void*) {
     XEvent e;
     Visual* visual = DefaultVisual(dpy, 0);
 
-
+    // The thread's polling loop. Repeat forever until told otherwise.
     while (keep_polling) {
       if (0 < XPending(dpy)) {
         bool handled = false;
@@ -84,24 +87,24 @@ void* gui_thread_handler(void*) {
           handled = true;
           XWindowAttributes wa;
           XGetWindowAttributes(dpy, win, &wa);
-          int width = wa.width;
-          int height = wa.height;
-          char buf[256] = {0, };
-          int y_offset = 10;
+          uint32_t width  = (uint32_t) wa.width;
+          uint32_t height = (uint32_t) wa.height;
           const char* HEADER_STR_0 = "Right Hand of Manuvr";
           const char* HEADER_STR_1 = "Build date " __DATE__ " " __TIME__;
           if ((0 < width) && (0 < height)) {
             if ((_main_img.x() != width) | (_main_img.y() != height)) {
+              // TODO: Period-bound this operation so we don't thrash.
               if (ximage) {
                 ximage->data = nullptr;  // Do not want X11 to free the Image's buffer.
                 XDestroyImage(ximage);
                 ximage = nullptr;
               }
-              if (_main_img.setSize((uint32_t) width, (uint32_t) height)) {
+              if (_main_img.setSize(width, height)) {
+                c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "uApp frame buffer resized to %u x %u x %u", _main_img.x(), _main_img.y(), _main_img.bitsPerPixel());
                 ximage = XCreateImage(dpy, visual, DefaultDepth(dpy, screen_num), ZPixmap, 0, (char*)_main_img.buffer(), _main_img.x(), _main_img.y(), 32, 0);
               }
               else {
-                c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "setSize() failed.");
+                c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "uApp frame buffer resize failed.");
               }
             }
           }
@@ -132,41 +135,63 @@ void* gui_thread_handler(void*) {
           char* btn_str = (char*) "";
           switch (e.xbutton.button) {
             case 1:    btn_str = (char*) "Left";
+              ui_gfx.drawButton(0, 100, 22, 22, true);
               break;
             case 2:    btn_str = (char*) "Middle";
+              ui_gfx.drawButton(25, 100, 22, 22, true);
               break;
             case 3:    btn_str = (char*) "Right";
+              ui_gfx.drawButton(50, 100, 22, 22, true);
               break;
-            case 4:    btn_str = (char*) "ScrlUp";      break;
-            case 5:    btn_str = (char*) "ScrlDwn";     break;
-            default:   btn_str = (char*) "Unhandled";   break;
+            case 4:    btn_str = (char*) "ScrlUp";
+              scroll_val_0 = strict_min(1.0, (scroll_val_0 + 0.02));
+              test_filter_0.feedFilter(scroll_val_0);
+              ui_gfx.drawProgressBarH(0, 125, 125, 16, 0x00FF00, true, true, scroll_val_0);
+              break;
+            case 5:    btn_str = (char*) "ScrlDwn";
+              scroll_val_0 = strict_max(0.0, (scroll_val_0 - 0.02));
+              test_filter_0.feedFilter(scroll_val_0);
+              ui_gfx.drawProgressBarH(0, 125, 125, 16, 0x00FF00, true, true, scroll_val_0);
+              break;
+            default:
+              btn_str = (char*) "Unhandled";
+              c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "%s click %d: (%d, %d)", btn_str, e.xbutton.state, e.xbutton.x, e.xbutton.y);
+              break;
           }
-          c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "%s click %d: (%d, %d)", btn_str, e.xbutton.state, e.xbutton.x, e.xbutton.y);
-          _main_img.setCursor(0, 0);
-          _main_img.setTextSize(2);
-          _main_img.setTextColor(0xFFFFFF, 0);
-          _main_img.writeString(btn_str);
-          _main_img.writeString("      ");
+          //_main_img.setCursor(0, 0);
+          //_main_img.setTextSize(2);
+          //_main_img.setTextColor(0xFFFFFF, 0);
+          //_main_img.writeString(btn_str);
+          //_main_img.writeString("      ");
+
         }
         if (e.type == ButtonRelease) {
           handled = true;
           char* btn_str = (char*) "";
           switch (e.xbutton.button) {
-            case 1:    btn_str = (char*) "Left";        break;
-            case 2:    btn_str = (char*) "Middle";      break;
-            case 3:    btn_str = (char*) "Right";       break;
+            case 1:    btn_str = (char*) "Left";
+              ui_gfx.drawButton(0, 100, 22, 22, false);
+              break;
+            case 2:    btn_str = (char*) "Middle";
+              ui_gfx.drawButton(25, 100, 22, 22, false);
+              break;
+            case 3:    btn_str = (char*) "Right";
+              ui_gfx.drawButton(50, 100, 22, 22, false);
+              break;
             case 4:    btn_str = (char*) "ScrlUp";      break;
             case 5:    btn_str = (char*) "ScrlDwn";     break;
-            default:   btn_str = (char*) "Unhandled";   break;
+            default:
+              btn_str = (char*) "Unhandled";
+              c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "%s release %d: (%d, %d)", btn_str, e.xbutton.state, e.xbutton.x, e.xbutton.y);
+              break;
           }
-          c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "%s release %d: (%d, %d)", btn_str, e.xbutton.state, e.xbutton.x, e.xbutton.y);
         }
 
         if (e.type == KeyPress) {
           handled = true;
           char buf[128] = {0, };
           KeySym keysym;
-          int len = XLookupString(&e.xkey, buf, sizeof buf, &keysym, NULL);
+          XLookupString(&e.xkey, buf, sizeof buf, &keysym, nullptr);
           if (keysym == XK_Escape) {
             keep_polling = false;
           }
@@ -186,6 +211,13 @@ void* gui_thread_handler(void*) {
       }
 
       if (window_ready) {
+        if (test_filter_0.dirty()) {
+          ui_gfx.drawGraph(
+            0, 200, test_filter_0.windowSize(), 50, 0xA05010,
+            true, true, true,
+             &test_filter_0
+          );
+        }
         XPutImage(dpy, win, DefaultGC(dpy, DefaultScreen(dpy)), ximage, 0, 0, 0, 0, _main_img.x(), _main_img.y());
       }
 
@@ -207,7 +239,7 @@ void* gui_thread_handler(void*) {
     c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Cannot open display.");
   }
 
-  c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Exiting GUI thread...");
+  c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "Exiting GUI thread...");
   gui_thread_id = 0;
   return nullptr;
 }
@@ -222,6 +254,9 @@ int callback_gui_tools(StringBuilder* text_return, StringBuilder* args) {
   if (0 == StringBuilder::strcasecmp(cmd, "resize")) {
     // NOTE: This is against GUI best-practices (according to Xorg). But it
     //   might be useful later.
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "border-pix")) {
+    //XSetWindowBorder(dpy, win, 40);
   }
   else if (0 == StringBuilder::strcasecmp(cmd, "gravepact")) {
     // If this is enabled, and the user closes the GUI, the main program will

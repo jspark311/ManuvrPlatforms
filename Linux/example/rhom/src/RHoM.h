@@ -19,6 +19,7 @@
 #include "uuid.h"
 #include "cbor-cpp/cbor.h"
 #include "Image/Image.h"
+#include "Image/ImageUtils.h"
 #include "Identity/IdentityUUID.h"
 #include "Identity/Identity.h"
 #include "ManuvrLink/ManuvrLink.h"
