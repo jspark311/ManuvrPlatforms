@@ -21,6 +21,8 @@
 
 #include "RHoM.h"
 
+#define INSET_SIZE   200
+
 
 extern unsigned long gui_thread_id;   // TODO: (rolled up newspaper) Bad...
 extern bool continue_running;         // TODO: (rolled up newspaper) Bad...
@@ -30,10 +32,10 @@ extern SensorFilter<uint32_t> _filter;
 Display* dpy = nullptr;
 XImage* ximage = nullptr;
 
-Image _main_img(640, 480, ImgBufferFormat::R8_G8_B8_ALPHA);
+Image _main_img(1, 1, ImgBufferFormat::R8_G8_B8_ALPHA);
+Image _overlay_img(1, 1, ImgBufferFormat::R8_G8_B8_ALPHA);
 UIGfxWrapper ui_gfx(&_main_img);
 
-float scroll_val_0 = 0.5f;
 SensorFilter<float> test_filter_0(150, FilteringStrategy::RAW);
 SensorFilter<float> test_filter_1(256, FilteringStrategy::RAW);
 
@@ -51,9 +53,15 @@ GfxUISlider _slider_1(0,   150, 197, 20, 0xFFA07A, GFXUI_SLIDER_FLAG_RENDER_VALU
 GfxUISlider _slider_2(0,   175, 197, 20, 0x0000CD, GFXUI_SLIDER_FLAG_RENDER_VALUE);
 GfxUISlider _slider_3(0,   200, 197, 20, 0x6B8E23, GFXUI_SLIDER_FLAG_RENDER_VALUE);
 GfxUISlider _slider_4(0,   225, 197, 20, 0xFFF5EE);
-
 GfxUISlider _slider_5(205, 125, 25, 120, 0x90F5EE, GFXUI_SLIDER_FLAG_RENDER_VALUE | GFXUI_SLIDER_FLAG_VERTICAL);
 GfxUISlider _slider_6(235, 125, 25, 120, 0xDC143C, GFXUI_SLIDER_FLAG_RENDER_VALUE | GFXUI_SLIDER_FLAG_VERTICAL);
+
+bool gravepact = true;
+
+uint pointer_x = 0;
+uint pointer_y = 0;
+uint window_w  = 0;
+uint window_h  = 0;
 
 
 /*
@@ -117,7 +125,7 @@ void proc_mouse_button(uint btn_id, uint x, uint y, bool pressed) {
             for (uint n = 0; n < SEARCH_SIZE_QUEUE; n++) {
               GfxUISlider* ui_element = slider_queue.get(n);
               if (pressed) {
-                if (ui_element->touch(x, y)) {
+                if (ui_element->notify(GfxUIEvent::TOUCH, x, y)) {
                   ui_element->render(&ui_gfx);
                   return;
                 }
@@ -135,11 +143,11 @@ void proc_mouse_button(uint btn_id, uint x, uint y, bool pressed) {
               GfxUISlider* ui_element = slider_queue.get(n);
               if (ui_element->includesPoint(x, y)) {
                 if (mouse_buttons[i].button_id == 4) {
-                  ui_element->value(strict_min(1.0, (ui_element->value() + 0.02)));
+                  ui_element->value(strict_min(1.0, (ui_element->value() + 0.01)));
                   test_filter_0.feedFilter(ui_element->value());
                 }
                 else {
-                  ui_element->value(strict_max(0.0, (ui_element->value() - 0.02)));
+                  ui_element->value(strict_max(0.0, (ui_element->value() - 0.01)));
                   test_filter_0.feedFilter(ui_element->value());
                 }
                 ui_element->render(&ui_gfx);
@@ -160,7 +168,9 @@ void proc_mouse_button(uint btn_id, uint x, uint y, bool pressed) {
 }
 
 
-
+/*
+* Called to unconditionally show the elements in the GUI.
+*/
 void render_all_elements() {
   const char* HEADER_STR_0 = "Right Hand of Manuvr";
   const char* HEADER_STR_1 = "Build date " __DATE__ " " __TIME__;
@@ -224,15 +234,14 @@ void* gui_thread_handler(void*) {
     //Colormap color_map = XDefaultColormap(dpy, screen_num);
     Window win = XCreateSimpleWindow(
       dpy, RootWindow(dpy, screen_num),
-      10,
-      10,
-      800,
-      800,
+      10, 10,
+      800, 600,
       1,
       0x9932CC,  // TODO: Use colormap.
       0x000000   // TODO: Use colormap.
     );
     _main_img.reallocate();
+    _overlay_img.reallocate();
     test_filter_0.init();
     test_filter_1.init();
 
@@ -253,9 +262,11 @@ void* gui_thread_handler(void*) {
     slider_queue.insert(&_slider_5);
     slider_queue.insert(&_slider_6);
 
+    _slider_0.value(0.5);
+
     GC gc = DefaultGC(dpy, screen_num);
     XSetForeground(dpy, gc, 0xAAAAAA);
-    XSelectInput(dpy, win, ExposureMask | ButtonPressMask | ButtonReleaseMask | KeyPressMask);  // PointerMotionMask
+    XSelectInput(dpy, win, ExposureMask | ButtonPressMask | ButtonReleaseMask | KeyPressMask); // | PointerMotionMask);
     XMapWindow(dpy, win);
     XStoreName(dpy, win, "Right Hand of Manuvr");
 
@@ -274,20 +285,25 @@ void* gui_thread_handler(void*) {
             {
               XWindowAttributes wa;
               XGetWindowAttributes(dpy, win, &wa);
-              uint32_t width  = (uint32_t) wa.width;
-              uint32_t height = (uint32_t) wa.height;
-              if ((0 < width) && (0 < height)) {
-                if ((_main_img.x() != width) | (_main_img.y() != height)) {
+              window_w = (uint32_t) wa.width;
+              window_h = (uint32_t) wa.height;
+              if ((0 < window_w) && (0 < window_h)) {
+                if ((_main_img.x() != window_w) | (_main_img.y() != window_h)) {
                   // TODO: Period-bound this operation so we don't thrash.
                   if (ximage) {
                     ximage->data = nullptr;  // Do not want X11 to free the Image's buffer.
                     XDestroyImage(ximage);
                     ximage = nullptr;
                   }
-                  if (_main_img.setSize(width, height)) {
-                    c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "uApp frame buffer resized to %u x %u x %u", _main_img.x(), _main_img.y(), _main_img.bitsPerPixel());
-                    ximage = XCreateImage(dpy, visual, DefaultDepth(dpy, screen_num), ZPixmap, 0, (char*)_main_img.buffer(), _main_img.x(), _main_img.y(), 32, 0);
-                    render_all_elements();
+                  if (_main_img.setSize(window_w, window_h)) {
+                    if (_overlay_img.setSize(window_w, window_h)) {
+                      c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "uApp frame buffer resized to %u x %u x %u", _overlay_img.x(), _overlay_img.y(), _overlay_img.bitsPerPixel());
+                      ximage = XCreateImage(dpy, visual, DefaultDepth(dpy, screen_num), ZPixmap, 0, (char*)_overlay_img.buffer(), _overlay_img.x(), _overlay_img.y(), 32, 0);
+                      render_all_elements();
+                    }
+                    else {
+                      c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Overlay frame buffer resize failed.");
+                    }
                   }
                   else {
                     c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "uApp frame buffer resize failed.");
@@ -323,6 +339,11 @@ void* gui_thread_handler(void*) {
             }
             break;
 
+          case MotionNotify:
+            pointer_x = e.xmotion.x;
+            pointer_y = e.xmotion.y;
+            break;
+
           default:
             c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Unhandled: %d", e.type);
             break;
@@ -347,7 +368,44 @@ void* gui_thread_handler(void*) {
         //    SensorFilter<float>* filt
         //  );
         //}
-        XPutImage(dpy, win, DefaultGC(dpy, DefaultScreen(dpy)), ximage, 0, 0, 0, 0, _main_img.x(), _main_img.y());
+        int garbage = 0;
+        int temp_ptr_x = 0;
+        int temp_ptr_y = 0;
+        uint mask_ret = 0;
+        Window win_ret;
+        XQueryPointer(dpy, win,
+          &win_ret, &win_ret,
+          &garbage, &garbage,
+          &temp_ptr_x, &temp_ptr_y,
+          &mask_ret
+        );
+
+        if (_overlay_img.setBufferByCopy(_main_img.buffer(), _main_img.format())) {
+          const bool  POINTER_IN_WINDOW = (0 <= temp_ptr_x) && (0 <= temp_ptr_y) && (window_w > (uint) temp_ptr_x) && (window_h > (uint) temp_ptr_y);
+          if (POINTER_IN_WINDOW) {
+            // If the pointer is within the window...
+            pointer_x = (uint) temp_ptr_x;
+            pointer_y = (uint) temp_ptr_y;
+
+            const uint  INSET_X_POS = (window_w - INSET_SIZE) - 1;
+            const uint  INSET_Y_POS = (window_h - INSET_SIZE) - 1;
+            const float INSET_SCALE = 0.4 + (_slider_0.value() * 5.0);
+            const int   INSET_FEED_SIZE   = (INSET_SIZE / INSET_SCALE);
+            const int   INSET_FEED_OFFSET = (INSET_FEED_SIZE/2);
+            const uint  INSET_FEED_X_POS  = (uint) strict_max(INSET_FEED_OFFSET, strict_min((int) (window_w - INSET_FEED_OFFSET), (int) pointer_x)) - INSET_FEED_OFFSET;
+            const uint  INSET_FEED_Y_POS  = (uint) strict_max(INSET_FEED_OFFSET, strict_min((int) (window_h - INSET_FEED_OFFSET), (int) pointer_y)) - INSET_FEED_OFFSET;
+            //c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "(%u %u)\t(%u %u)", INSET_FEED_X_POS, INSET_FEED_Y_POS, pointer_x, pointer_y);
+            ImageScaler scale_window(&_main_img, &_overlay_img, INSET_SCALE, INSET_FEED_X_POS, INSET_FEED_Y_POS, INSET_FEED_SIZE, INSET_FEED_SIZE, INSET_X_POS, INSET_Y_POS);
+            scale_window.apply();
+
+            //_overlay_img.fillRect(pointer_x, pointer_y, 5, 5, 0xFFFFFF);
+            _overlay_img.drawRect(INSET_FEED_X_POS, INSET_FEED_Y_POS, INSET_FEED_SIZE, INSET_FEED_SIZE, 0xFFFFFF);
+            _overlay_img.drawLine(INSET_FEED_X_POS, (INSET_FEED_Y_POS + INSET_FEED_SIZE), INSET_X_POS, (INSET_Y_POS + INSET_SIZE), 0xFFFFFF);
+            _overlay_img.drawLine((INSET_FEED_X_POS + INSET_FEED_SIZE), INSET_FEED_Y_POS, (INSET_X_POS + INSET_SIZE), INSET_Y_POS, 0xFFFFFF);
+            _overlay_img.drawRect(INSET_X_POS, INSET_Y_POS, INSET_SIZE, INSET_SIZE, 0xFFFFFF);
+          }
+          XPutImage(dpy, win, DefaultGC(dpy, DefaultScreen(dpy)), ximage, 0, 0, 0, 0, _overlay_img.x(), _overlay_img.y());
+        }
       }
 
       // If either this thread, or the main thread decided we should terminate,
@@ -370,6 +428,9 @@ void* gui_thread_handler(void*) {
 
   c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "Exiting GUI thread...");
   gui_thread_id = 0;
+  if (gravepact) {
+    continue_running = false;
+  }
   return nullptr;
 }
 
@@ -390,6 +451,10 @@ int callback_gui_tools(StringBuilder* text_return, StringBuilder* args) {
   else if (0 == StringBuilder::strcasecmp(cmd, "gravepact")) {
     // If this is enabled, and the user closes the GUI, the main program will
     //   also terminate in an orderly manner.
+    if (1 < args->count()) {
+      gravepact = (0 != args->position_as_int(1));
+    }
+    text_return->concatf("Closing the GUI will %sterminate the entire program.\n", gravepact?"":"not ");
   }
   else if (0 == StringBuilder::strcasecmp(cmd, "detatched-modals")) {
     // If enabled, this setting causes modals to be spawned off as distinct

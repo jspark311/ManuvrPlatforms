@@ -345,7 +345,7 @@ int main(int argc, const char *argv[]) {
   console.hasColor(true);
 
   console.defineCommand("console",     '\0', ParsingConsole::tcodes_str_3, "Console conf.", "[echo|prompt|force|rxterm|txterm]", 0, callback_console_tools);
-  if (0 == gui_thread_id) {
+  if (0 != gui_thread_id) {
     console.defineCommand("gui",         'G', ParsingConsole::tcodes_str_4, "GUi tools.", "[echo|prompt|force|rxterm|txterm]", 0, callback_gui_tools);
   }
   console.defineCommand("crypto",     'C',  ParsingConsole::tcodes_str_4, "Cryptographic tools.", "", 0, callback_crypt_tools);
