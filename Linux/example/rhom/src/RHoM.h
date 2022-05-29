@@ -20,6 +20,7 @@
 #include "cbor-cpp/cbor.h"
 #include "Image/Image.h"
 #include "Image/ImageUtils.h"
+#include "GfxUI/GfxUI.h"
 #include "Identity/IdentityUUID.h"
 #include "Identity/Identity.h"
 #include "ManuvrLink/ManuvrLink.h"
