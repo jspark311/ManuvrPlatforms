@@ -37,13 +37,14 @@ export OUTPUT_PATH = $(BUILD_ROOT)/build/
 ###########################################################################
 # Source files, includes, and linker directives...
 ###########################################################################
-INCLUDES  = -I../CppPotpourri/src -I../../ -Isrc 
+INCLUDES  = -I../CppPotpourri/src -I../../ -Isrc
 
 CXX_SRCS  = src/*.cpp
 CXX_SRCS += src/uApp/*.cpp
 CXX_SRCS += ../CppPotpourri/src/*.cpp
 CXX_SRCS += ../CppPotpourri/src/Identity/*.cpp
 CXX_SRCS += ../CppPotpourri/src/cbor-cpp/*.cpp
+CXX_SRCS += ../CppPotpourri/src/GfxUI/*.cpp
 CXX_SRCS += ../CppPotpourri/src/TripleAxisPipe/*.cpp
 CXX_SRCS += ../CppPotpourri/src/Image/*.cpp
 CXX_SRCS += ../CppPotpourri/src/ManuvrLink/*.cpp

@@ -36,7 +36,7 @@ Image _main_img(1, 1, ImgBufferFormat::R8_G8_B8_ALPHA);
 Image _overlay_img(1, 1, ImgBufferFormat::R8_G8_B8_ALPHA);
 UIGfxWrapper ui_gfx(&_main_img);
 
-SensorFilter<float> test_filter_0(150, FilteringStrategy::RAW);
+SensorFilter<uint32_t> test_filter_0(150, FilteringStrategy::RAW);
 SensorFilter<float> test_filter_1(256, FilteringStrategy::RAW);
 
 GfxUIButton _button_0(0,   100, 22, 22, 0x9932CC);
@@ -56,6 +56,10 @@ GfxUISlider _slider_4(0,   225, 197, 20, 0xFFF5EE);
 GfxUISlider _slider_5(205, 125, 25, 120, 0x90F5EE, GFXUI_SLIDER_FLAG_RENDER_VALUE | GFXUI_SLIDER_FLAG_VERTICAL);
 GfxUISlider _slider_6(235, 125, 25, 120, 0xDC143C, GFXUI_SLIDER_FLAG_RENDER_VALUE | GFXUI_SLIDER_FLAG_VERTICAL);
 
+GfxUISensorFilter<uint32_t> sf_render_0(&test_filter_0, 280, 125, 150, 120, 0xA05010, GFXUI_SENFILT_FLAG_SHOW_RANGE);
+
+StopWatch redraw_timer;
+
 bool gravepact = true;
 
 uint pointer_x = 0;
@@ -71,29 +75,49 @@ uint window_h  = 0;
 struct MouseButtonDef {
   const uint button_id;
   const char* const label;
+  const GfxUIEvent gfx_event_down;
+  const GfxUIEvent gfx_event_up;
 };
 
 MouseButtonDef mouse_buttons[] = {
   { .button_id = 1,
-    .label = "Left"
+    .label = "Left",
+    .gfx_event_down = GfxUIEvent::TOUCH,
+    .gfx_event_up   = GfxUIEvent::RELEASE
   },
   { .button_id = 2,
-    .label = "Middle"
+    .label = "Middle",
+    .gfx_event_down = GfxUIEvent::DRAG,
+    .gfx_event_up   = GfxUIEvent::NONE
   },
   { .button_id = 3,
-    .label = "Right"
+    .label = "Right",
+    .gfx_event_down = GfxUIEvent::SELECT,
+    .gfx_event_up   = GfxUIEvent::NONE
   },
   { .button_id = 4,
-    .label = "ScrlUp"
+    .label = "ScrlUp",
+    .gfx_event_down = GfxUIEvent::MOVE_UP,
+    .gfx_event_up   = GfxUIEvent::NONE
   },
   { .button_id = 5,
-    .label = "ScrlDwn"
+    .label = "ScrlDwn",
+    .gfx_event_down = GfxUIEvent::MOVE_DOWN,
+    .gfx_event_up   = GfxUIEvent::NONE
+  },
+  { .button_id = 6,
+    .label = "TiltLeft",
+    .gfx_event_down = GfxUIEvent::MOVE_LEFT,
+    .gfx_event_up   = GfxUIEvent::NONE
+  },
+  { .button_id = 7,
+    .label = "TiltRight",
+    .gfx_event_down = GfxUIEvent::MOVE_RIGHT,
+    .gfx_event_up   = GfxUIEvent::NONE
   }
 };
 
-
-PriorityQueue<GfxUIButton*> button_queue;
-PriorityQueue<GfxUISlider*> slider_queue;
+PriorityQueue<GfxUIElement*> element_queue;
 
 
 
@@ -105,63 +129,22 @@ void proc_mouse_button(uint btn_id, uint x, uint y, bool pressed) {
   const uint SEARCH_SIZE_DEF = sizeof(mouse_buttons) / sizeof(MouseButtonDef);
   for (uint i = 0; i < SEARCH_SIZE_DEF; i++) {
     if (mouse_buttons[i].button_id == btn_id) {
-      switch (mouse_buttons[i].button_id) {
-        case 1:
-        case 2:
-        case 3:
-          {
-            const uint SEARCH_SIZE_QUEUE = button_queue.size();
-            for (uint n = 0; n < SEARCH_SIZE_QUEUE; n++) {
-              GfxUIButton* ui_btn = button_queue.get(n);
-              if (ui_btn->includesPoint(x, y)) {
-                ui_btn->pressed(pressed);
-                ui_btn->render(&ui_gfx);
-                return;
-              }
-            }
-          }
-          {
-            const uint SEARCH_SIZE_QUEUE = slider_queue.size();
-            for (uint n = 0; n < SEARCH_SIZE_QUEUE; n++) {
-              GfxUISlider* ui_element = slider_queue.get(n);
-              if (pressed) {
-                if (ui_element->notify(GfxUIEvent::TOUCH, x, y)) {
-                  ui_element->render(&ui_gfx);
-                  return;
-                }
-              }
-              else return;
-            }
-          }
+      const uint SEARCH_SIZE_QUEUE = element_queue.size();
+      bool local_ret = false;
+      for (uint n = 0; n < SEARCH_SIZE_QUEUE; n++) {
+        GfxUIElement* ui_obj = element_queue.get(n);
+        const GfxUIEvent event = pressed ? mouse_buttons[i].gfx_event_down : mouse_buttons[i].gfx_event_up;
+        if (GfxUIEvent::NONE != event) {
+          local_ret = ui_obj->notify(event, x, y);
+        }
+        if (local_ret) {
           break;
-        case 4:
-        case 5:
-          if (pressed) {
-            // We ignore all release events for the scrollwheel.
-            const uint SEARCH_SIZE_QUEUE = slider_queue.size();
-            for (uint n = 0; n < SEARCH_SIZE_QUEUE; n++) {
-              GfxUISlider* ui_element = slider_queue.get(n);
-              if (ui_element->includesPoint(x, y)) {
-                if (mouse_buttons[i].button_id == 4) {
-                  ui_element->value(strict_min(1.0, (ui_element->value() + 0.01)));
-                  test_filter_0.feedFilter(ui_element->value());
-                }
-                else {
-                  ui_element->value(strict_max(0.0, (ui_element->value() - 0.01)));
-                  test_filter_0.feedFilter(ui_element->value());
-                }
-                ui_element->render(&ui_gfx);
-                return;
-              }
-            }
-          }
-          else {
-            return;
-          }
-          break;
+        }
       }
-      c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "%s %s: (%d, %d) (no target)", mouse_buttons[i].label, (pressed ? "click" : "release"), x, y);
-      return;
+      if (!local_ret) {
+        c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "%s %s: (%d, %d) (no target)", mouse_buttons[i].label, (pressed ? "click" : "release"), x, y);
+        return;
+      }
     }
   }
   c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Unhandled %s %d: (%d, %d)", (pressed ? "click" : "release"), btn_id, x, y);
@@ -194,28 +177,12 @@ void render_all_elements() {
   _main_img.writeString(&txt_render);
   txt_render.clear();
 
-  _button_0.render(&ui_gfx);
-  _button_1.render(&ui_gfx);
-  _button_2.render(&ui_gfx);
-  _button_3.render(&ui_gfx);
-  _button_4.render(&ui_gfx);
-  _button_5.render(&ui_gfx);
-  _button_6.render(&ui_gfx);
-  _button_7.render(&ui_gfx);
-
-  _slider_0.render(&ui_gfx);
-  _slider_1.render(&ui_gfx);
-  _slider_2.render(&ui_gfx);
-  _slider_3.render(&ui_gfx);
-  _slider_4.render(&ui_gfx);
-  _slider_5.render(&ui_gfx);
-  _slider_6.render(&ui_gfx);
-
-  ui_gfx.drawGraph(
-    280, 125, test_filter_0.windowSize(), 120, 0xA05010,
-    true, true, true,
-    &test_filter_0
-  );
+  const uint SEARCH_SIZE_QUEUE = element_queue.size();
+  bool local_ret = false;
+  for (uint n = 0; n < SEARCH_SIZE_QUEUE; n++) {
+    GfxUIElement* ui_obj = element_queue.get(n);
+    ui_obj->render(&ui_gfx, true);
+  }
 }
 
 
@@ -245,23 +212,25 @@ void* gui_thread_handler(void*) {
     test_filter_0.init();
     test_filter_1.init();
 
-    button_queue.insert(&_button_0);
-    button_queue.insert(&_button_1);
-    button_queue.insert(&_button_2);
-    button_queue.insert(&_button_3);
-    button_queue.insert(&_button_4);
-    button_queue.insert(&_button_5);
-    button_queue.insert(&_button_6);
-    button_queue.insert(&_button_7);
+    element_queue.insert(&_button_0);
+    element_queue.insert(&_button_1);
+    element_queue.insert(&_button_2);
+    element_queue.insert(&_button_3);
+    element_queue.insert(&_button_4);
+    element_queue.insert(&_button_5);
+    element_queue.insert(&_button_6);
+    element_queue.insert(&_button_7);
 
-    slider_queue.insert(&_slider_0);
-    slider_queue.insert(&_slider_1);
-    slider_queue.insert(&_slider_2);
-    slider_queue.insert(&_slider_3);
-    slider_queue.insert(&_slider_4);
-    slider_queue.insert(&_slider_5);
-    slider_queue.insert(&_slider_6);
+    element_queue.insert(&_slider_0);
+    element_queue.insert(&_slider_1);
+    element_queue.insert(&_slider_2);
+    element_queue.insert(&_slider_3);
+    element_queue.insert(&_slider_4);
+    element_queue.insert(&_slider_5);
+    element_queue.insert(&_slider_6);
+    element_queue.insert(&sf_render_0);
 
+    redraw_timer.reset();
     _slider_0.value(0.5);
 
     GC gc = DefaultGC(dpy, screen_num);
@@ -352,22 +321,7 @@ void* gui_thread_handler(void*) {
 
       if (window_ready & refresh_period.expired()) {
         refresh_period.reset();
-        if (test_filter_0.dirty()) {
-          ui_gfx.drawGraph(
-            280, 125, test_filter_0.windowSize(), 120, 0xA05010,
-            true, true, true,
-            &test_filter_0
-          );
-        }
-        //if (test_filter_1.dirty()) {
-        //  test_filter_1.min()
-        //  ui_gfx.drawHeatMap(
-        //    0, 260, 128, 128,
-        //    uint32_t flags,
-        //    float* range_min, float* range_max,
-        //    SensorFilter<float>* filt
-        //  );
-        //}
+        redraw_timer.markStart();
         int garbage = 0;
         int temp_ptr_x = 0;
         int temp_ptr_y = 0;
@@ -379,6 +333,14 @@ void* gui_thread_handler(void*) {
           &temp_ptr_x, &temp_ptr_y,
           &mask_ret
         );
+
+        // Render the UI elements...
+        const uint SEARCH_SIZE_QUEUE = element_queue.size();
+        bool local_ret = false;
+        for (uint n = 0; n < SEARCH_SIZE_QUEUE; n++) {
+          GfxUIElement* ui_obj = element_queue.get(n);
+          ui_obj->render(&ui_gfx, true);
+        }
 
         if (_overlay_img.setBufferByCopy(_main_img.buffer(), _main_img.format())) {
           const bool  POINTER_IN_WINDOW = (0 <= temp_ptr_x) && (0 <= temp_ptr_y) && (window_w > (uint) temp_ptr_x) && (window_h > (uint) temp_ptr_y);
@@ -406,6 +368,8 @@ void* gui_thread_handler(void*) {
           }
           XPutImage(dpy, win, DefaultGC(dpy, DefaultScreen(dpy)), ximage, 0, 0, 0, 0, _overlay_img.x(), _overlay_img.y());
         }
+        redraw_timer.markStop();
+        test_filter_0.feedFilter(redraw_timer.lastTime());
       }
 
       // If either this thread, or the main thread decided we should terminate,
