@@ -21,8 +21,10 @@
 
 #include "RHoM.h"
 
-#define INSET_SIZE   200
-
+#define INSET_SIZE            200
+#define CONSOLE_INPUT_HEIGHT  100
+#define TEST_FILTER_DEPTH     310
+#define ELEMENT_MARGIN          5
 
 extern unsigned long gui_thread_id;   // TODO: (rolled up newspaper) Bad...
 extern bool continue_running;         // TODO: (rolled up newspaper) Bad...
@@ -36,27 +38,107 @@ Image _main_img(1, 1, ImgBufferFormat::R8_G8_B8_ALPHA);
 Image _overlay_img(1, 1, ImgBufferFormat::R8_G8_B8_ALPHA);
 UIGfxWrapper ui_gfx(&_main_img);
 
-SensorFilter<uint32_t> test_filter_0(150, FilteringStrategy::RAW);
-SensorFilter<float> test_filter_1(256, FilteringStrategy::RAW);
+SensorFilter<uint32_t> test_filter_0(TEST_FILTER_DEPTH, FilteringStrategy::RAW);
+SensorFilter<float> test_filter_1(TEST_FILTER_DEPTH, FilteringStrategy::RAW);
+SensorFilter<float> test_filter_stdev(TEST_FILTER_DEPTH, FilteringStrategy::RAW);
 
-GfxUIButton _button_0(0,   100, 22, 22, 0x9932CC);
-GfxUIButton _button_1(25,  100, 22, 22, 0xFF8C00, GFXUI_BUTTON_FLAG_MOMENTARY);
-GfxUIButton _button_2(50,  100, 22, 22, 0x9932CC);
-GfxUIButton _button_3(75,  100, 22, 22, 0x9932CC, GFXUI_BUTTON_FLAG_MOMENTARY);
-GfxUIButton _button_4(100, 100, 22, 22, 0xE9967A, GFXUI_BUTTON_FLAG_MOMENTARY);
-GfxUIButton _button_5(125, 100, 22, 22, 0x9932CC);
-GfxUIButton _button_6(150, 100, 22, 22, 0x9932CC, GFXUI_BUTTON_FLAG_MOMENTARY);
-GfxUIButton _button_7(175, 100, 22, 22, 0x9932CC);
 
-GfxUISlider _slider_0(0,   125, 197, 20, 0x20B2AA, GFXUI_SLIDER_FLAG_RENDER_VALUE);
-GfxUISlider _slider_1(0,   150, 197, 20, 0xFFA07A, GFXUI_SLIDER_FLAG_RENDER_VALUE);
-GfxUISlider _slider_2(0,   175, 197, 20, 0x0000CD, GFXUI_SLIDER_FLAG_RENDER_VALUE);
-GfxUISlider _slider_3(0,   200, 197, 20, 0x6B8E23, GFXUI_SLIDER_FLAG_RENDER_VALUE);
-GfxUISlider _slider_4(0,   225, 197, 20, 0xFFF5EE);
-GfxUISlider _slider_5(205, 125, 25, 120, 0x90F5EE, GFXUI_SLIDER_FLAG_RENDER_VALUE | GFXUI_SLIDER_FLAG_VERTICAL);
-GfxUISlider _slider_6(235, 125, 25, 120, 0xDC143C, GFXUI_SLIDER_FLAG_RENDER_VALUE | GFXUI_SLIDER_FLAG_VERTICAL);
+// Graph the screen re-draw period.
+GfxUISensorFilter<uint32_t> sf_render_0(
+  &test_filter_0,
+  0, 50,
+  TEST_FILTER_DEPTH, 170,
+  0xC09020, (GFXUI_SENFILT_FLAG_SHOW_RANGE | GFXUI_SENFILT_FLAG_SHOW_VALUE)
+);
+// Graph the standard deviation of the screen re-draw period.
+GfxUISensorFilter<float> sf_render_1(
+  &test_filter_stdev,
+  sf_render_0.elementPosX(),
+  sf_render_0.elementPosY() + sf_render_0.elementHeight() + 1,
+  TEST_FILTER_DEPTH, 60,
+  0xC0B020, (GFXUI_SENFILT_FLAG_SHOW_RANGE | GFXUI_SENFILT_FLAG_SHOW_VALUE)
+);
+// Create a text window, into which we will write running filter stats.
+GfxUITextArea _filter_txt_0(
+  sf_render_1.elementPosX(),
+  sf_render_1.elementPosY() + sf_render_1.elementHeight() + 2,
+  sf_render_1.elementWidth(),
+  40, 0xC09020
+);
 
-GfxUISensorFilter<uint32_t> sf_render_0(&test_filter_0, 280, 125, 150, 120, 0xA05010, GFXUI_SENFILT_FLAG_SHOW_RANGE);
+GfxUIButton _button_0(
+  sf_render_0.elementPosX() + sf_render_0.elementWidth() + ELEMENT_MARGIN,
+  sf_render_0.elementPosY(),
+  22, 22, 0x9932CC
+);
+GfxUIButton _button_1(
+  _button_0.elementPosX() + _button_0.elementWidth() + ELEMENT_MARGIN,
+  _button_0.elementPosY(),
+  22, 22, 0x9932CC,
+  GFXUI_BUTTON_FLAG_MOMENTARY
+);
+
+GfxUIButton _button_2(
+  _button_1.elementPosX() + _button_1.elementWidth() + ELEMENT_MARGIN,
+  _button_1.elementPosY(),
+  22, 22, 0xFF8C00
+);
+
+GfxUIButton _button_3(
+  _button_2.elementPosX() + _button_2.elementWidth() + ELEMENT_MARGIN,
+  _button_2.elementPosY(),
+  22, 22, 0xFF8C00,
+  GFXUI_BUTTON_FLAG_MOMENTARY
+);
+
+GfxUISlider _slider_0(
+  _button_0.elementPosX(),
+  _button_0.elementPosY() + _button_0.elementHeight() + ELEMENT_MARGIN,
+  (22*4) + (ELEMENT_MARGIN * 3),  20,
+  0x20B2AA, GFXUI_SLIDER_FLAG_RENDER_VALUE
+);
+
+GfxUISlider _slider_1(
+  _slider_0.elementPosX(),
+  _slider_0.elementPosY() + _slider_0.elementHeight() + ELEMENT_MARGIN,
+  (22*4) + (ELEMENT_MARGIN * 3),  20,
+  0xFFA07A, GFXUI_SLIDER_FLAG_RENDER_VALUE
+);
+
+GfxUISlider _slider_2(
+  _slider_1.elementPosX(),
+  _slider_1.elementPosY() + _slider_1.elementHeight() + ELEMENT_MARGIN,
+  (22*4) + (ELEMENT_MARGIN * 3),  20,
+  0xFFA07A, GFXUI_SLIDER_FLAG_RENDER_VALUE
+);
+
+GfxUISlider _slider_3(
+  _button_3.elementPosX() + _button_3.elementWidth() + ELEMENT_MARGIN,
+  _button_3.elementPosY(),
+  24,  100, 0x90F5EE, GFXUI_SLIDER_FLAG_RENDER_VALUE | GFXUI_SLIDER_FLAG_VERTICAL
+);
+
+GfxUISlider _slider_4(
+  _slider_3.elementPosX() + _slider_3.elementWidth() + ELEMENT_MARGIN,
+  _slider_3.elementPosY(),
+  24,  100, 0xDC143C, GFXUI_SLIDER_FLAG_RENDER_VALUE | GFXUI_SLIDER_FLAG_VERTICAL
+);
+
+
+
+
+
+
+// Create a simple logging window, with a full frame.
+GfxUITextArea _txt_area_0(
+  _filter_txt_0.elementPosX(),
+  _filter_txt_0.elementPosY() + _filter_txt_0.elementHeight() + 2,
+  400, 145, 0x00FF00
+);
+
+// Firmware UIs are small. If the host is showing the UI on a 4K monitor, it
+//   will cause "the squints". But we don't know the positions yet.
+GfxUIMagnifier ui_magnifier(0, 0, INSET_SIZE, INSET_SIZE, 0xFFFFFF);
 
 StopWatch redraw_timer;
 
@@ -122,18 +204,18 @@ PriorityQueue<GfxUIElement*> element_queue;
 
 
 /*******************************************************************************
-* Mouse/touch handlers
+* Mouse/touch support
 *******************************************************************************/
 
 void proc_mouse_button(uint btn_id, uint x, uint y, bool pressed) {
   const uint SEARCH_SIZE_DEF = sizeof(mouse_buttons) / sizeof(MouseButtonDef);
   for (uint i = 0; i < SEARCH_SIZE_DEF; i++) {
     if (mouse_buttons[i].button_id == btn_id) {
+      const GfxUIEvent event = pressed ? mouse_buttons[i].gfx_event_down : mouse_buttons[i].gfx_event_up;
       const uint SEARCH_SIZE_QUEUE = element_queue.size();
       bool local_ret = false;
       for (uint n = 0; n < SEARCH_SIZE_QUEUE; n++) {
         GfxUIElement* ui_obj = element_queue.get(n);
-        const GfxUIEvent event = pressed ? mouse_buttons[i].gfx_event_down : mouse_buttons[i].gfx_event_up;
         if (GfxUIEvent::NONE != event) {
           local_ret = ui_obj->notify(event, x, y);
         }
@@ -141,7 +223,15 @@ void proc_mouse_button(uint btn_id, uint x, uint y, bool pressed) {
           break;
         }
       }
+
       if (!local_ret) {
+        switch (btn_id) {
+          case 4:
+          case 5:
+            // Unhandled scroll events adjust the magnifier scale.
+            ui_magnifier.notify(event, ui_magnifier.elementPosX(), ui_magnifier.elementPosY());
+            break;
+        }
         c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "%s %s: (%d, %d) (no target)", mouse_buttons[i].label, (pressed ? "click" : "release"), x, y);
         return;
       }
@@ -151,10 +241,27 @@ void proc_mouse_button(uint btn_id, uint x, uint y, bool pressed) {
 }
 
 
+int pollPointerLocation() {
+  return 0;
+}
+
+/*******************************************************************************
+*
+*******************************************************************************/
+
 /*
 * Called to unconditionally show the elements in the GUI.
 */
-void render_all_elements() {
+void resize_and_render_all_elements() {
+  const uint  CONSOLE_INPUT_X_POS = 0;
+  const uint  CONSOLE_INPUT_Y_POS = (window_h - CONSOLE_INPUT_HEIGHT) - 1;
+  _txt_area_0.reposition(CONSOLE_INPUT_X_POS, CONSOLE_INPUT_Y_POS);
+  _txt_area_0.resize(window_w, CONSOLE_INPUT_HEIGHT);
+
+  const uint  INSET_X_POS = (window_w - INSET_SIZE) - 1;
+  const uint  INSET_Y_POS = (window_h - INSET_SIZE) - 1;
+  ui_magnifier.reposition(INSET_X_POS, INSET_Y_POS);
+
   const char* HEADER_STR_0 = "Right Hand of Manuvr";
   const char* HEADER_STR_1 = "Build date " __DATE__ " " __TIME__;
   _main_img.setCursor(2, 0);
@@ -211,24 +318,26 @@ void* gui_thread_handler(void*) {
     _overlay_img.reallocate();
     test_filter_0.init();
     test_filter_1.init();
+    test_filter_stdev.init();
 
     element_queue.insert(&_button_0);
     element_queue.insert(&_button_1);
     element_queue.insert(&_button_2);
     element_queue.insert(&_button_3);
-    element_queue.insert(&_button_4);
-    element_queue.insert(&_button_5);
-    element_queue.insert(&_button_6);
-    element_queue.insert(&_button_7);
 
     element_queue.insert(&_slider_0);
     element_queue.insert(&_slider_1);
     element_queue.insert(&_slider_2);
     element_queue.insert(&_slider_3);
     element_queue.insert(&_slider_4);
-    element_queue.insert(&_slider_5);
-    element_queue.insert(&_slider_6);
     element_queue.insert(&sf_render_0);
+    element_queue.insert(&sf_render_1);
+    element_queue.insert(&_filter_txt_0);
+    element_queue.insert(&_txt_area_0);
+    element_queue.insert(&ui_magnifier);
+
+    _txt_area_0.enableFrames();
+    _filter_txt_0.enableFrames(GFXUI_FLAG_DRAW_FRAME_U);
 
     redraw_timer.reset();
     _slider_0.value(0.5);
@@ -267,8 +376,8 @@ void* gui_thread_handler(void*) {
                   if (_main_img.setSize(window_w, window_h)) {
                     if (_overlay_img.setSize(window_w, window_h)) {
                       c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "uApp frame buffer resized to %u x %u x %u", _overlay_img.x(), _overlay_img.y(), _overlay_img.bitsPerPixel());
+                      resize_and_render_all_elements();
                       ximage = XCreateImage(dpy, visual, DefaultDepth(dpy, screen_num), ZPixmap, 0, (char*)_overlay_img.buffer(), _overlay_img.x(), _overlay_img.y(), 32, 0);
-                      render_all_elements();
                     }
                     else {
                       c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Overlay frame buffer resize failed.");
@@ -297,7 +406,9 @@ void* gui_thread_handler(void*) {
                 keep_polling = false;
               }
               else {
-                c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Key press %s: ", buf);
+                StringBuilder _tmp_sbldr(buf);
+                _txt_area_0.provideBuffer(&_tmp_sbldr);
+                c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Key press: %s", buf);
               }
             }
             break;
@@ -337,6 +448,17 @@ void* gui_thread_handler(void*) {
         // Render the UI elements...
         const uint SEARCH_SIZE_QUEUE = element_queue.size();
         bool local_ret = false;
+        // TODO: Should be in the relvant class.
+        if (test_filter_0.dirty()) {
+          StringBuilder _tmp_sbldr;
+          _tmp_sbldr.concatf("RMS:      %.2f\n", (double) test_filter_0.rms());
+          _tmp_sbldr.concatf("STDEV:    %.2f\n", (double) test_filter_0.stdev());
+          _tmp_sbldr.concatf("SNR:      %.2f\n", (double) test_filter_0.snr());
+          _tmp_sbldr.concatf("Min/Max:  %.2f / %.2f\n", (double) test_filter_0.minValue(), (double) test_filter_0.maxValue());
+          _filter_txt_0.clear();
+          _filter_txt_0.provideBuffer(&_tmp_sbldr);
+        }
+
         for (uint n = 0; n < SEARCH_SIZE_QUEUE; n++) {
           GfxUIElement* ui_obj = element_queue.get(n);
           ui_obj->render(&ui_gfx, true);
@@ -351,25 +473,27 @@ void* gui_thread_handler(void*) {
 
             const uint  INSET_X_POS = (window_w - INSET_SIZE) - 1;
             const uint  INSET_Y_POS = (window_h - INSET_SIZE) - 1;
-            const float INSET_SCALE = 0.4 + (_slider_0.value() * 5.0);
+            const float INSET_SCALE = range_bind((ui_magnifier.scale() * 10.0), 1.0f, 50.0f);
             const int   INSET_FEED_SIZE   = (INSET_SIZE / INSET_SCALE);
-            const int   INSET_FEED_OFFSET = (INSET_FEED_SIZE/2);
-            const uint  INSET_FEED_X_POS  = (uint) strict_max(INSET_FEED_OFFSET, strict_min((int) (window_w - INSET_FEED_OFFSET), (int) pointer_x)) - INSET_FEED_OFFSET;
-            const uint  INSET_FEED_Y_POS  = (uint) strict_max(INSET_FEED_OFFSET, strict_min((int) (window_h - INSET_FEED_OFFSET), (int) pointer_y)) - INSET_FEED_OFFSET;
+            const int   INSET_FEED_OFFSET = (INSET_FEED_SIZE/2) + 1;
+            const uint  INSET_FEED_X_POS  = (uint) range_bind((int) pointer_x, INSET_FEED_OFFSET, (int) (window_w - INSET_FEED_OFFSET)) - INSET_FEED_OFFSET;
+            const uint  INSET_FEED_Y_POS  = (uint) range_bind((int) pointer_y, INSET_FEED_OFFSET, (int) (window_h - INSET_FEED_OFFSET)) - INSET_FEED_OFFSET;
             //c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "(%u %u)\t(%u %u)", INSET_FEED_X_POS, INSET_FEED_Y_POS, pointer_x, pointer_y);
             ImageScaler scale_window(&_main_img, &_overlay_img, INSET_SCALE, INSET_FEED_X_POS, INSET_FEED_Y_POS, INSET_FEED_SIZE, INSET_FEED_SIZE, INSET_X_POS, INSET_Y_POS);
             scale_window.apply();
 
             //_overlay_img.fillRect(pointer_x, pointer_y, 5, 5, 0xFFFFFF);
-            _overlay_img.drawRect(INSET_FEED_X_POS, INSET_FEED_Y_POS, INSET_FEED_SIZE, INSET_FEED_SIZE, 0xFFFFFF);
             _overlay_img.drawLine(INSET_FEED_X_POS, (INSET_FEED_Y_POS + INSET_FEED_SIZE), INSET_X_POS, (INSET_Y_POS + INSET_SIZE), 0xFFFFFF);
             _overlay_img.drawLine((INSET_FEED_X_POS + INSET_FEED_SIZE), INSET_FEED_Y_POS, (INSET_X_POS + INSET_SIZE), INSET_Y_POS, 0xFFFFFF);
+            _overlay_img.drawRect(INSET_FEED_X_POS, INSET_FEED_Y_POS, INSET_FEED_SIZE, INSET_FEED_SIZE, 0xFFFFFF);
             _overlay_img.drawRect(INSET_X_POS, INSET_Y_POS, INSET_SIZE, INSET_SIZE, 0xFFFFFF);
           }
           XPutImage(dpy, win, DefaultGC(dpy, DefaultScreen(dpy)), ximage, 0, 0, 0, 0, _overlay_img.x(), _overlay_img.y());
         }
         redraw_timer.markStop();
-        test_filter_0.feedFilter(redraw_timer.lastTime());
+        if (1 == test_filter_0.feedFilter(redraw_timer.lastTime())) {
+          test_filter_stdev.feedFilter(test_filter_0.stdev());
+        }
       }
 
       // If either this thread, or the main thread decided we should terminate,
