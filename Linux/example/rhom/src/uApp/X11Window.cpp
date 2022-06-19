@@ -22,7 +22,8 @@
 #include "RHoM.h"
 
 #define INSET_SIZE            200
-#define CONSOLE_INPUT_HEIGHT  100
+#define CONSOLE_INPUT_HEIGHT  200
+#define IDENT_SELF_HEIGHT      80
 #define TEST_FILTER_DEPTH     310
 #define ELEMENT_MARGIN          5
 
@@ -30,6 +31,9 @@ extern unsigned long gui_thread_id;   // TODO: (rolled up newspaper) Bad...
 extern bool continue_running;         // TODO: (rolled up newspaper) Bad...
 
 extern SensorFilter<uint32_t> _filter;
+extern ManuvrLink* m_link;
+extern ParsingConsole console;
+extern IdentityUUID ident_uuid;
 
 Display* dpy = nullptr;
 XImage* ximage = nullptr;
@@ -66,7 +70,8 @@ GfxUITextArea _filter_txt_0(
   40, 0xC09020
 );
 
-GfxUIButton _button_0(
+GfxUITextButton _button_0(
+  "ST",
   sf_render_0.elementPosX() + sf_render_0.elementWidth() + ELEMENT_MARGIN,
   sf_render_0.elementPosY(),
   22, 22, 0x9932CC
@@ -78,7 +83,8 @@ GfxUIButton _button_1(
   GFXUI_BUTTON_FLAG_MOMENTARY
 );
 
-GfxUIButton _button_2(
+GfxUITextButton _button_2(
+  "Rm",
   _button_1.elementPosX() + _button_1.elementWidth() + ELEMENT_MARGIN,
   _button_1.elementPosY(),
   22, 22, 0xFF8C00
@@ -124,16 +130,20 @@ GfxUISlider _slider_4(
   24,  100, 0xDC143C, GFXUI_SLIDER_FLAG_RENDER_VALUE | GFXUI_SLIDER_FLAG_VERTICAL
 );
 
-
-
-
-
-
-// Create a simple logging window, with a full frame.
+// Create a simple console window, with a full frame.
 GfxUITextArea _txt_area_0(
   _filter_txt_0.elementPosX(),
   _filter_txt_0.elementPosY() + _filter_txt_0.elementHeight() + 2,
-  400, 145, 0x00FF00
+  400, 145, 0x00FF00,
+  (GFXUI_FLAG_DRAW_FRAME_U)
+);
+
+GfxUIIdentity self_ident_pane(
+  &ident_uuid,
+  0, 0,
+  150, IDENT_SELF_HEIGHT,
+  0x48d1cc,
+  (GFXUI_FLAG_DRAW_FRAME_MASK | GFXUI_FLAG_DRAW_FRAME_MASK)
 );
 
 // Firmware UIs are small. If the host is showing the UI on a 4K monitor, it
@@ -143,6 +153,7 @@ GfxUIMagnifier ui_magnifier(0, 0, INSET_SIZE, INSET_SIZE, 0xFFFFFF);
 StopWatch redraw_timer;
 
 bool gravepact = true;
+bool mlink_onscreen = false;
 
 uint pointer_x = 0;
 uint pointer_y = 0;
@@ -258,6 +269,10 @@ void resize_and_render_all_elements() {
   _txt_area_0.reposition(CONSOLE_INPUT_X_POS, CONSOLE_INPUT_Y_POS);
   _txt_area_0.resize(window_w, CONSOLE_INPUT_HEIGHT);
 
+  const uint  IDENT_PANE_X_POS = (window_w - self_ident_pane.elementWidth()) - 1;
+  const uint  IDENT_PANE_Y_POS = 0;
+  self_ident_pane.reposition(IDENT_PANE_X_POS, IDENT_PANE_Y_POS);
+
   const uint  INSET_X_POS = (window_w - INSET_SIZE) - 1;
   const uint  INSET_Y_POS = (window_h - INSET_SIZE) - 1;
   ui_magnifier.reposition(INSET_X_POS, INSET_Y_POS);
@@ -334,9 +349,13 @@ void* gui_thread_handler(void*) {
     element_queue.insert(&sf_render_1);
     element_queue.insert(&_filter_txt_0);
     element_queue.insert(&_txt_area_0);
+    element_queue.insert(&self_ident_pane);
     element_queue.insert(&ui_magnifier);
 
-    _txt_area_0.enableFrames();
+    console.setOutputTarget(&_txt_area_0);
+    console.hasColor(false);
+    console.localEcho(true);
+
     _filter_txt_0.enableFrames(GFXUI_FLAG_DRAW_FRAME_U);
 
     redraw_timer.reset();
@@ -401,14 +420,22 @@ void* gui_thread_handler(void*) {
             {
               char buf[128] = {0, };
               KeySym keysym;
-              XLookupString(&e.xkey, buf, sizeof buf, &keysym, nullptr);
+              int ret_local = XLookupString(&e.xkey, buf, sizeof buf, &keysym, nullptr);
               if (keysym == XK_Escape) {
                 keep_polling = false;
               }
+              else if (keysym == XK_Return) {
+                StringBuilder _tmp_sbldr;
+                _tmp_sbldr.concat('\n');
+                console.provideBuffer(&_tmp_sbldr);
+              }
+              else if (1 == ret_local) {
+                StringBuilder _tmp_sbldr;
+                _tmp_sbldr.concat(buf[0]);
+                console.provideBuffer(&_tmp_sbldr);
+              }
               else {
-                StringBuilder _tmp_sbldr(buf);
-                _txt_area_0.provideBuffer(&_tmp_sbldr);
-                c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Key press: %s", buf);
+                c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Key press: %s (%s)", buf, XKeysymToString(keysym));
               }
             }
             break;
@@ -444,6 +471,21 @@ void* gui_thread_handler(void*) {
           &temp_ptr_x, &temp_ptr_y,
           &mask_ret
         );
+
+        if (!mlink_onscreen && (nullptr != m_link)) {
+          GfxUIMLink* mlink_ui_obj = new GfxUIMLink(
+            m_link,
+            _slider_2.elementPosX(),
+            _slider_2.elementPosY() + _slider_2.elementHeight() + ELEMENT_MARGIN,
+            400,
+            250,
+            (GFXUI_FLAG_DRAW_FRAME_MASK)
+          );
+          mlink_ui_obj->shouldReap(true);
+          element_queue.insert(mlink_ui_obj);
+          mlink_onscreen = true;
+        }
+
 
         // Render the UI elements...
         const uint SEARCH_SIZE_QUEUE = element_queue.size();

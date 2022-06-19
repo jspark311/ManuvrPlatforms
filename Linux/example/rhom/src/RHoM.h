@@ -23,8 +23,9 @@
 #include "GfxUI/GfxUI.h"
 #include "Identity/IdentityUUID.h"
 #include "Identity/Identity.h"
+#include "Identity/IdentityCrypto.h"
 #include "ManuvrLink/ManuvrLink.h"
-#include <CryptoBurrito/CryptoBurrito.h>
+#include "CryptoBurrito/CryptoBurrito.h"
 #include <Linux.h>
 
 

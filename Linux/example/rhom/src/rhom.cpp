@@ -49,6 +49,8 @@ extern Image _main_img;
 * TODO: Pending mitosis into a header file....
 *******************************************************************************/
 
+IdentityUUID ident_uuid("BIN_ID", "29c6e2b9-9e68-4e52-9af0-03e9ca10e217");
+
 
 /*******************************************************************************
 * Globals
@@ -331,18 +333,22 @@ int main(int argc, const char *argv[]) {
 
   console.setTXTerminator(LineTerm::LF);
   console.setRXTerminator(LineTerm::LF);
-  console.localEcho(false);
-
-  // Mutually connect the console class to STDIO.
-  console_adapter.readCallback(&console);
-  console.setOutputTarget(&console_adapter);
-
-  // We want to have a nice prompt string...
-  StringBuilder prompt_string;
-  prompt_string.concatf("%c[36m%s> %c[39m", 0x1B, argv[0], 0x1B);
+  StringBuilder prompt_string;   // We want to have a nice prompt string...
+  if (0 == gui_thread_id) {
+    // The GUI thread handles the console, if it was enabled. If there is no
+    //   GUI, mutually connect the console class to STDIO.
+    console.localEcho(false);
+    console_adapter.readCallback(&console);
+    console.setOutputTarget(&console_adapter);
+    console.hasColor(true);
+    prompt_string.concatf("%c[36m%s> %c[39m", 0x1B, argv[0], 0x1B);
+  }
+  else {
+    prompt_string.concatf("%s> ", argv[0]);
+  }
   console.setPromptString((const char*) prompt_string.string());
   console.emitPrompt(true);
-  console.hasColor(true);
+
 
   console.defineCommand("console",     '\0', ParsingConsole::tcodes_str_3, "Console conf.", "[echo|prompt|force|rxterm|txterm]", 0, callback_console_tools);
   if (0 != gui_thread_id) {
