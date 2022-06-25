@@ -29,11 +29,7 @@ Implemented as a CBOR object within a single file. This feature therefore
 
 #include <Storage.h>
 
-#ifndef MANUVR_CBOR
-  #error The LinuxStorage class requires MANUVR_CBOR be enabled.
-#endif
-
-class LinuxStorage : public EventReceiver, public Storage {
+class LinuxFileStorage : public Storage {
   public:
     LinuxStorage(Argument*);
     ~LinuxStorage();

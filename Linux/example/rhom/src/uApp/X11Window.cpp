@@ -146,6 +146,7 @@ GfxUIIdentity self_ident_pane(
   (GFXUI_FLAG_DRAW_FRAME_MASK | GFXUI_FLAG_DRAW_FRAME_MASK)
 );
 
+
 // Firmware UIs are small. If the host is showing the UI on a 4K monitor, it
 //   will cause "the squints". But we don't know the positions yet.
 GfxUIMagnifier ui_magnifier(0, 0, INSET_SIZE, INSET_SIZE, 0xFFFFFF);
@@ -320,11 +321,15 @@ void* gui_thread_handler(void*) {
   if (keep_polling) {
     PeriodicTimeout refresh_period(20);
     int screen_num = DefaultScreen(dpy);
+    bool fullscreen = false;
     //Colormap color_map = XDefaultColormap(dpy, screen_num);
+
+    int desired_win_w = fullscreen ? DisplayWidth(dpy, screen_num)  : 800;
+    int desired_win_h = fullscreen ? DisplayHeight(dpy, screen_num) : 600;
     Window win = XCreateSimpleWindow(
       dpy, RootWindow(dpy, screen_num),
       10, 10,
-      800, 600,
+      desired_win_w, desired_win_h,
       1,
       0x9932CC,  // TODO: Use colormap.
       0x000000   // TODO: Use colormap.
