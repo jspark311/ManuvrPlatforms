@@ -38,6 +38,7 @@
 #include <Linux.h>
 
 
+
 #define U_INPUT_BUFF_SIZE      512    // The maximum size of user input.
 
 extern void* gui_thread_handler(void*);
@@ -92,6 +93,7 @@ SensorFilter<uint32_t> _filter(128, FilteringStrategy::RAW);
 
 ParsingConsole console(U_INPUT_BUFF_SIZE);
 LinuxStdIO console_adapter;
+LinuxSockPipe socket_adapter;
 
 
 /*******************************************************************************
@@ -269,6 +271,11 @@ int callback_link_tools(StringBuilder* text_return, StringBuilder* args) {
 }
 
 
+int callback_socket_tools(StringBuilder* text_return, StringBuilder* args) {
+  return socket_adapter.console_handler(text_return, args);
+}
+
+
 
 /*******************************************************************************
 * The main function.                                                           *
@@ -327,7 +334,6 @@ int main(int argc, const char *argv[]) {
     }
     else {
       printf("Unhandled argument: %s\n", argv[i]);
-      //platform.firmware_shutdown(0);     // Clean up the platform.
     }
   }
 
@@ -357,6 +363,7 @@ int main(int argc, const char *argv[]) {
   console.defineCommand("crypto",     'C',  ParsingConsole::tcodes_str_4, "Cryptographic tools.", "", 0, callback_crypt_tools);
   console.defineCommand("link",        'l', ParsingConsole::tcodes_str_4, "Linked device tools.", "", 0, callback_link_tools);
   console.defineCommand("uart",        'u', ParsingConsole::tcodes_str_4, "UART tools.", "", 0, callback_uart_tools);
+  console.defineCommand("socket",      'S', ParsingConsole::tcodes_str_4, "Socket tools.", "", 0, callback_socket_tools);
   console.defineCommand("quit",        'Q', ParsingConsole::tcodes_0, "Commit sudoku.", "", 0, callback_program_quit);
   console.defineCommand("help",        '?', ParsingConsole::tcodes_str_1, "Prints help to console.", "[<specific command>]", 0, callback_help);
   platform.configureConsole(&console);

@@ -22,6 +22,8 @@ LOCAL_FLAGS  =  -std=$(CXX_STANDARD) -nostdlib
 # Sources
 CPP_SRCS    = src/Linux.cpp
 CPP_SRCS   += src/LinuxStdIO.cpp
+CPP_SRCS   += src/LinuxSocketPipe.cpp
+CPP_SRCS   += src/LinuxUART.cpp
 #CPP_SRCS   += src/LinuxStorage.cpp
 #CPP_SRCS   += src/I2CAdapter.cpp
 #CPP_SRCS   += src/SPIAdapter.cpp

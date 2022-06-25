@@ -66,6 +66,54 @@ class LinuxStdIO : public BufferAccepter {
 
 
 /*******************************************************************************
+* Socket driver class
+*******************************************************************************/
+class LinuxSockPipe : public BufferAccepter {
+  public:
+    LinuxSockPipe(char* path);
+    LinuxSockPipe() : LinuxSockPipe(nullptr) {};
+    ~LinuxSockPipe();
+
+    /* Implementation of BufferAccepter. */
+    inline int8_t provideBuffer(StringBuilder* buf) {  _tx_buffer.concatHandoff(buf); return 1;   };
+
+    inline void readCallback(BufferAccepter* cb) {   _read_cb_obj = cb;   };
+    int8_t poll();
+    void   printDebug(StringBuilder* out);
+
+    inline void write(const char* str) {  _tx_buffer.concat((uint8_t*) str, strlen(str));  };
+    uint   read(StringBuilder* buf);
+    uint   read(uint8_t* buf, uint len);
+    uint   write(char c);
+    uint   write(uint8_t* buf, uint len);
+
+    int    listening();  // Returns the number of connections, or -1 if not listening.
+    int    connected();  // Returns the number of connections, or -1 if not connected.
+    int    connect(char* path);  // Open an existing socket.
+    int    listen(char* path);   // Establish a listening socket at the given path.
+    inline bool   flushed() {   return _tx_buffer.isEmpty();   };
+
+    /* Built-in per-instance console handler. */
+    int8_t console_handler(StringBuilder* text_return, StringBuilder* args);
+
+
+  private:
+    BufferAccepter* _read_cb_obj = nullptr;
+    uint32_t        _flags       = 0;
+    uint32_t        _last_rx_ms  = 0;
+    uint32_t        _count_tx    = 0;
+    uint32_t        _count_rx    = 0;
+    int             _sock_id     = 0;
+    char*           _sock_path   = nullptr;
+    StringBuilder   _tx_buffer;
+    StringBuilder   _rx_buffer;
+
+    int8_t _open();
+    int8_t _close();
+};
+
+
+/*******************************************************************************
 * Wrapper classes to allow taking a path as a device identifier.
 *******************************************************************************/
 class LinuxUART : public UARTAdapter {

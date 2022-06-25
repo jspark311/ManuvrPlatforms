@@ -20,6 +20,7 @@ OPTIMIZATION       = -O2
 CONFIG_MANUVR_CRYPTO = mbedtls
 MANUVR_CONF  = -DCONFIG_MANUVR_CBOR
 MANUVR_CONF += -DCONFIG_MANUVR_M2M_SUPPORT
+MANUVR_CONF += -DCONFIG_C3P_SOCKET_WRAPPER
 
 
 ###########################################################################
@@ -53,6 +54,8 @@ CXX_SRCS += ../CppPotpourri/src/CryptoBurrito/Providers/*.cpp
 CXX_SRCS += ../../src/Linux.cpp
 CXX_SRCS += ../../src/LinuxStdIO.cpp
 CXX_SRCS += ../../src/LinuxUART.cpp
+CXX_SRCS += ../../src/LinuxSocketPipe.cpp
+#CXX_SRCS += ../../src/LinuxStorage.cpp
 #CXX_SRCS += ../../src/I2CAdapter.cpp
 
 # Libraries to link against.
