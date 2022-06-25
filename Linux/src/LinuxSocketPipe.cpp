@@ -18,8 +18,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-This is a pair of BufferPipes that operates over a unix socket.
-
+This is a BufferPipe that abstracts a unix socket.
 */
 
 
@@ -32,23 +31,10 @@ This is a pair of BufferPipes that operates over a unix socket.
 #include <unistd.h>
 #include <fcntl.h>
 #include <termios.h>
-#include <sys/signal.h>
 #include <fstream>
 #include <iostream>
-#include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-
-
-/*******************************************************************************
-*
-*******************************************************************************/
-
-class SocketOpts {
-  public:
-  private:
-    uint32_t _flags = 0;
-};
 
 
 /*******************************************************************************

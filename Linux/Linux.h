@@ -30,8 +30,9 @@ This file forms the catch-all for linux platforms that have no support.
 #include "CryptoBurrito/CryptoBurrito.h"
 
 #include <pthread.h>
-#include <signal.h>
+#include <sys/signal.h>
 #include <sys/time.h>
+#include <sys/socket.h>
 
 #if defined(CONFIG_MANUVR_STORAGE)
   #include "LinuxStorage.h"
