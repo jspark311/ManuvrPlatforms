@@ -29,7 +29,7 @@
 #include <Linux.h>
 
 
-#define PROGRAM_VERSION    "0.0.2"    // Program version.
+#define PROGRAM_VERSION    "0.0.3"    // Program version.
 
 
 
@@ -48,5 +48,25 @@ class CryptoLogShunt : public CryptOpCallback {
       op->printOp(&output);
       c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, &output);
       return JOB_Q_CALLBACK_NOMINAL;
+    };
+};
+
+
+// TODO: Don't code against this too much. It will probably be templated and promoted to C3P.
+class LinkSockPair {
+  public:
+    LinuxSockPipe* sock;
+    ManuvrLink* link;
+    uint32_t established;
+
+    LinkSockPair(LinuxSockPipe* s, ManuvrLink* l) :
+      sock(s),
+      link(l),
+      established(millis())
+    {};
+
+    ~LinkSockPair() {
+      delete sock;
+      delete link;
     };
 };

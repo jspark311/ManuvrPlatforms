@@ -86,8 +86,12 @@ UARTOpts uart_opts {
   .padding       = 0
 };
 
+/* Transports such as UARTs are generally 1:1 with sessions. */
 LinuxUART*  uart   = nullptr;
 ManuvrLink* m_link = nullptr;
+
+/* But some transports (socket servers) have 1:x relationships to sessions. */
+LinuxSockListener socket_listener("/tmp/c3p-test.sock");
 
 SensorFilter<uint32_t> _filter(128, FilteringStrategy::RAW);
 
@@ -96,31 +100,48 @@ LinuxStdIO console_adapter;
 LinuxSockPipe socket_adapter;
 
 
+LinkedList<LinkSockPair*> active_links;
+
+
+
+int8_t new_socket_connection_callback(LinuxSockListener* svr, LinuxSockPipe* pipe) {
+  int8_t ret = 0;   // We should reject by default.
+  c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "New socket connection.");
+  ManuvrLink* new_link = new ManuvrLink(&link_opts);
+  if (nullptr != new_link) {
+    active_links.insert(new LinkSockPair(pipe, new_link));
+    m_link = new_link;
+    ret = 1;   // Accept connection.
+  }
+  return ret;
+}
+
+
+
+
 /*******************************************************************************
 * Link callbacks
 *******************************************************************************/
 
 void link_callback_state(ManuvrLink* cb_link) {
-  StringBuilder log;
-  log.concatf("Link (0x%x) entered state %s\n", cb_link->linkTag(), ManuvrLink::sessionStateStr(cb_link->getState()));
-  printf("%s\n\n", (const char*) log.string());
+  c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Link (0x%x) entered state %s.", cb_link->linkTag(), ManuvrLink::sessionStateStr(cb_link->getState()));
 }
 
 
-void link_callback_message(uint32_t tag, ManuvrMsg* msg) {
+void link_callback_message(uint32_t session_tag, ManuvrMsg* msg) {
   StringBuilder log;
   KeyValuePair* kvps_rxd = nullptr;
-  log.concatf("link_callback_message(0x%x): \n", tag, msg->uniqueId());
+  log.concatf("link_callback_message(0x%x, 0x08%x): \n", session_tag, msg->uniqueId());
   msg->printDebug(&log);
   msg->getPayload(&kvps_rxd);
   if (kvps_rxd) {
-    //kvps_rxd->printDebug(&log);
+    kvps_rxd->printDebug(&log);
   }
   if (msg->expectsReply()) {
     int8_t ack_ret = msg->ack();
-    log.concatf("\nlink_callback_message ACK'ing %u returns %d.\n", msg->uniqueId(), ack_ret);
+    log.concatf("link_callback_message ACK'ing %u returns %d.\n", msg->uniqueId(), ack_ret);
   }
-  printf("%s\n\n", (const char*) log.string());
+  c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, &log);
 }
 
 
@@ -253,15 +274,37 @@ int callback_uart_tools(StringBuilder* text_return, StringBuilder* args) {
 }
 
 
+uint32_t ping_req_time = 0;
+uint32_t ping_nonce    = 0;
+
 int callback_link_tools(StringBuilder* text_return, StringBuilder* args) {
   int ret = -1;
   char* cmd = args->position_trimmed(0);
   // We interdict if the command is something specific to this application.
   if (0 == StringBuilder::strcasecmp(cmd, "desc")) {
-    // Send a description request message.
-    KeyValuePair a((uint32_t) millis(), "time_ms");
-    a.append((uint32_t) randomUInt32(), "rand");
+    // Send a self-description message, with a request for same.
+    KeyValuePair a("WHO", "fxn");
+    a.append(&ident_uuid,      "ident");
     int8_t ret_local = m_link->send(&a, true);
+    text_return->concatf("Description request send() returns ID %u\n", ret_local);
+    ret = 0;
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "ping")) {
+    // Send a description request message.
+    ping_req_time = (uint32_t) millis();
+    ping_nonce = randomUInt32();
+    KeyValuePair a("PING",  "fxn");
+    a.append(ping_req_time, "time_ms");
+    a.append(ping_nonce,    "rand");
+    int8_t ret_local = m_link->send(&a, true);
+    text_return->concatf("Description request send() returns ID %u\n", ret_local);
+    ret = 0;
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "screenshot")) {
+    // TODO: I am using this space to prototype ImageCaster/Catcher.
+    KeyValuePair a("IMG_CAST", "fxn");
+    a.append((uint32_t) millis(),       "time_ms");
+    int8_t ret_local = m_link->send(&a, false);
     text_return->concatf("Description request send() returns ID %u\n", ret_local);
     ret = 0;
   }
@@ -272,7 +315,20 @@ int callback_link_tools(StringBuilder* text_return, StringBuilder* args) {
 
 
 int callback_socket_tools(StringBuilder* text_return, StringBuilder* args) {
-  return socket_adapter.console_handler(text_return, args);
+  int ret = -1;
+  char* cmd = args->position_trimmed(0);
+  // We interdict if the command is something specific to this application.
+  if (0 == StringBuilder::strcasecmp(cmd, "listener")) {
+    ret = socket_listener.console_handler(text_return, args);
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "twrite")) {
+    args->drop_position(0);
+    text_return->concatf("write(%s) returned %d\n", (char*) args->string(), socket_adapter.provideBuffer(args));
+  }
+  else {
+    ret = socket_adapter.console_handler(text_return, args);
+  }
+  return ret;
 }
 
 
@@ -324,6 +380,15 @@ int main(int argc, const char *argv[]) {
         uart->init(&uart_opts);
         uart->readCallback(m_link);      // Attach the UART to ManuvrLink...
         m_link->setOutputTarget(uart);   // ...and ManuvrLink to UART.
+      }
+      else if ((strcasestr(argv[i], "--listen")) || (strcasestr(argv[i], "-L"))) {
+        if (argc - i < 2) {  // Mis-use of flag...
+          printf("Using --listen means you must supply a path.\n");
+          exit(1);
+        }
+        i++;
+        socket_listener.newConnectionCallback(new_socket_connection_callback);
+        socket_listener.listen((char*) argv[i++]);
       }
       else if ((strlen(argv[i]) > 3) && (argv[i][0] == '-') && (argv[i][1] == '-')) {
         i++;

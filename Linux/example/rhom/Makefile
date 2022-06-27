@@ -56,6 +56,7 @@ CXX_SRCS += ../../src/Linux.cpp
 CXX_SRCS += ../../src/LinuxStdIO.cpp
 CXX_SRCS += ../../src/LinuxUART.cpp
 CXX_SRCS += ../../src/LinuxSocketPipe.cpp
+CXX_SRCS += ../../src/LinuxSockListener.cpp
 #CXX_SRCS += ../../src/LinuxStorage.cpp
 #CXX_SRCS += ../../src/I2CAdapter.cpp
 

@@ -69,11 +69,45 @@ class LinuxStdIO : public BufferAccepter {
 /*******************************************************************************
 * Socket driver class
 *******************************************************************************/
+class LinuxSockPipe;
+class LinuxSockListener;
+typedef int8_t (*NewSocketCallback)(LinuxSockListener*, LinuxSockPipe*);
+
+
+class LinuxSockListener {
+  public:
+    LinuxSockListener(char* path);
+    LinuxSockListener() {};
+    ~LinuxSockListener();
+
+    inline void newConnectionCallback(NewSocketCallback cb) {   _new_cb = cb;   };
+    int8_t poll();
+    void   printDebug(StringBuilder* out);
+
+    int    listening();  // Returns the number of connections, or -1 if not listening.
+    int    listen(char* path = nullptr);  // Open a listening socket.
+    int8_t close();   // Close the listener, if it is open.
+
+    /* Built-in per-instance console handler. */
+    int8_t console_handler(StringBuilder* text_return, StringBuilder* args);
+
+
+  private:
+    int             _sock_id     = 0;
+    char*           _sock_path   = nullptr;
+    unsigned long   _thread_id   = 0;
+    NewSocketCallback _new_cb   = nullptr;
+
+    int8_t _set_sock_path(char*);
+};
+
+
 class LinuxSockPipe : public BufferAccepter {
   public:
+    LinuxSockPipe(char* path, int sock_id);
     LinuxSockPipe(char* path);
     LinuxSockPipe() : LinuxSockPipe(nullptr) {};
-    ~LinuxSockPipe();
+    virtual ~LinuxSockPipe();
 
     /* Implementation of BufferAccepter. */
     inline int8_t provideBuffer(StringBuilder* buf) {  _tx_buffer.concatHandoff(buf); return 1;   };
@@ -88,10 +122,9 @@ class LinuxSockPipe : public BufferAccepter {
     uint   write(char c);
     uint   write(uint8_t* buf, uint len);
 
-    int    listening();  // Returns the number of connections, or -1 if not listening.
     int    connected();  // Returns the number of connections, or -1 if not connected.
-    int    connect(char* path);  // Open an existing socket.
-    int    listen(char* path);   // Establish a listening socket at the given path.
+    int    connect(char* path = nullptr);  // Open an existing socket.
+    int8_t close();   // Close the socket, if it is open.
     inline bool   flushed() {   return _tx_buffer.isEmpty();   };
 
     /* Built-in per-instance console handler. */
@@ -110,7 +143,7 @@ class LinuxSockPipe : public BufferAccepter {
     StringBuilder   _rx_buffer;
 
     int8_t _open();
-    int8_t _close();
+    int8_t _set_sock_path(char*);
 };
 
 
