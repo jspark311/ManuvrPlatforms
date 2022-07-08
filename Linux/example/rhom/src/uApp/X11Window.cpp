@@ -142,7 +142,7 @@ GfxUIIdentity self_ident_pane(
   &ident_uuid,
   0, 0,
   150, IDENT_SELF_HEIGHT,
-  0x48d1cc,
+  0x20B2AA,
   (GFXUI_FLAG_DRAW_FRAME_MASK | GFXUI_FLAG_DRAW_FRAME_MASK)
 );
 
@@ -172,6 +172,7 @@ struct MouseButtonDef {
   const GfxUIEvent gfx_event_down;
   const GfxUIEvent gfx_event_up;
 };
+
 
 MouseButtonDef mouse_buttons[] = {
   { .button_id = 1,
@@ -482,8 +483,8 @@ void* gui_thread_handler(void*) {
             m_link,
             _slider_2.elementPosX(),
             _slider_2.elementPosY() + _slider_2.elementHeight() + ELEMENT_MARGIN,
-            400,
-            250,
+            360,
+            248,
             (GFXUI_FLAG_DRAW_FRAME_MASK)
           );
           mlink_ui_obj->shouldReap(true);

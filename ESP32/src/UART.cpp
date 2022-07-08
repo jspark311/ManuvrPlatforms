@@ -244,7 +244,8 @@ int8_t UARTAdapter::_pf_init() {
               const uart_intr_config_t intr_conf {
                 // UART_FRM_ERR_INT: Triggered when the receiver detects a data frame error .
                 // UART_PARITY_ERR_INT: Triggered when the receiver detects a parity error in the data.
-                .intr_enable_mask = (UART_INTR_TXFIFO_EMPTY | UART_INTR_RXFIFO_FULL | UART_INTR_RXFIFO_TOUT | UART_INTR_RXFIFO_OVF | UART_INTR_TX_DONE),
+                //.intr_enable_mask = (UART_INTR_TXFIFO_EMPTY | UART_INTR_RXFIFO_FULL | UART_INTR_RXFIFO_TOUT | UART_INTR_RXFIFO_OVF | UART_INTR_TX_DONE),
+                .intr_enable_mask = (UART_INTR_TXFIFO_EMPTY | UART_INTR_RXFIFO_FULL | UART_INTR_RXFIFO_OVF | UART_INTR_TX_DONE),
                 .rx_timeout_thresh        = 8,
                 .txfifo_empty_intr_thresh = 16,
                 .rxfifo_full_thresh       = 16

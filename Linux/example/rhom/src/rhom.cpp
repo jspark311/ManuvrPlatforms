@@ -63,6 +63,9 @@ const char*   program_name;
 bool          continue_running  = true;
 unsigned long gui_thread_id     = 0;
 
+uint32_t ping_req_time = 0;
+uint32_t ping_nonce    = 0;
+
 
 ManuvrLinkOpts link_opts(
   100,   // ACK timeout is 100ms.
@@ -135,11 +138,43 @@ void link_callback_message(uint32_t session_tag, ManuvrMsg* msg) {
   msg->printDebug(&log);
   msg->getPayload(&kvps_rxd);
   if (kvps_rxd) {
-    kvps_rxd->printDebug(&log);
+    char* fxn_name = nullptr;
+    if (0 == kvps_rxd->valueWithKey("fxn", &fxn_name)) {
+      if (0 == strcmp("PING", fxn_name)) {
+        // Counterparty may have replied to our ping. If not, reply logic will
+        //   handle the response.
+        if (ping_nonce) {
+          if (ping_nonce == msg->uniqueId()) {
+            log.concatf("\tPing returned in %ums.\n", wrap_accounted_delta((uint32_t) micros(), ping_req_time));
+            ping_req_time = 0;
+            ping_nonce    = 0;
+          }
+        }
+      }
+      else if (0 == strcmp("IMG_CAST", fxn_name)) {
+        // Counterparty is sending us an image.
+      }
+      else if (0 == strcmp("WHO", fxn_name)) {
+        // Counterparty wants to know who we are.
+        log.concatf("\tTODO: Unimplemented fxn: \n", fxn_name);
+      }
+      else {
+        log.concatf("\tUnhandled fxn: \n", fxn_name);
+        kvps_rxd->printDebug(&log);
+      }
+    }
+    else {
+      log.concat("\tRX'd message with no specified fxn.\n");
+      kvps_rxd->printDebug(&log);
+    }
   }
+  else {
+    log.concat("\tRX'd message with no payload.\n");
+  }
+
   if (msg->expectsReply()) {
     int8_t ack_ret = msg->ack();
-    log.concatf("link_callback_message ACK'ing %u returns %d.\n", msg->uniqueId(), ack_ret);
+    log.concatf("\tlink_callback_message ACK'ing %u returns %d.\n", msg->uniqueId(), ack_ret);
   }
   c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, &log);
 }
@@ -274,8 +309,6 @@ int callback_uart_tools(StringBuilder* text_return, StringBuilder* args) {
 }
 
 
-uint32_t ping_req_time = 0;
-uint32_t ping_nonce    = 0;
 
 int callback_link_tools(StringBuilder* text_return, StringBuilder* args) {
   int ret = -1;
@@ -297,7 +330,7 @@ int callback_link_tools(StringBuilder* text_return, StringBuilder* args) {
     a.append(ping_req_time, "time_ms");
     a.append(ping_nonce,    "rand");
     int8_t ret_local = m_link->send(&a, true);
-    text_return->concatf("Description request send() returns ID %u\n", ret_local);
+    text_return->concatf("Ping send() returns ID %u\n", ret_local);
     ret = 0;
   }
   else if (0 == StringBuilder::strcasecmp(cmd, "screenshot")) {
@@ -305,7 +338,7 @@ int callback_link_tools(StringBuilder* text_return, StringBuilder* args) {
     KeyValuePair a("IMG_CAST", "fxn");
     a.append((uint32_t) millis(),       "time_ms");
     int8_t ret_local = m_link->send(&a, false);
-    text_return->concatf("Description request send() returns ID %u\n", ret_local);
+    text_return->concatf("IMG_CAST() returns ID %u\n", ret_local);
     ret = 0;
   }
   else ret = m_link->console_handler(text_return, args);
