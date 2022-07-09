@@ -22,7 +22,6 @@
 #include "RHoM.h"
 
 #define CONSOLE_INPUT_HEIGHT  200
-#define IDENT_SELF_HEIGHT      80
 #define TEST_FILTER_DEPTH     310
 #define ELEMENT_MARGIN          5
 
@@ -32,7 +31,6 @@ extern bool continue_running;         // TODO: (rolled up newspaper) Bad...
 extern SensorFilter<uint32_t> _filter;
 extern ManuvrLink* m_link;
 extern ParsingConsole console;
-extern IdentityUUID ident_uuid;
 
 Display* dpy = nullptr;
 XImage* ximage = nullptr;
@@ -136,14 +134,6 @@ GfxUITextArea _txt_area_0(
   _filter_txt_0.elementPosY() + _filter_txt_0.elementHeight() + 2,
   400, 145, 0x00FF00,
   (GFXUI_FLAG_DRAW_FRAME_U)
-);
-
-GfxUIIdentity self_ident_pane(
-  &ident_uuid,
-  0, 0,
-  150, IDENT_SELF_HEIGHT,
-  0x20B2AA,
-  (GFXUI_FLAG_DRAW_FRAME_MASK | GFXUI_FLAG_DRAW_FRAME_MASK)
 );
 
 
@@ -276,10 +266,6 @@ void resize_and_render_all_elements() {
   _txt_area_0.reposition(CONSOLE_INPUT_X_POS, CONSOLE_INPUT_Y_POS);
   _txt_area_0.resize(window_w, CONSOLE_INPUT_HEIGHT);
 
-  const uint  IDENT_PANE_X_POS = (window_w - self_ident_pane.elementWidth()) - 1;
-  const uint  IDENT_PANE_Y_POS = 0;
-  self_ident_pane.reposition(IDENT_PANE_X_POS, IDENT_PANE_Y_POS);
-
   const char* HEADER_STR_0 = "Right Hand of Manuvr";
   const char* HEADER_STR_1 = "Build date " __DATE__ " " __TIME__;
   _main_img.setCursor(2, 0);
@@ -356,7 +342,6 @@ void* gui_thread_handler(void*) {
     element_queue.insert(&sf_render_1);
     element_queue.insert(&_filter_txt_0);
     element_queue.insert(&_txt_area_0);
-    element_queue.insert(&self_ident_pane);
 
     console.setOutputTarget(&_txt_area_0);
     console.hasColor(false);

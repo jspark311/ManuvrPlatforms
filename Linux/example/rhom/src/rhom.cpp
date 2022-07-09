@@ -380,6 +380,7 @@ int main(int argc, const char *argv[]) {
   m_link = new ManuvrLink(&link_opts);
   m_link->setCallback(link_callback_state);
   m_link->setCallback(link_callback_message);
+  m_link->localIdentity(&ident_uuid);
 
   // Parse through all the command line arguments and flags...
   // Please note that the order matters. Put all the most-general matches at the bottom of the loop.
