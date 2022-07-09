@@ -371,6 +371,7 @@ int callback_socket_tools(StringBuilder* text_return, StringBuilder* args) {
 *******************************************************************************/
 int main(int argc, const char *argv[]) {
   program_name = argv[0];   // Our name.
+  bool gui_takes_console = false;
   StringBuilder output;
 
   platform.init();

@@ -21,7 +21,6 @@
 
 #include "RHoM.h"
 
-#define INSET_SIZE            200
 #define CONSOLE_INPUT_HEIGHT  200
 #define IDENT_SELF_HEIGHT      80
 #define TEST_FILTER_DEPTH     310
@@ -38,9 +37,10 @@ extern IdentityUUID ident_uuid;
 Display* dpy = nullptr;
 XImage* ximage = nullptr;
 
-Image _main_img(1, 1, ImgBufferFormat::R8_G8_B8_ALPHA);
-Image _overlay_img(1, 1, ImgBufferFormat::R8_G8_B8_ALPHA);
-UIGfxWrapper ui_gfx(&_main_img);
+Image _main_img(1, 1, ImgBufferFormat::R8_G8_B8_ALPHA);    // The true-size frame-buffer.
+Image _overlay_img(1, 1, ImgBufferFormat::R8_G8_B8_ALPHA); // The image used to render the X window. Might be larger.
+UIGfxWrapper ui_gfx_main(&_main_img);     // Wrapper for elements rendered in the main pane.
+UIGfxWrapper ui_gfx_overlay(&_overlay_img);  // Wrapper for elements rendered in the overlay.
 
 SensorFilter<uint32_t> test_filter_0(TEST_FILTER_DEPTH, FilteringStrategy::RAW);
 SensorFilter<float> test_filter_1(TEST_FILTER_DEPTH, FilteringStrategy::RAW);
@@ -148,8 +148,13 @@ GfxUIIdentity self_ident_pane(
 
 
 // Firmware UIs are small. If the host is showing the UI on a 4K monitor, it
-//   will cause "the squints". But we don't know the positions yet.
-GfxUIMagnifier ui_magnifier(0, 0, INSET_SIZE, INSET_SIZE, 0xFFFFFF);
+//   will cause "the squints".
+// This element should not be added to the element list, and it ignores the
+//   position arguments.
+GfxUIMagnifier ui_magnifier(
+  &_main_img, 0, 0, 200, 200, 0xFFFFFF,
+  (GFXUI_FLAG_DRAW_FRAME_U | GFXUI_FLAG_DRAW_FRAME_L | GFXUI_MAGNIFIER_FLAG_SHOW_FEED_FRAME)
+);
 
 StopWatch redraw_timer;
 
@@ -250,7 +255,7 @@ void proc_mouse_button(uint btn_id, uint x, uint y, bool pressed) {
       }
     }
   }
-  c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Unhandled %s %d: (%d, %d)", (pressed ? "click" : "release"), btn_id, x, y);
+  //c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Unhandled %s %d: (%d, %d)", (pressed ? "click" : "release"), btn_id, x, y);
 }
 
 
@@ -274,10 +279,6 @@ void resize_and_render_all_elements() {
   const uint  IDENT_PANE_X_POS = (window_w - self_ident_pane.elementWidth()) - 1;
   const uint  IDENT_PANE_Y_POS = 0;
   self_ident_pane.reposition(IDENT_PANE_X_POS, IDENT_PANE_Y_POS);
-
-  const uint  INSET_X_POS = (window_w - INSET_SIZE) - 1;
-  const uint  INSET_Y_POS = (window_h - INSET_SIZE) - 1;
-  ui_magnifier.reposition(INSET_X_POS, INSET_Y_POS);
 
   const char* HEADER_STR_0 = "Right Hand of Manuvr";
   const char* HEADER_STR_1 = "Build date " __DATE__ " " __TIME__;
@@ -305,7 +306,7 @@ void resize_and_render_all_elements() {
   bool local_ret = false;
   for (uint n = 0; n < SEARCH_SIZE_QUEUE; n++) {
     GfxUIElement* ui_obj = element_queue.get(n);
-    ui_obj->render(&ui_gfx, true);
+    ui_obj->render(&ui_gfx_main, true);
   }
 }
 
@@ -356,7 +357,6 @@ void* gui_thread_handler(void*) {
     element_queue.insert(&_filter_txt_0);
     element_queue.insert(&_txt_area_0);
     element_queue.insert(&self_ident_pane);
-    element_queue.insert(&ui_magnifier);
 
     console.setOutputTarget(&_txt_area_0);
     console.hasColor(false);
@@ -495,7 +495,6 @@ void* gui_thread_handler(void*) {
 
         // Render the UI elements...
         const uint SEARCH_SIZE_QUEUE = element_queue.size();
-        bool local_ret = false;
         // TODO: Should be in the relvant class.
         if (test_filter_0.dirty()) {
           StringBuilder _tmp_sbldr;
@@ -509,32 +508,18 @@ void* gui_thread_handler(void*) {
 
         for (uint n = 0; n < SEARCH_SIZE_QUEUE; n++) {
           GfxUIElement* ui_obj = element_queue.get(n);
-          ui_obj->render(&ui_gfx, true);
+          ui_obj->render(&ui_gfx_main, true);
         }
 
         if (_overlay_img.setBufferByCopy(_main_img.buffer(), _main_img.format())) {
           const bool  POINTER_IN_WINDOW = (0 <= temp_ptr_x) && (0 <= temp_ptr_y) && (window_w > (uint) temp_ptr_x) && (window_h > (uint) temp_ptr_y);
           if (POINTER_IN_WINDOW) {
-            // If the pointer is within the window...
+            // If the pointer is within the window, we note its location and
+            //   annotate the overlay.
             pointer_x = (uint) temp_ptr_x;
             pointer_y = (uint) temp_ptr_y;
-
-            const uint  INSET_X_POS = (window_w - INSET_SIZE) - 1;
-            const uint  INSET_Y_POS = (window_h - INSET_SIZE) - 1;
-            const float INSET_SCALE = range_bind((ui_magnifier.scale() * 10.0), 1.0f, 50.0f);
-            const int   INSET_FEED_SIZE   = (INSET_SIZE / INSET_SCALE);
-            const int   INSET_FEED_OFFSET = (INSET_FEED_SIZE/2) + 1;
-            const uint  INSET_FEED_X_POS  = (uint) range_bind((int) pointer_x, INSET_FEED_OFFSET, (int) (window_w - INSET_FEED_OFFSET)) - INSET_FEED_OFFSET;
-            const uint  INSET_FEED_Y_POS  = (uint) range_bind((int) pointer_y, INSET_FEED_OFFSET, (int) (window_h - INSET_FEED_OFFSET)) - INSET_FEED_OFFSET;
-            //c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "(%u %u)\t(%u %u)", INSET_FEED_X_POS, INSET_FEED_Y_POS, pointer_x, pointer_y);
-            ImageScaler scale_window(&_main_img, &_overlay_img, INSET_SCALE, INSET_FEED_X_POS, INSET_FEED_Y_POS, INSET_FEED_SIZE, INSET_FEED_SIZE, INSET_X_POS, INSET_Y_POS);
-            scale_window.apply();
-
-            //_overlay_img.fillRect(pointer_x, pointer_y, 5, 5, 0xFFFFFF);
-            _overlay_img.drawLine(INSET_FEED_X_POS, (INSET_FEED_Y_POS + INSET_FEED_SIZE), INSET_X_POS, (INSET_Y_POS + INSET_SIZE), 0xFFFFFF);
-            _overlay_img.drawLine((INSET_FEED_X_POS + INSET_FEED_SIZE), INSET_FEED_Y_POS, (INSET_X_POS + INSET_SIZE), INSET_Y_POS, 0xFFFFFF);
-            _overlay_img.drawRect(INSET_FEED_X_POS, INSET_FEED_Y_POS, INSET_FEED_SIZE, INSET_FEED_SIZE, 0xFFFFFF);
-            _overlay_img.drawRect(INSET_X_POS, INSET_Y_POS, INSET_SIZE, INSET_SIZE, 0xFFFFFF);
+            ui_magnifier.pointerLocation(pointer_x, pointer_y);
+            ui_magnifier.render(&ui_gfx_overlay);
           }
           XPutImage(dpy, win, DefaultGC(dpy, DefaultScreen(dpy)), ximage, 0, 0, 0, 0, _overlay_img.x(), _overlay_img.y());
         }
