@@ -79,7 +79,7 @@ static LinuxUARTLookup* _uart_table_get_by_adapter_ref(UARTAdapter* adapter) {
 */
 static void* uart_polling_handler(void*) {
   bool keep_polling = true;
-  printf("Started UART polling thread.\n");
+  c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "Started UART polling thread.\n");
   while (keep_polling) {
     sleep_ms(20);
     for (int i = 0; i < uart_instances.size(); i++) {
@@ -92,7 +92,7 @@ static void* uart_polling_handler(void*) {
     }
     keep_polling = (0 < uart_instances.size());
   }
-  printf("Exiting UART polling thread...\n");
+  c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "Exiting UART polling thread...\n");
   _uart_polling_thread_id = 0;  // Allow the thread to be restarted later.
   return NULL;
 }
@@ -229,7 +229,7 @@ int8_t UARTAdapter::_pf_init() {
         case 7:  lookup->termAttr.c_cflag |= CS7;  break;
         case 8:  lookup->termAttr.c_cflag |= CS8;  break;
         default:
-          printf("%d bis-per-word is invalid for %s.\n", _opts.bit_per_word, lookup->path);
+          c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "%d bis-per-word is invalid for %s.\n", _opts.bit_per_word, lookup->path);
           return ret;
       }
       switch (_opts.parity) {
@@ -237,21 +237,21 @@ int8_t UARTAdapter::_pf_init() {
         case UARTParityBit::EVEN:  lookup->termAttr.c_cflag |= PARENB;             break;
         case UARTParityBit::ODD:   lookup->termAttr.c_cflag |= (PARENB | PARODD);  break;
         default:
-          printf("Invalid parity selection for %s.\n", lookup->path);
+          c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Invalid parity selection for %s.\n", lookup->path);
           return ret;
       }
       switch (_opts.stop_bits) {
         case UARTStopBit::STOP_1:  lookup->termAttr.c_cflag &= ~CSTOPB;  break;
         case UARTStopBit::STOP_2:  lookup->termAttr.c_cflag |= CSTOPB;   break;
         default:
-          printf("Unsupported stop-bit selection for %s.\n", lookup->path);
+          c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Unsupported stop-bit selection for %s.\n", lookup->path);
           return ret;
       }
       switch (_opts.flow_control) {
         case UARTFlowControl::NONE:     lookup->termAttr.c_cflag |= CLOCAL;   break;
         case UARTFlowControl::RTS_CTS:  lookup->termAttr.c_cflag |= CRTSCTS;  break;
         default:
-          printf("Unsupported flow control selection for %s.\n", lookup->path);
+          c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Unsupported flow control selection for %s.\n", lookup->path);
           return ret;
       }
       // If an input buffer was desired, we turn on RX.
@@ -260,7 +260,7 @@ int8_t UARTAdapter::_pf_init() {
         _adapter_set_flag(UART_FLAG_HAS_RX);
       }
 
-      printf("Opened UART (%s) at %dbps\n", lookup->path, _opts.bitrate);
+      c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Opened UART (%s) at %dbps\n", lookup->path, _opts.bitrate);
       lookup->termAttr.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);
       lookup->termAttr.c_iflag &= ~(IXON | IXOFF | IXANY);
       lookup->termAttr.c_oflag &= ~OPOST;
@@ -276,11 +276,11 @@ int8_t UARTAdapter::_pf_init() {
         ret = 0;
       }
       else {
-        printf("Failed to tcsetattr...\n");
+        c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Failed to tcsetattr...\n");
       }
     }
     else {
-      printf("Unable to open port: (%s)\n", lookup->path);
+      c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Unable to open port: (%s)\n", lookup->path);
     }
   }
   return ret;
@@ -299,7 +299,7 @@ int8_t UARTAdapter::_pf_deinit() {
     if (0 < lookup->sock) {
       close(lookup->sock);  // Close the socket.
       lookup->sock = -1;
-      printf("Closed UART (%s)\n", lookup->path);
+      c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Closed UART (%s)\n", lookup->path);
     }
     _tx_buffer.clear();
     _rx_buffer.clear();
