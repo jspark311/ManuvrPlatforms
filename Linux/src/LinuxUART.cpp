@@ -184,6 +184,10 @@ int8_t UARTAdapter::poll() {
         int tx_count = strict_min((int32_t) 64, (int32_t) _tx_buffer.length());
         if (0 < tx_count) {
           int bytes_written = (int) ::write(lookup->sock, _tx_buffer.string(), tx_count);
+          //StringBuilder tmp_log;
+          //tmp_log.concatf("\n\n__________Bytes written (%d)________\n", bytes_written);
+          //_tx_buffer.printDebug(&tmp_log);
+          //printf("%s\n\n", tmp_log.string());
           _tx_buffer.cull(bytes_written);
           _adapter_set_flag(UART_FLAG_FLUSHED, _tx_buffer.isEmpty());
         }
@@ -194,6 +198,10 @@ int8_t UARTAdapter::poll() {
         if (n > 0) {
           _rx_buffer.concat(buf, n);
           last_byte_rx_time = millis();
+          //StringBuilder tmp_log;
+          //tmp_log.concatf("\n\n__________Bytes read (%d)________\n", n);
+          //_rx_buffer.printDebug(&tmp_log);
+          //printf("%s\n\n", tmp_log.string());
           return_value = 1;
         }
         if (0 < _rx_buffer.length()) {
