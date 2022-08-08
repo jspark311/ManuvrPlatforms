@@ -134,13 +134,14 @@ void link_callback_state(ManuvrLink* cb_link) {
 void link_callback_message(uint32_t session_tag, ManuvrMsg* msg) {
   StringBuilder log;
   KeyValuePair* kvps_rxd = nullptr;
-  log.concatf("link_callback_message(0x%x, 0x08%x): \n", session_tag, msg->uniqueId());
-  msg->printDebug(&log);
+  bool dump_msg_debug = true;
+  log.concatf("link_callback_message(Tag = %u, ID = 0x%08x):\n", session_tag, msg->uniqueId());
   msg->getPayload(&kvps_rxd);
   if (kvps_rxd) {
     char* fxn_name = nullptr;
     if (0 == kvps_rxd->valueWithKey("fxn", &fxn_name)) {
       if (0 == strcmp("PING", fxn_name)) {
+        //dump_msg_debug = false;
         // Counterparty may have replied to our ping. If not, reply logic will
         //   handle the response.
         if (ping_nonce) {
@@ -153,23 +154,34 @@ void link_callback_message(uint32_t session_tag, ManuvrMsg* msg) {
       }
       else if (0 == strcmp("IMG_CAST", fxn_name)) {
         // Counterparty is sending us an image.
+        //dump_msg_debug = false;
       }
       else if (0 == strcmp("WHO", fxn_name)) {
         // Counterparty wants to know who we are.
         log.concatf("\tTODO: Unimplemented fxn: \n", fxn_name);
+        dump_msg_debug = true;
       }
       else {
         log.concatf("\tUnhandled fxn: \n", fxn_name);
-        kvps_rxd->printDebug(&log);
       }
     }
     else {
       log.concat("\tRX'd message with no specified fxn.\n");
-      kvps_rxd->printDebug(&log);
     }
   }
   else {
-    log.concat("\tRX'd message with no payload.\n");
+    if (msg->isReply()) {
+      log.concatf("\tRX'd ACK for msg %u.\n", msg->uniqueId());
+      dump_msg_debug = false;
+    }
+    else {
+      log.concat("\tRX'd message with no payload.\n");
+    }
+  }
+
+  if (dump_msg_debug) {
+    log.concat('\n');
+    msg->printDebug(&log);
   }
 
   if (msg->expectsReply()) {
@@ -314,22 +326,14 @@ int callback_link_tools(StringBuilder* text_return, StringBuilder* args) {
   int ret = -1;
   char* cmd = args->position_trimmed(0);
   // We interdict if the command is something specific to this application.
-  if (0 == StringBuilder::strcasecmp(cmd, "desc")) {
-    // Send a self-description message, with a request for same.
-    KeyValuePair a("WHO", "fxn");
-    a.append(&ident_uuid,      "ident");
-    int8_t ret_local = m_link->send(&a, true);
-    text_return->concatf("Description request send() returns ID %u\n", ret_local);
-    ret = 0;
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "ping")) {
+  if (0 == StringBuilder::strcasecmp(cmd, "ping")) {
     // Send a description request message.
     ping_req_time = (uint32_t) millis();
     ping_nonce = randomUInt32();
-    KeyValuePair a("PING",  "fxn");
-    a.append(ping_req_time, "time_ms");
-    a.append(ping_nonce,    "rand");
-    int8_t ret_local = m_link->send(&a, true);
+    KeyValuePair* a = new KeyValuePair("PING",  "fxn");
+    a->append(ping_req_time, "time_ms");
+    a->append(ping_nonce,    "rand");
+    int8_t ret_local = m_link->send(a, true);
     text_return->concatf("Ping send() returns ID %u\n", ret_local);
     ret = 0;
   }
@@ -381,6 +385,7 @@ int main(int argc, const char *argv[]) {
   m_link->setCallback(link_callback_state);
   m_link->setCallback(link_callback_message);
   m_link->localIdentity(&ident_uuid);
+  //m_link->verbosity(6);
 
   // Parse through all the command line arguments and flags...
   // Please note that the order matters. Put all the most-general matches at the bottom of the loop.
