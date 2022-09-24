@@ -50,8 +50,8 @@ class LinuxFileStorage : public Storage {
 
     /* Overrides from EventReceiver */
     void printDebug(StringBuilder*);
-    int8_t notify(ManuvrMsg*);
-    int8_t callback_proc(ManuvrMsg*);
+    int8_t notify(M2MMsg*);
+    int8_t callback_proc(M2MMsg*);
 
 
   protected:

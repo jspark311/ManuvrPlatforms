@@ -29,7 +29,7 @@ extern unsigned long gui_thread_id;   // TODO: (rolled up newspaper) Bad...
 extern bool continue_running;         // TODO: (rolled up newspaper) Bad...
 
 extern SensorFilter<uint32_t> _filter;
-extern ManuvrLink* m_link;
+extern M2MLink* m_link;
 extern ParsingConsole console;
 
 /* This program wraps X11 constructs, but we keep some globals. */

@@ -247,7 +247,7 @@ int8_t LinuxStorage::attached() {
 * @param  event  The event for which service has been completed.
 * @return A callback return code.
 */
-int8_t LinuxStorage::callback_proc(ManuvrMsg* event) {
+int8_t LinuxStorage::callback_proc(M2MMsg* event) {
   /* Setup the default return code. If the event was marked as mem_managed, we return a DROP code.
      Otherwise, we will return a REAP code. Downstream of this assignment, we might choose differently. */
   int8_t return_value = (0 == event->refCount()) ? EVENT_CALLBACK_RETURN_REAP : EVENT_CALLBACK_RETURN_DROP;
@@ -277,7 +277,7 @@ void LinuxStorage::printDebug(StringBuilder *output) {
 /*
 * This is the override from EventReceiver.
 */
-int8_t LinuxStorage::notify(ManuvrMsg* active_event) {
+int8_t LinuxStorage::notify(M2MMsg* active_event) {
   int8_t return_value = 0;
 
   switch (active_event->eventCode()) {

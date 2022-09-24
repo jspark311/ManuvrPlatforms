@@ -33,7 +33,7 @@
 #include "Image/Image.h"
 #include "Identity/IdentityUUID.h"
 #include "Identity/Identity.h"
-#include "ManuvrLink/ManuvrLink.h"
+#include "M2MLink/M2MLink.h"
 #include <CryptoBurrito/CryptoBurrito.h>
 #include <Linux.h>
 
@@ -66,14 +66,14 @@ uint32_t ping_req_time = 0;
 uint32_t ping_nonce    = 0;
 
 
-ManuvrLinkOpts link_opts(
+M2MLinkOpts link_opts(
   100,   // ACK timeout is 100ms.
   2000,  // Send a KA every 2s.
   2048,  // MTU for this link is 2 kibi.
   TCode::CBOR,   // Payloads should be CBOR encoded.
   // This side of the link will send a KA while IDLE, and
   //   allows remote log write.
-  (MANUVRLINK_FLAG_SEND_KA | MANUVRLINK_FLAG_ALLOW_LOG_WRITE)
+  (M2MLINK_FLAG_SEND_KA | M2MLINK_FLAG_ALLOW_LOG_WRITE)
 );
 
 UARTOpts uart_opts {
@@ -90,7 +90,7 @@ UARTOpts uart_opts {
 
 /* Transports such as UARTs are generally 1:1 with sessions. */
 LinuxUART*  uart   = nullptr;
-ManuvrLink* m_link = nullptr;
+M2MLink* m_link = nullptr;
 
 /* But some transports (socket servers) have 1:x relationships to sessions. */
 LinuxSockListener socket_listener("/tmp/c3p-test.sock");
@@ -109,7 +109,7 @@ LinkedList<LinkSockPair*> active_links;
 int8_t new_socket_connection_callback(LinuxSockListener* svr, LinuxSockPipe* pipe) {
   int8_t ret = 0;   // We should reject by default.
   c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "New socket connection.");
-  ManuvrLink* new_link = new ManuvrLink(&link_opts);
+  M2MLink* new_link = new M2MLink(&link_opts);
   if (nullptr != new_link) {
     active_links.insert(new LinkSockPair(pipe, new_link));
     m_link = new_link;
@@ -125,12 +125,12 @@ int8_t new_socket_connection_callback(LinuxSockListener* svr, LinuxSockPipe* pip
 * Link callbacks
 *******************************************************************************/
 
-void link_callback_state(ManuvrLink* cb_link) {
-  c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Link (0x%x) entered state %s.", cb_link->linkTag(), ManuvrLink::sessionStateStr(cb_link->getState()));
+void link_callback_state(M2MLink* cb_link) {
+  c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Link (0x%x) entered state %s.", cb_link->linkTag(), M2MLink::sessionStateStr(cb_link->getState()));
 }
 
 
-void link_callback_message(uint32_t session_tag, ManuvrMsg* msg) {
+void link_callback_message(uint32_t session_tag, M2MMsg* msg) {
   StringBuilder log;
   KeyValuePair* kvps_rxd = nullptr;
   bool dump_msg_debug = true;
@@ -289,8 +289,8 @@ int callback_uart_tools(StringBuilder* text_return, StringBuilder* args) {
         uart = new LinuxUART(args->position_trimmed(1));
         if (nullptr != uart) {
           uart->init(&uart_opts);
-          uart->readCallback(m_link);      // Attach the UART to ManuvrLink...
-          m_link->setOutputTarget(uart);   // ...and ManuvrLink to UART.
+          uart->readCallback(m_link);      // Attach the UART to M2MLink...
+          m_link->setOutputTarget(uart);   // ...and M2MLink to UART.
         }
         else print_alloc_fail = true;
       }
@@ -375,7 +375,7 @@ int main(int argc, const char *argv[]) {
   platform.init();
   _filter.init();
 
-  m_link = new ManuvrLink(&link_opts);
+  m_link = new M2MLink(&link_opts);
   m_link->setCallback(link_callback_state);
   m_link->setCallback(link_callback_message);
   m_link->localIdentity(&ident_uuid);
@@ -412,8 +412,8 @@ int main(int argc, const char *argv[]) {
         // Instance a UART.
         uart = new LinuxUART((char*) argv[i++]);
         uart->init(&uart_opts);
-        uart->readCallback(m_link);      // Attach the UART to ManuvrLink...
-        m_link->setOutputTarget(uart);   // ...and ManuvrLink to UART.
+        uart->readCallback(m_link);      // Attach the UART to M2MLink...
+        m_link->setOutputTarget(uart);   // ...and M2MLink to UART.
       }
       else if ((strcasestr(argv[i], "--listen")) || (strcasestr(argv[i], "-L"))) {
         if (argc - i < 2) {  // Mis-use of flag...

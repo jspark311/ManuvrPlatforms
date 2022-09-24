@@ -284,7 +284,7 @@ void unsetPinIRQ(uint8_t pin) {
 }
 
 
-int8_t setPinEvent(uint8_t pin, uint8_t condition, ManuvrMsg* isr_event) {
+int8_t setPinEvent(uint8_t pin, uint8_t condition, M2MMsg* isr_event) {
   return 0;
 }
 

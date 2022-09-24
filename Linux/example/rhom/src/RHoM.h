@@ -22,7 +22,7 @@
 #include "Image/ImageUtils.h"
 #include "Image/GfxUI.h"
 #include "Identity/Identity.h"
-#include "ManuvrLink/ManuvrLink.h"
+#include "M2MLink/M2MLink.h"
 #include "CryptoBurrito/CryptoBurrito.h"
 #include <Linux.h>
 
@@ -54,10 +54,10 @@ class CryptoLogShunt : public CryptOpCallback {
 class LinkSockPair {
   public:
     LinuxSockPipe* sock;
-    ManuvrLink* link;
+    M2MLink* link;
     uint32_t established;
 
-    LinkSockPair(LinuxSockPipe* s, ManuvrLink* l) :
+    LinkSockPair(LinuxSockPipe* s, M2MLink* l) :
       sock(s),
       link(l),
       established(millis())
