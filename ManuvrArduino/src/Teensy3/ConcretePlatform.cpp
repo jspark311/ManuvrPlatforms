@@ -30,7 +30,7 @@ This file is meant to contain a set of common functions that are typically platf
 
 #include "../ManuvrPlatform.h"
 
-#if defined(CONFIG_MANUVR_STORAGE)
+#if defined(CONFIG_C3P_STORAGE)
 #include "TeensyStorage.h"
 #endif
 
@@ -50,7 +50,7 @@ This file is meant to contain a set of common functions that are typically platf
 *******************************************************************************/
 time_t getTeensy3Time() {   return Teensy3Clock.get();   }
 
-#if defined(CONFIG_MANUVR_STORAGE)
+#if defined(CONFIG_C3P_STORAGE)
 TeensyStorage _t_storage(nullptr);
 #endif
 
@@ -302,7 +302,7 @@ int readPinAnalog(uint8_t pin) {
 /*******************************************************************************
 * Persistent configuration                                                     *
 *******************************************************************************/
-#if defined(CONFIG_MANUVR_STORAGE)
+#if defined(CONFIG_C3P_STORAGE)
   // Called during boot to load configuration.
   int8_t Teensy3::_load_config() {
     if (_storage_device) {
@@ -411,7 +411,7 @@ int8_t Teensy3::platformPreInit(Argument* root_config) {
   if (root_config) {
   }
 
-  #if defined(CONFIG_MANUVR_STORAGE)
+  #if defined(CONFIG_C3P_STORAGE)
     _storage_device = (Storage*) &_t_storage;
     _kernel.subscribe((EventReceiver*) &_t_storage);
   #endif

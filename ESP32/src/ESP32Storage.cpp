@@ -19,7 +19,7 @@ limitations under the License.
 
 
 Implemented as a CBOR object within NVS. This feature therefore
-  requires MANUVR_CBOR. In the future, it may be made to operate on some
+  requires CONFIG_C3P_CBOR. In the future, it may be made to operate on some
   other encoding, be run through a cryptographic pipe, etc.
 
 CBOR data begins at offset 4. The first uint32 is broken up this way:
@@ -41,17 +41,17 @@ Noteworth snippit from the ESP-IDF doc:
 #include "../ESP32.h"
 
 
-#if defined(CONFIG_MANUVR_STORAGE)
+#if defined(CONFIG_C3P_STORAGE)
 
-#if !defined(CONFIG_MANUVR_CBOR)
-  #error Enabling the storage abstraction requires CONFIG_MANUVR_CBOR.
+#if !defined(CONFIG_C3P_CBOR)
+  #error Enabling the storage abstraction requires CONFIG_C3P_CBOR.
 #endif
 
 // We want this definition isolated to the compilation unit.
 #define STORAGE_PROPS (PL_FLAG_BLOCK_ACCESS | PL_FLAG_MEDIUM_READABLE | PL_FLAG_MEDIUM_WRITABLE)
 
-#if !defined(CONFIG_MANUVR_STORAGE_BLK_SIZE)
-  #define CONFIG_MANUVR_STORAGE_BLK_SIZE  256
+#if !defined(CONFIG_C3P_STORAGE_BLK_SIZE)
+  #define CONFIG_C3P_STORAGE_BLK_SIZE  256
 #endif
 
 /*******************************************************************************
@@ -66,7 +66,7 @@ Noteworth snippit from the ESP-IDF doc:
 static ESP32Storage* INSTANCE = nullptr;
 
 ESP32Storage::ESP32Storage(const esp_partition_t* NVS_PART_PTR)
-  : Storage(NVS_PART_PTR->size, CONFIG_MANUVR_STORAGE_BLK_SIZE), _PART_PTR(NVS_PART_PTR) {
+  : Storage(NVS_PART_PTR->size, CONFIG_C3P_STORAGE_BLK_SIZE), _PART_PTR(NVS_PART_PTR) {
   INSTANCE = this;
 }
 
@@ -307,4 +307,4 @@ int console_callback_esp_storage(StringBuilder* text_return, StringBuilder* args
   return ret;
 }
 
-#endif   // CONFIG_MANUVR_STORAGE
+#endif   // CONFIG_C3P_STORAGE

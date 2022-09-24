@@ -190,7 +190,7 @@ void ESP32Platform::printDebug(StringBuilder* output) {
   output->concatf("==< ESP32 [IDF version %s] >==================================\n", _board_name);
   output->concatf("\tHeap Free/Minimum:  %u/%u\n", esp_get_free_heap_size(), esp_get_minimum_free_heap_size());
   _print_abstract_debug(output);
-  #if defined(CONFIG_MANUVR_STORAGE)
+  #if defined(CONFIG_C3P_STORAGE)
     if (nullptr != storage) {
       storage->printDebug(output);
     }
@@ -837,7 +837,7 @@ int8_t ESP32Platform::init() {
   _alter_flags(true, ABSTRACT_PF_FLAG_RTC_READY);
   gpioSetup();
 
-  #if defined(CONFIG_MANUVR_STORAGE)
+  #if defined(CONFIG_C3P_STORAGE)
     // If we were compiled with support for the storage layer, try to find an
     //   NVS partition and instance the driver, if possible.
     const esp_partition_t* NVS_PART_PTR = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_NVS, NULL);

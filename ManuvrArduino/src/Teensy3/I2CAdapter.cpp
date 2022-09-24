@@ -1,7 +1,7 @@
 #include <I2CAdapter.h>
 
 #if defined(__MK20DX256__) || defined(__MK20DX128__)
-#if defined(CONFIG_MANUVR_I2C)
+#if defined(CONFIG_C3P_I2C)
 #include <i2c_t3/i2c_t3.h>
 
 #define MANUVR_I2C_WRAP_TO 1000000
@@ -180,5 +180,5 @@ XferFault I2CBusOp::advance(uint32_t status_reg) {
   return xfer_fault;
 }
 
-#endif  // CONFIG_MANUVR_I2C
+#endif  // CONFIG_C3P_I2C
 #endif   // defined(__MK20DX256__) || defined(__MK20DX128__)

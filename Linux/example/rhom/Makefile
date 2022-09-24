@@ -17,10 +17,10 @@ FIRMWARE_NAME      = rhom
 CXX_STANDARD       = gnu++11
 OPTIMIZATION       = -O2
 
-CONFIG_MANUVR_CRYPTO = mbedtls
-MANUVR_CONF  = -DCONFIG_MANUVR_CBOR
-MANUVR_CONF += -DCONFIG_MANUVR_IMG_SUPPORT
-MANUVR_CONF += -DCONFIG_MANUVR_M2M_SUPPORT
+CONFIG_C3P_CRYPTO = mbedtls
+MANUVR_CONF  = -DCONFIG_C3P_CBOR
+MANUVR_CONF += -DCONFIG_C3P_IMG_SUPPORT
+MANUVR_CONF += -DCONFIG_C3P_M2M_SUPPORT
 MANUVR_CONF += -DCONFIG_C3P_SOCKET_WRAPPER
 
 
@@ -68,12 +68,12 @@ LIBS	= -L$(OUTPUT_PATH) -lstdc++ -lm -lpthread -lX11
 ###########################################################################
 # Paramter packaging and error-checking...
 ###########################################################################
-ifeq ($(CONFIG_MANUVR_CRYPTO),mbedtls)
+ifeq ($(CONFIG_C3P_CRYPTO),mbedtls)
 INCLUDES    += -I$(BUILD_ROOT)/lib/mbedtls/include/
 LIBS        += -lmbedtls
 LIBS        += -lmbedx509
 LIBS        += -lmbedcrypto
-MANUVR_CONF += -DCONFIG_MANUVR_MBEDTLS
+MANUVR_CONF += -DCONFIG_C3P_MBEDTLS
 # mbedTLS will require this in order to use our chosen options.
 CXXFLAGS    += -DMBEDTLS_CONFIG_FILE='<mbedTLS_conf.h>'
 LIBS_TO_BUILD  = mbedtls.a

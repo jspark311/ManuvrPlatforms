@@ -25,7 +25,7 @@ limitations under the License.
 #include <AbstractPlatform.h>
 #include <StringBuilder.h>
 
-#if defined(CONFIG_MANUVR_STORAGE)
+#if defined(CONFIG_C3P_STORAGE)
   #include <Storage.h>
 #endif
 
@@ -157,7 +157,7 @@ class ESP32Platform : public AbstractPlatform {
     inline void suspendThread() {  vTaskSuspend(xTaskGetCurrentTaskHandle()); };
 
     /* Storage, if applicable */
-    #if defined(CONFIG_MANUVR_STORAGE)
+    #if defined(CONFIG_C3P_STORAGE)
       ESP32Storage* storage = nullptr;
     #endif
 

@@ -34,7 +34,7 @@ This file forms the catch-all for linux platforms that have no support.
 #include <sys/time.h>
 #include <sys/socket.h>
 
-#if defined(CONFIG_MANUVR_STORAGE)
+#if defined(CONFIG_C3P_STORAGE)
   #include "LinuxStorage.h"
 #endif
 

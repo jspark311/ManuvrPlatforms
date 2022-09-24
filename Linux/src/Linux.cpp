@@ -28,20 +28,20 @@ This file forms the catch-all for linux platforms that have no specific support.
 #include <signal.h>
 #include <syslog.h>
 #include <sys/utsname.h>
-#if defined(CONFIG_MANUVR_STORAGE)
+#if defined(CONFIG_C3P_STORAGE)
   #include <fcntl.h>      // Needed for integrity checks.
   #include <sys/stat.h>   // Needed for integrity checks.
 #endif
 
 
-#ifndef CONFIG_MANUVR_INTERVAL_PERIOD_MS
+#ifndef CONFIG_C3P_INTERVAL_PERIOD_MS
   // Unless otherwise specified, the interval timer will fire at 10Hz.
-  #define CONFIG_MANUVR_INTERVAL_PERIOD_MS  100
+  #define CONFIG_C3P_INTERVAL_PERIOD_MS  100
 #endif
 
-#ifndef CONFIG_MANUVR_CRYPTO_QUEUE_MAX_DEPTH
+#ifndef CONFIG_C3P_CRYPTO_QUEUE_MAX_DEPTH
   // Unless otherwise specified, the cryptographic processing queue depth is 32.
-  #define CONFIG_MANUVR_CRYPTO_QUEUE_MAX_DEPTH  32
+  #define CONFIG_C3P_CRYPTO_QUEUE_MAX_DEPTH  32
 #endif
 
 #ifndef PLATFORM_RNG_CARRY_CAPACITY
@@ -126,9 +126,9 @@ bool set_linux_interval_timer() {
   sigaction(SIGALRM, &_signal_action_SIGALRM, NULL);
 
   _interval.it_value.tv_sec      = 0;
-  _interval.it_value.tv_usec     = CONFIG_MANUVR_INTERVAL_PERIOD_MS * 1000;
+  _interval.it_value.tv_usec     = CONFIG_C3P_INTERVAL_PERIOD_MS * 1000;
   _interval.it_interval.tv_sec   = 0;
-  _interval.it_interval.tv_usec  = CONFIG_MANUVR_INTERVAL_PERIOD_MS * 1000;
+  _interval.it_interval.tv_usec  = CONFIG_C3P_INTERVAL_PERIOD_MS * 1000;
 
   int err = setitimer(ITIMER_REAL, &_interval, nullptr);
   if (err) {
@@ -584,7 +584,7 @@ int LinuxPlatform::wakeThread(unsigned long _thread_id) {
 /*******************************************************************************
 * Persistent configuration                                                     *
 *******************************************************************************/
-#if defined(CONFIG_MANUVR_STORAGE)
+#if defined(CONFIG_C3P_STORAGE)
   // Called during boot to load configuration.
   int8_t LinuxPlatform::_load_config() {
     if (_storage_device) {
@@ -658,7 +658,7 @@ uint8_t last_restart_reason() {  return 0;  }
 void LinuxPlatform::firmware_reset(uint8_t reason) {
   // TODO: If reason is update, pull binary from a location of firmware's choice,
   //   install firmware after validation, and schedule a program restart.
-  #if defined(CONFIG_MANUVR_STORAGE)
+  #if defined(CONFIG_C3P_STORAGE)
     if (_self && _self->isDirty()) {
       // Save the dirty identity.
       // TODO: int8_t persistentWrite(const char*, uint8_t*, int, uint16_t);
@@ -785,7 +785,7 @@ int8_t LinuxPlatform::init() {
   _init_rng();
   _alter_flags(true, ABSTRACT_PF_FLAG_RTC_READY);
 
-  #if defined(CONFIG_MANUVR_STORAGE)
+  #if defined(CONFIG_C3P_STORAGE)
     LinuxStorage* sd = new LinuxStorage(root_config);
     _storage_device = (Storage*) sd;
   #endif
@@ -793,7 +793,7 @@ int8_t LinuxPlatform::init() {
   set_linux_interval_timer();
 
   #if defined(__HAS_CRYPT_WRAPPER)
-    crypto = new CryptoProcessor(CONFIG_MANUVR_CRYPTO_QUEUE_MAX_DEPTH);
+    crypto = new CryptoProcessor(CONFIG_C3P_CRYPTO_QUEUE_MAX_DEPTH);
     if (nullptr != crypto) {
       if (0 != crypto->init()) {
         return -3;

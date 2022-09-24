@@ -20,7 +20,7 @@ limitations under the License.
 
 Data-persistence layer for linux.
 Implemented as a CBOR object within a single file. This feature therefore
-  requires MANUVR_CBOR. In the future, it may be made to operate on some
+  requires CONFIG_C3P_CBOR. In the future, it may be made to operate on some
   other encoding, be run through a cryptographic pipe, etc.
 */
 

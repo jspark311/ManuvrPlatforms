@@ -120,10 +120,10 @@ int main(int argc, const char* argv[]) {
   console.hasColor(true);
 
   // Define the commands for the application. Usually, these are some basics.
-  console.defineCommand("help",     '?',  ParsingConsole::tcodes_str_1, "Prints help to console.", "", 0, callback_help);
-  console.defineCommand("console",  '\0', ParsingConsole::tcodes_str_3, "Console conf", "[history|rxterm|txterm|echo|prompt]", 0, callback_console_tools);
-  console.defineCommand("kvp",      'k',  ParsingConsole::tcodes_str_4, "Temporary code to test KVP.", "", 0, callback_kvp_tools);
-  console.defineCommand("quit",     'Q',  ParsingConsole::tcodes_0, "Commit sudoku.", "", 0, callback_program_quit);
+  console.defineCommand("help",     '?',  "Prints help to console.", "", 0, callback_help);
+  console.defineCommand("console",  '\0', "Console conf", "[history|rxterm|txterm|echo|prompt]", 0, callback_console_tools);
+  console.defineCommand("kvp",      'k',  "Temporary code to test KVP.", "", 0, callback_kvp_tools);
+  console.defineCommand("quit",     'Q',  "Commit sudoku.", "", 0, callback_program_quit);
 
   // The platform itself comes with a convenient set of console functions.
   platform.configureConsole(&console);

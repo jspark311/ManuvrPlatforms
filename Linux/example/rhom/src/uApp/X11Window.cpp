@@ -32,17 +32,56 @@ extern SensorFilter<uint32_t> _filter;
 extern ManuvrLink* m_link;
 extern ParsingConsole console;
 
-Display* dpy = nullptr;
-XImage* ximage = nullptr;
+/* This program wraps X11 constructs, but we keep some globals. */
+Display* dpy    = nullptr;
+XImage*  ximage = nullptr;
 
-Image _main_img(1, 1, ImgBufferFormat::R8_G8_B8_ALPHA);    // The true-size frame-buffer.
+/* There are a collection of Image buffers. */
+Image _main_img(1, 1, ImgBufferFormat::R8_G8_B8_ALPHA);        // The true-size frame-buffer.
+Image _scaled_main_img(1, 1, ImgBufferFormat::R8_G8_B8_ALPHA); // Scaled copy of the main image.
 Image _overlay_img(1, 1, ImgBufferFormat::R8_G8_B8_ALPHA); // The image used to render the X window. Might be larger.
+
 UIGfxWrapper ui_gfx_main(&_main_img);     // Wrapper for elements rendered in the main pane.
 UIGfxWrapper ui_gfx_overlay(&_overlay_img);  // Wrapper for elements rendered in the overlay.
 
 SensorFilter<uint32_t> test_filter_0(TEST_FILTER_DEPTH, FilteringStrategy::RAW);
 SensorFilter<float> test_filter_1(TEST_FILTER_DEPTH, FilteringStrategy::RAW);
 SensorFilter<float> test_filter_stdev(TEST_FILTER_DEPTH, FilteringStrategy::RAW);
+
+
+/*******************************************************************************
+* UI definition
+*******************************************************************************/
+
+GfxUILayout test0(
+  0, 0, 0, 0,
+  0, 0, 0, 0,
+  0, 0, 0, 0
+);
+GfxUILayout test1(
+  0, 0, 0, 0,
+  0, 0, 0, 0,
+  0, 0, 0, 0
+);
+GfxUIGroup test2(
+  GfxUILayout{
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0
+  }, 0
+);
+
+
+GfxUIStyle base_style;
+
+//base_style.color_bg          = 0;
+//base_style.color_border      = 0xFFFFFF;
+//base_style.color_header      = 0x20B2AA;
+//base_style.color_active      = 0x20B2AA;
+//base_style.color_inactive    = 0xA0A0A0;
+//base_style.color_selected    = 0x202020;
+//base_style.color_unselected  = 0x202020;
+//base_style.text_size         = 2;
 
 
 // Graph the screen re-draw period.
@@ -148,8 +187,8 @@ GfxUIMagnifier ui_magnifier(
 
 StopWatch redraw_timer;
 
-bool gravepact = true;
-bool mlink_onscreen = false;
+bool gravepact      = true;   // Closing the GUI window should terminate the main thread?
+bool mlink_onscreen = false;  // Has the Link object been rendered?
 
 uint pointer_x = 0;
 uint pointer_y = 0;
@@ -323,6 +362,7 @@ void* gui_thread_handler(void*) {
       0x000000   // TODO: Use colormap.
     );
     _main_img.reallocate();
+    _scaled_main_img.reallocate();
     _overlay_img.reallocate();
     test_filter_0.init();
     test_filter_1.init();
@@ -385,9 +425,14 @@ void* gui_thread_handler(void*) {
                   }
                   if (_main_img.setSize(window_w, window_h)) {
                     if (_overlay_img.setSize(window_w, window_h)) {
-                      c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "uApp frame buffer resized to %u x %u x %u", _overlay_img.x(), _overlay_img.y(), _overlay_img.bitsPerPixel());
-                      resize_and_render_all_elements();
-                      ximage = XCreateImage(dpy, visual, DefaultDepth(dpy, screen_num), ZPixmap, 0, (char*)_overlay_img.buffer(), _overlay_img.x(), _overlay_img.y(), 32, 0);
+                      //if (_scaled_main_img.setSize(window_w * _fb_scale, window_h << 1)) {
+                        c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "uApp frame buffer resized to %u x %u x %u", _overlay_img.x(), _overlay_img.y(), _overlay_img.bitsPerPixel());
+                        resize_and_render_all_elements();
+                        ximage = XCreateImage(dpy, visual, DefaultDepth(dpy, screen_num), ZPixmap, 0, (char*)_overlay_img.buffer(), _overlay_img.x(), _overlay_img.y(), 32, 0);
+                      //}
+                      //else {
+                      //  c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "uApp scaled frame buffer resize failed.");
+                      //}
                     }
                     else {
                       c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Overlay frame buffer resize failed.");
@@ -398,7 +443,7 @@ void* gui_thread_handler(void*) {
                   }
                 }
               }
-              window_ready = (nullptr != ximage) & _main_img.allocated();
+              window_ready = (nullptr != ximage) & _main_img.allocated() & _scaled_main_img.allocated();
             }
             break;
 

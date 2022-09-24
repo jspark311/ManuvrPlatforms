@@ -29,8 +29,8 @@ Data-persistence layer for Teensy.
 #include <EventReceiver.h>
 #include <Storage.h>
 
-#if defined(CONFIG_MANUVR_STORAGE) && !defined(MANUVR_CBOR)
-  #error The TeensyStorage class requires MANUVR_CBOR be enabled.
+#if defined(CONFIG_C3P_STORAGE) && !defined(CONFIG_C3P_CBOR)
+  #error The TeensyStorage class requires CONFIG_C3P_CBOR be enabled.
 #endif
 
 class TeensyStorage : public EventReceiver, public Storage {

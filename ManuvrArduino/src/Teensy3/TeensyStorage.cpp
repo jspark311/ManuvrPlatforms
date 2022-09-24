@@ -19,7 +19,7 @@ limitations under the License.
 
 
 Implemented as a CBOR object within EEPROM. This feature therefore
-  requires MANUVR_CBOR. In the future, it may be made to operate on some
+  requires CONFIG_C3P_CBOR. In the future, it may be made to operate on some
   other encoding, be run through a cryptographic pipe, etc.
 
 CBOR data begins at offset 4. The first uint32 is broken up this way:
@@ -37,7 +37,7 @@ CBOR data begins at offset 4. The first uint32 is broken up this way:
 #include <Platform/Platform.h>
 #include <Platform/Targets/Teensy3/TeensyStorage.h>
 
-#if defined(CONFIG_MANUVR_STORAGE)
+#if defined(CONFIG_C3P_STORAGE)
 #include <EEPROM.h>
 
 // We want this definition isolated to the compilation unit.
@@ -307,6 +307,6 @@ int8_t TeensyStorage::notify(ManuvrMsg* active_event) {
 //  flushLocalLog();
 //}
 //#endif   // MANUVR_CONSOLE_SUPPORT
-#endif   // __MANUVR_LINUX & CONFIG_MANUVR_STORAGE
+#endif   // __MANUVR_LINUX & CONFIG_C3P_STORAGE
 
 #endif   // defined(__MK20DX256__) || defined(__MK20DX128__)

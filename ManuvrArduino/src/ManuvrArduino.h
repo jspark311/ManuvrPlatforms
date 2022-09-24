@@ -28,15 +28,15 @@
 #endif
 
 
-#if defined(CONFIG_MANUVR_STORAGE)
+#if defined(CONFIG_C3P_STORAGE)
   #if defined(__IMXRT1052__) || defined(__IMXRT1062__)
     // TODO: support this.
   #elif defined(__MK20DX256__) || defined(__MK20DX128__)
     #include "Teensy3/TeensyStorage.h"
   #else
-    #error CONFIG_MANUVR_STORAGE was set, but have no support in Vanilla Arduino.
+    #error CONFIG_C3P_STORAGE was set, but have no support in Vanilla Arduino.
   #endif
-#endif   // CONFIG_MANUVR_STORAGE
+#endif   // CONFIG_C3P_STORAGE
 
 
 class ArduinoPlatform : public AbstractPlatform {
