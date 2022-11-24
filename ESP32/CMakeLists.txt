@@ -14,7 +14,7 @@ file(GLOB_RECURSE SOURCE_FILES
 idf_component_register(
   SRCS ${SOURCE_FILES}
   INCLUDE_DIRS "."
-  REQUIRES CppPotpourri nvs_flash
+  REQUIRES CppPotpourri nvs_flash esp_adc_cal
 )
 
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-ignored-qualifiers -Wno-implicit-fallthrough)
