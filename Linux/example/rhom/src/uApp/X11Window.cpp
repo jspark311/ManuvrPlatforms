@@ -3,23 +3,9 @@
 * Author: J. Ian Lindsay
 *
 */
-#include <cstdio>
-#include <stdlib.h>
-#include <stdarg.h>
-#include <string.h>
-#include <ctype.h>
-#include <unistd.h>
-#include <math.h>
-
-#include <fstream>
-#include <iostream>
-
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
-#include <X11/Xos.h>
-#include <sys/utsname.h>
 
 #include "RHoM.h"
+#include "C3POnX11.h"
 
 #define CONSOLE_INPUT_HEIGHT  200
 #define TEST_FILTER_DEPTH     310
@@ -196,18 +182,6 @@ uint window_w  = 0;
 uint window_h  = 0;
 
 
-/*
-* This is the listing of buttons we will respond to, along with their queues
-*   and application response policies.
-*/
-struct MouseButtonDef {
-  const uint button_id;
-  const char* const label;
-  const GfxUIEvent gfx_event_down;
-  const GfxUIEvent gfx_event_up;
-};
-
-
 MouseButtonDef mouse_buttons[] = {
   { .button_id = 1,
     .label = "Left",
@@ -288,9 +262,12 @@ void proc_mouse_button(uint btn_id, uint x, uint y, bool pressed) {
 }
 
 
+// TODO: Last time I tried to consolidate this function here, it failed to work.
 int pollPointerLocation() {
   return 0;
 }
+
+
 
 /*******************************************************************************
 *
@@ -611,5 +588,89 @@ int callback_gui_tools(StringBuilder* text_return, StringBuilder* args) {
     // If enabled, this setting causes modals to be spawned off as distinct
     //   child windows. If disabled, you will get an overlay instead.
   }
+  return ret;
+}
+
+
+
+
+/*******************************************************************************
+* TODO: Migrate to new source file, and promote to Linux ManuvrPlatform.
+*******************************************************************************/
+
+/**
+* Constructor
+*/
+C3Px11Window::C3Px11Window(uint32_t win_x, uint32_t win_y, uint32_t win_w, uint32_t win_h)
+  : _width(win_w), _height(win_h), _pointer_x(0), _pointer_y(0), _thread_id(0),
+  _ximage(nullptr), _screen_num(0),
+  _refresh_period(20), _fb(win_w, win_h, ImgBufferFormat::R8_G8_B8_ALPHA)
+{
+  _dpy = XOpenDisplay(nullptr);
+  _screen_num = DefaultScreen(_dpy);
+  if ((0 == win_x) & (0 == win_y) & (0 == win_w) & (0 == win_h)) {
+    // If the ordered pairs for Position and Size are both 0, Interpret this to
+    //   be shorthand for full-screen.
+    _width = DisplayWidth(_dpy, _screen_num);
+    _height = DisplayHeight(_dpy, _screen_num);
+    _main_img.setSize(_width, _height);
+  }
+  _win = XCreateSimpleWindow(
+    _dpy, RootWindow(_dpy, _screen_num),
+    win_x, win_y,
+    _width, _height,
+    1,
+    0x9932CC,  // TODO: Use colormap.
+    0x000000   // TODO: Use colormap.
+  );
+
+  if (_fb.allocated()) {
+    platform.createThread(&_thread_id, nullptr, gui_thread_handler, nullptr, nullptr);
+  }
+}
+
+
+/**
+* Destructor
+*/
+C3Px11Window::~C3Px11Window() {
+  // Clean up the resources we allocated.
+  if (_ximage) {
+    _ximage->data = nullptr;  // Do not want X11 to free the Image's buffer.
+    XDestroyImage(_ximage);
+    _ximage = nullptr;
+  }
+  XDestroyWindow(_dpy, _win);
+  XCloseDisplay(_dpy);
+}
+
+
+
+// Called from the thread.
+int8_t C3Px11Window::poll() {
+  int8_t ret = 0;
+  return ret;
+}
+
+
+
+// NOTE: The GUI is running in a separate thread. It should only be
+//   manipulated indirectly by an IPC mechanism, or by a suitable stand-ins.
+int8_t C3Px11Window::console_callback(StringBuilder* text_return, StringBuilder* args) {
+  int8_t ret = 0;
+  char* cmd = args->position_trimmed(0);
+  if (0 == StringBuilder::strcasecmp(cmd, "resize")) {
+    // NOTE: This is against GUI best-practices (according to Xorg). But it
+    //   might be useful later.
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "border-pix")) {
+    //XSetWindowBorder(dpy, win, 40);
+  }
+  return ret;
+}
+
+
+int8_t C3Px11Window::_resize_and_render_all_elements() {
+  int8_t ret = 0;
   return ret;
 }

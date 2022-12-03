@@ -26,6 +26,9 @@
 #include "CryptoBurrito/CryptoBurrito.h"
 #include <Linux.h>
 
+#ifndef __RHOM_HEADER_H__
+#define __RHOM_HEADER_H__
+
 
 #define PROGRAM_VERSION    "0.0.3"    // Program version.
 
@@ -68,3 +71,6 @@ class LinkSockPair {
       delete link;
     };
 };
+
+
+#endif  // __RHOM_HEADER_H__
