@@ -78,6 +78,7 @@ class C3Px11Window {
     virtual int8_t createWindow()     =0;
     virtual int8_t closeWindow()      =0;
     virtual int8_t render(bool force) =0;
+    virtual int8_t render_overlay()   =0;
 
     inline uint32_t width() {         return root.elementWidth();    };
     inline uint32_t height() {        return root.elementHeight();   };
