@@ -16,33 +16,10 @@
 
 #include "RHoM.h"
 
-#include "CppPotpourri.h"
-#include "AbstractPlatform.h"
-#include "StringBuilder.h"
-#include "ParsingConsole.h"
-#include "ElementPool.h"
-#include "GPSWrapper.h"
-#include "UARTAdapter.h"
-#include "I2CAdapter.h"
-#include "KeyValuePair.h"
-#include "SensorFilter.h"
-#include "Vector3.h"
-#include "StopWatch.h"
-#include "uuid.h"
-#include "cbor-cpp/cbor.h"
-#include "Image/Image.h"
-#include "Identity/IdentityUUID.h"
-#include "Identity/Identity.h"
-#include "M2MLink/M2MLink.h"
-#include <CryptoBurrito/CryptoBurrito.h>
-#include <Linux.h>
-
-
 #define U_INPUT_BUFF_SIZE      512    // The maximum size of user input.
 
 extern void* gui_thread_handler(void*);
-extern int callback_gui_tools(StringBuilder*, StringBuilder*);
-extern Image _main_img;
+int callback_gui_tools(StringBuilder*, StringBuilder*);
 
 
 /*******************************************************************************
@@ -60,10 +37,10 @@ using namespace std;
 CryptoLogShunt crypto_logger;
 const char*   program_name;
 bool          continue_running  = true;
-unsigned long gui_thread_id     = 0;
 
 uint32_t ping_req_time = 0;
 uint32_t ping_nonce    = 0;
+MainGuiWindow* c3p_root_window   = nullptr;
 
 
 M2MLinkOpts link_opts(
@@ -102,9 +79,8 @@ LinuxStdIO console_adapter;
 LinuxSockPipe socket_adapter;
 
 
+
 LinkedList<LinkSockPair*> active_links;
-
-
 
 int8_t new_socket_connection_callback(LinuxSockListener* svr, LinuxSockPipe* pipe) {
   int8_t ret = 0;   // We should reject by default.
@@ -117,7 +93,6 @@ int8_t new_socket_connection_callback(LinuxSockListener* svr, LinuxSockPipe* pip
   }
   return ret;
 }
-
 
 
 
@@ -238,13 +213,13 @@ int callback_crypt_tools(StringBuilder* text_return, StringBuilder* args) {
   }
 
   else if (0 == StringBuilder::strcasecmp(cmd, "rng2")) {
-    uint depth = _main_img.bytesUsed();
-    if (0 != depth) {
-      CryptOpRNG* rng_op = new CryptOpRNG(nullptr);
-      rng_op->setResBuffer(_main_img.buffer(), depth);
-      rng_op->reapJob(true);
-      text_return->concatf("queue_job() returned %d\n", platformObj()->crypto->queue_job(rng_op));
-    }
+    // uint depth = _main_img.bytesUsed();
+    // if (0 != depth) {
+    //   CryptOpRNG* rng_op = new CryptOpRNG(nullptr);
+    //   rng_op->setResBuffer(_main_img.buffer(), depth);
+    //   rng_op->reapJob(true);
+    //   text_return->concatf("queue_job() returned %d\n", platformObj()->crypto->queue_job(rng_op));
+    // }
   }
   return ret;
 }
@@ -398,8 +373,17 @@ int main(int argc, const char *argv[]) {
     }
     else if (strcasestr(argv[i], "--gui")) {
       // Instance an X11 window.
-      if (0 == gui_thread_id) {
-        platform.createThread(&gui_thread_id, nullptr, gui_thread_handler, nullptr, nullptr);
+      c3p_root_window = new MainGuiWindow(0, 0, 1024, 768, program_name);
+      if (c3p_root_window) {
+        if (0 == c3p_root_window->createWindow()) {
+          // The window thread is running.
+        }
+        else {
+          c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Failed to instance the root GUI window.");
+        }
+      }
+      else {
+        c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Failed to instance the root GUI window.");
       }
     }
     else if (argc - i >= 2) {    // Compound arguments go in this case block...
@@ -439,9 +423,10 @@ int main(int argc, const char *argv[]) {
   console.setTXTerminator(LineTerm::LF);
   console.setRXTerminator(LineTerm::LF);
   StringBuilder prompt_string;   // We want to have a nice prompt string...
-  if (0 == gui_thread_id) {
+  if (nullptr == c3p_root_window) {
     // The GUI thread handles the console, if it was enabled. If there is no
     //   GUI, mutually connect the console class to STDIO.
+    console.defineCommand("gui",         'G', "GUi tools.", "[echo|prompt|force|rxterm|txterm]", 0, callback_gui_tools);
     console.localEcho(false);
     console_adapter.readCallback(&console);
     console.setOutputTarget(&console_adapter);
@@ -456,9 +441,6 @@ int main(int argc, const char *argv[]) {
 
 
   console.defineCommand("console",     '\0', "Console conf.", "[echo|prompt|force|rxterm|txterm]", 0, callback_console_tools);
-  if (0 != gui_thread_id) {
-    console.defineCommand("gui",         'G', "GUi tools.", "[echo|prompt|force|rxterm|txterm]", 0, callback_gui_tools);
-  }
   console.defineCommand("crypto",     'C', "Cryptographic tools.", "", 0, callback_crypt_tools);
   console.defineCommand("link",       'l', "Linked device tools.", "", 0, callback_link_tools);
   console.defineCommand("uart",       'u', "UART tools.", "", 0, callback_uart_tools);
@@ -495,10 +477,7 @@ int main(int argc, const char *argv[]) {
   }
   console_adapter.poll();
 
-  while (0 != gui_thread_id) {
-    sleep_ms(10);
-  }
-
+  delete c3p_root_window;   // Will block until the GUI thread is shut down.
   platform.firmware_shutdown(0);     // Clean up the platform.
   return 0;  // Should never execute.
 }

@@ -53,6 +53,7 @@ CXX_SRCS += ../CppPotpourri/src/Image/ImageUtils/*.cpp
 CXX_SRCS += ../CppPotpourri/src/M2MLink/*.cpp
 CXX_SRCS += ../CppPotpourri/src/CryptoBurrito/*.cpp
 CXX_SRCS += ../CppPotpourri/src/CryptoBurrito/Providers/*.cpp
+CXX_SRCS += ../../src/GUI/X11/*.cpp
 CXX_SRCS += ../../src/Linux.cpp
 CXX_SRCS += ../../src/LinuxStdIO.cpp
 CXX_SRCS += ../../src/LinuxUART.cpp
