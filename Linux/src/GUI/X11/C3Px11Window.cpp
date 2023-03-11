@@ -175,8 +175,9 @@ int8_t C3Px11Window::_proc_mouse_button(uint16_t btn_id, uint32_t x, uint32_t y,
   MouseButtonDef* btn = _btn_defs.getByPriority(btn_id);
   if (nullptr != btn) {
     const GfxUIEvent event = pressed ? btn->gfx_event_down : btn->gfx_event_up;
-    if (GfxUIEvent::NONE != event) {
-      if (!root.notify(event, x, y)) {
+    if ((GfxUIEvent::NONE != event) && (GfxUIEvent::INVALID != event)) {
+      PriorityQueue<GfxUIEvent> change_log;
+      if (!root.notify(event, x, y, &change_log)) {
         //c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "%s %s: (%d, %d) (no target)", btn->label, (pressed ? "click" : "release"), x, y);
       }
       else {

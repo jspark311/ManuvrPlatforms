@@ -71,7 +71,7 @@ class C3Px11Window {
     UIGfxWrapper    gfx_overlay;   // Wrapper for transient overlay data.
 
     C3Px11Window(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const char* TITLE = "C3Px11Window");
-    ~C3Px11Window();
+    virtual ~C3Px11Window();
 
     /* These functions must be implemented by the application as typed children of this class. */
     virtual int8_t poll()             =0;
