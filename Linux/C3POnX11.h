@@ -45,6 +45,10 @@ void* gui_thread_handler(void*);
 /*******************************************************************************
 * Types
 *******************************************************************************/
+
+typedef void (*ValueChangeCallback)(GfxUIElement*);
+
+
 /*
 * This is the listing of buttons we will respond to, along with their queues
 *   and application response policies. The application should define these if
@@ -85,9 +89,17 @@ class C3Px11Window {
     inline Image*   frameBuffer() {   return &_fb;      };
     inline Image*   overlay() {       return &_overlay; };
     inline bool     windowReady() {   return ((nullptr != _ximage) && _fb.allocated());   };
+    inline void setCallback(ValueChangeCallback x) {  _vc_callback = x;   };
+    inline bool pointerInWindow() {   return ((0 <= _pointer_x) && (0 <= _pointer_y) && (width() > (uint32_t) _pointer_x) && (height() > (uint32_t) _pointer_y));  };
+
+    inline void queryPointer(int* x, int* y) {
+      *x = _pointer_x;
+      *y = _pointer_y;
+    };
+
+    GfxUIElement* elementUnderPointer();
 
     int8_t map_button_inputs(MouseButtonDef*, uint32_t count);
-    int8_t queryPointer(int* c_pos_x, int* c_pos_y);
     //int8_t console_callback(StringBuilder* text_return, StringBuilder* args);
 
     friend void* gui_thread_handler(void*);  // We allow the ISR access to private members.
@@ -97,6 +109,8 @@ class C3Px11Window {
     const char*     _title;
     int             _pointer_x;
     int             _pointer_y;
+    int             _pointer_drag_point_x;
+    int             _pointer_drag_point_y;
     unsigned long   _thread_id;
     Window          _win;
     XImage*         _ximage;
@@ -107,13 +121,17 @@ class C3Px11Window {
     StopWatch       _redraw_timer;
     Image           _fb;
     Image           _overlay;
+    ValueChangeCallback _vc_callback;
     PriorityQueue<MouseButtonDef*> _btn_defs;
-    bool            _keep_polling = false;
+    bool            _keep_polling;
 
     int8_t _init_window();
     int8_t _deinit_window();
     int8_t _redraw_window();
     int8_t _refit_window();
+    int8_t _process_motion();
+    int8_t _query_pointer();
+    int8_t _proc_changelog(PriorityQueue<GfxUIElement*>* resp_list);
     int8_t _proc_mouse_button(uint16_t btn_id, uint32_t x, uint32_t y, bool pressed);
 };
 

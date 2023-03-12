@@ -28,6 +28,12 @@ void* gui_thread_handler(void* _ptr) {
 * Class members
 *******************************************************************************/
 
+// TODO: This is NOT a class member, but will be once it is decided if it ought
+//   to be a list or a singleton.
+GfxUIElement*   _pointer_client = nullptr;
+GfxUIElement*   _mrtlhne = nullptr;  // Most-recent top-level hover-notified element. Suffer.
+
+
 /**
 * Constructor
 */
@@ -38,6 +44,7 @@ C3Px11Window::C3Px11Window(uint32_t win_x, uint32_t win_y, uint32_t win_w, uint3
   _ximage(nullptr), _screen_num(0), _refresh_period(20),
   _fb(win_w, win_h, ImgBufferFormat::R8_G8_B8_ALPHA),
   _overlay(win_w, win_h, ImgBufferFormat::R8_G8_B8_ALPHA),
+  _vc_callback(nullptr),
   _keep_polling(true) {}
 
 
@@ -94,7 +101,7 @@ int8_t C3Px11Window::_init_window() {
         _redraw_timer.reset();
         GC gc = DefaultGC(_dpy, _screen_num);
         XSetForeground(_dpy, gc, 0xAAAAAA);
-        XSelectInput(_dpy, _win, ExposureMask | ButtonPressMask | ButtonReleaseMask | KeyPressMask); // | PointerMotionMask);
+        XSelectInput(_dpy, _win, ExposureMask | ButtonPressMask | ButtonReleaseMask | KeyPressMask | PointerMotionMask);
         XMapWindow(_dpy, _win);
         XStoreName(_dpy, _win, _title);
 
@@ -137,8 +144,51 @@ int8_t C3Px11Window::_refit_window() {
 }
 
 
+/*
+* This will mutate the state of the pointer as the window reckons.
+*/
+int8_t C3Px11Window::_process_motion() {
+  int8_t ret = -1;
+  if (_win) {
+    ret--;
+    if (pointerInWindow()) {
+      ret = 0;
+      PriorityQueue<GfxUIElement*> change_log;
+      if (nullptr != _pointer_client) {
+        _pointer_client->notify(GfxUIEvent::DRAG_START, _pointer_x, _pointer_y, &change_log);
+        ret++;
+      }
 
-int8_t C3Px11Window::queryPointer(int* c_pos_x, int* c_pos_y) {
+      GfxUIElement* current_hover = elementUnderPointer();
+      if (nullptr != current_hover) {
+        if (nullptr == _mrtlhne) {
+          current_hover->notify(GfxUIEvent::HOVER_IN, _pointer_x, _pointer_y, &change_log);
+          ret++;
+        }
+        else if (_mrtlhne != current_hover) {
+          _mrtlhne->notify(GfxUIEvent::HOVER_OUT, _pointer_x, _pointer_y, &change_log);
+          current_hover->notify(GfxUIEvent::HOVER_IN, _pointer_x, _pointer_y, &change_log);
+          ret++;
+        }
+      }
+      else if (nullptr != _mrtlhne) {
+        _mrtlhne->notify(GfxUIEvent::HOVER_OUT, _pointer_x, _pointer_y, &change_log);
+        _mrtlhne = nullptr;
+        ret++;
+      }
+
+      if (0 < ret) {  _mrtlhne = current_hover;   }
+      _proc_changelog(&change_log);
+    }
+  }
+  return ret;
+}
+
+
+/*
+* This will mutate the state of the pointer as the window reckons.
+*/
+int8_t C3Px11Window::_query_pointer() {
   int8_t ret = -1;
   if (_win) {
     int garbage = 0;
@@ -150,9 +200,26 @@ int8_t C3Px11Window::queryPointer(int* c_pos_x, int* c_pos_y) {
       &_pointer_x, &_pointer_y,
       &mask_ret
     );
-    *c_pos_x = _pointer_x;
-    *c_pos_y = _pointer_y;
     ret = 0;
+  }
+  return ret;
+}
+
+
+/*
+* Locate and return the element under the pointer.
+* Depth-first search. So the result will be the inner-most element that contains
+*   the current pointer location.
+*/
+GfxUIElement* C3Px11Window::elementUnderPointer() {
+  GfxUIElement* ret = nullptr;
+  //_query_pointer();
+  if (pointerInWindow()) {
+    PriorityQueue<GfxUIElement*> change_log;
+    root.notify(GfxUIEvent::IDENTIFY, _pointer_x, _pointer_y, &change_log);
+    if (change_log.hasNext()) {
+      ret = change_log.dequeue();
+    }
   }
   return ret;
 }
@@ -170,20 +237,75 @@ int8_t C3Px11Window::map_button_inputs(MouseButtonDef* list, uint32_t count) {
 }
 
 
+/*
+* This function handles returned events from a notify() cycle.
+* This function executes before a redraw, and synchronously with user action.
+*/
+int8_t C3Px11Window::_proc_changelog(PriorityQueue<GfxUIElement*>* change_log) {
+  int8_t ret = 0;
+  // Unwind the response events...
+  while (change_log->hasNext()) {
+    GfxUIEvent    response_event   = (GfxUIEvent) change_log->getPriority(0);
+    GfxUIElement* response_element = change_log->dequeue();
+    switch (response_event) {
+      case GfxUIEvent::DRAG_START:
+        //c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "Drag start %p", _pointer_client);
+        _pointer_client = response_element;
+        break;
+      case GfxUIEvent::DRAG_STOP:
+        //c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "Drag stop %p", _pointer_client);
+        if (_pointer_client == response_element) {
+          _pointer_client = nullptr;  // No ceremony required.
+        }
+        break;
+      case GfxUIEvent::VALUE_CHANGE:
+        if (_vc_callback) {
+          _vc_callback(response_element);
+        }
+        break;
+      default:
+        break;
+    }
+  }
+  return ret;
+}
+
+
+
+
 int8_t C3Px11Window::_proc_mouse_button(uint16_t btn_id, uint32_t x, uint32_t y, bool pressed) {
   int8_t ret = 0;
   MouseButtonDef* btn = _btn_defs.getByPriority(btn_id);
   if (nullptr != btn) {
+    PriorityQueue<GfxUIElement*> change_log;
+    GfxUIElement* current_hover = elementUnderPointer();
     const GfxUIEvent event = pressed ? btn->gfx_event_down : btn->gfx_event_up;
-    if ((GfxUIEvent::NONE != event) && (GfxUIEvent::INVALID != event)) {
-      PriorityQueue<GfxUIEvent> change_log;
-      if (!root.notify(event, x, y, &change_log)) {
-        //c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "%s %s: (%d, %d) (no target)", btn->label, (pressed ? "click" : "release"), x, y);
-      }
-      else {
-        ret = 1;
-      }
+
+    switch (event) {
+      case GfxUIEvent::RELEASE:
+        if ((nullptr != _pointer_client) && (_pointer_client != current_hover)) {
+          // If we are keeping an object aprised on the state of the mouse, it
+          //   needs to know about the release of the button, JiC it didn't
+          //   occur while hovering over the element that initiated the drag.
+          // TODO: Cross-element drag-and-drop should go here.
+          //c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Terminal drag notify %p", _pointer_client);
+          _pointer_client->notify(GfxUIEvent::RELEASE, x, y, &change_log);
+          _pointer_client = nullptr;
+        }
+        // NOTE: No break;
+      default:
+        if (root.notify(event, x, y, &change_log)) {
+          ret = 1;
+        }
+        else {
+          //c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "%s %s: (%d, %d) (no target)", btn->label, (pressed ? "click" : "release"), x, y);
+        }
+        break;
+      case GfxUIEvent::NONE:
+      case GfxUIEvent::INVALID:
+        break;
     }
+    _proc_changelog(&change_log);   // Unwind the response events.
   }
   //else c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Unhandled %s %d: (%d, %d)", (pressed ? "click" : "release"), btn_id, x, y);
   return ret;
@@ -206,7 +328,7 @@ int8_t C3Px11Window::_redraw_window() {
         if (_fb.setSize(width(), height())) {
           _ximage = XCreateImage(_dpy, _visual, DefaultDepth(_dpy, _screen_num), ZPixmap, 0, (char*)_overlay.buffer(), _overlay.x(), _overlay.y(), 32, 0);
           if (_ximage) {
-            c3p_log(LOG_LEV_DEBUG, LOG_TAG, "Frame buffer resized to %u x %u x %u", _fb.x(), _fb.y(), _fb.bitsPerPixel());
+            c3p_log(LOG_LEV_DEBUG, "_redraw_window()", "Frame buffer resized to %u x %u x %u", _fb.x(), _fb.y(), _fb.bitsPerPixel());
           }
         }
       }
@@ -216,9 +338,7 @@ int8_t C3Px11Window::_redraw_window() {
       ret--;
       _refresh_period.reset();
       _redraw_timer.markStart();
-      int temp_ptr_x = 0;
-      int temp_ptr_y = 0;
-      queryPointer(&temp_ptr_x, &temp_ptr_y);
+      _query_pointer();
 
       render(true);
       root.render(&gfx, true);  // Render the static frame-buffer.
@@ -226,8 +346,7 @@ int8_t C3Px11Window::_redraw_window() {
       if (_overlay.allocated() && (_overlay.y() == _fb.y()) && (_overlay.x() == _fb.x())) {
         if (_ximage) {
           if (_overlay.setBufferByCopy(_fb.buffer(), _fb.format())) {
-            const bool  POINTER_IN_WINDOW = (0 <= temp_ptr_x) && (0 <= temp_ptr_y) && (width() > (uint32_t) temp_ptr_x) && (height() > (uint32_t) temp_ptr_y);
-            if (POINTER_IN_WINDOW) {
+            if (pointerInWindow()) {
               render_overlay();
             }
             XPutImage(_dpy, _win, DefaultGC(_dpy, DefaultScreen(_dpy)), _ximage, 0, 0, 0, 0, _overlay.x(), _overlay.y());
@@ -247,4 +366,4 @@ int8_t C3Px11Window::_redraw_window() {
   }
 
   return ret;
-};
+}
