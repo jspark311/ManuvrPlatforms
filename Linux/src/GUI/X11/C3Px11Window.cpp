@@ -165,7 +165,7 @@ int8_t C3Px11Window::_process_motion() {
           current_hover->notify(GfxUIEvent::HOVER_IN, _pointer_x, _pointer_y, &change_log);
           ret++;
         }
-        else if (_mrtlhne != current_hover) {
+        else if ((_mrtlhne != current_hover) || (current_hover->trackPointer())) {
           _mrtlhne->notify(GfxUIEvent::HOVER_OUT, _pointer_x, _pointer_y, &change_log);
           current_hover->notify(GfxUIEvent::HOVER_IN, _pointer_x, _pointer_y, &change_log);
           ret++;

@@ -338,6 +338,7 @@ int callback_socket_tools(StringBuilder* text_return, StringBuilder* args) {
 }
 
 
+C3PScheduler* scheduler = nullptr;
 
 /*******************************************************************************
 * The main function.                                                           *
@@ -439,8 +440,7 @@ int main(int argc, const char *argv[]) {
   console.setPromptString((const char*) prompt_string.string());
   console.emitPrompt(true);
 
-
-  console.defineCommand("console",     '\0', "Console conf.", "[echo|prompt|force|rxterm|txterm]", 0, callback_console_tools);
+  console.defineCommand("console",   '\0', "Console conf.", "[echo|prompt|force|rxterm|txterm]", 0, callback_console_tools);
   console.defineCommand("crypto",     'C', "Cryptographic tools.", "", 0, callback_crypt_tools);
   console.defineCommand("link",       'l', "Linked device tools.", "", 0, callback_link_tools);
   console.defineCommand("uart",       'u', "UART tools.", "", 0, callback_uart_tools);
@@ -454,6 +454,8 @@ int main(int argc, const char *argv[]) {
   console.printToLog(&output);
   console.printPrompt();
 
+  scheduler = C3PScheduler::getInstance();
+
   // The main loop. Run until told to stop.
   while (continue_running) {
     if (nullptr != m_link) {
@@ -463,6 +465,7 @@ int main(int argc, const char *argv[]) {
       }
     }
     console_adapter.poll();
+    scheduler->serviceSchedules();
   }
   console.emitPrompt(false);  // Avoid a trailing prompt.
 

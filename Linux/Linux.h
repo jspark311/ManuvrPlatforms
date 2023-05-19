@@ -28,6 +28,7 @@ This file forms the catch-all for linux platforms that have no support.
 #include <UARTAdapter.h>
 #include <I2CAdapter.h>
 #include "CryptoBurrito/CryptoBurrito.h"
+#include "C3PEvents/C3PScheduler.h"
 
 #include <pthread.h>
 #include <sys/signal.h>

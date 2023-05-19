@@ -35,8 +35,8 @@ This file forms the catch-all for linux platforms that have no specific support.
 
 
 #ifndef CONFIG_C3P_INTERVAL_PERIOD_MS
-  // Unless otherwise specified, the interval timer will fire at 10Hz.
-  #define CONFIG_C3P_INTERVAL_PERIOD_MS  100
+  // Unless otherwise specified, the interval timer will fire at 100Hz.
+  #define CONFIG_C3P_INTERVAL_PERIOD_MS  10
 #endif
 
 #ifndef CONFIG_C3P_CRYPTO_QUEUE_MAX_DEPTH
@@ -108,6 +108,7 @@ void _platform_sig_handler(int signo) {
       // NOTE: No break;
     case SIGALRM:
       // Any periodic platform actions should be done here.
+      C3PScheduler::getInstance()->advanceScheduler();
       break;
     default:
       printf("Unhandled signal: %d\n", signo);

@@ -46,6 +46,7 @@ CXX_SRCS += src/uApp/*.cpp
 CXX_SRCS += ../CppPotpourri/src/*.cpp
 CXX_SRCS += ../CppPotpourri/src/Identity/*.cpp
 CXX_SRCS += ../CppPotpourri/src/cbor-cpp/*.cpp
+CXX_SRCS += ../CppPotpourri/src/C3PEvents/*.cpp
 CXX_SRCS += ../CppPotpourri/src/TripleAxisPipe/*.cpp
 CXX_SRCS += ../CppPotpourri/src/Image/*.cpp
 CXX_SRCS += ../CppPotpourri/src/Image/GfxUI/*.cpp
