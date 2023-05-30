@@ -101,7 +101,7 @@ int8_t C3Px11Window::_init_window() {
         _redraw_timer.reset();
         GC gc = DefaultGC(_dpy, _screen_num);
         XSetForeground(_dpy, gc, 0xAAAAAA);
-        XSelectInput(_dpy, _win, ExposureMask | ButtonPressMask | ButtonReleaseMask | KeyPressMask | PointerMotionMask);
+        XSelectInput(_dpy, _win, ExposureMask | ButtonPressMask | ButtonReleaseMask | KeyPressMask | KeyReleaseMask | PointerMotionMask);
         XMapWindow(_dpy, _win);
         XStoreName(_dpy, _win, _title);
 
@@ -183,6 +183,40 @@ int8_t C3Px11Window::_process_motion() {
   }
   return ret;
 }
+
+
+
+/*
+* Dispatch a request to see the current clipboard.
+*/
+int8_t C3Px11Window::_request_clipboard() {
+  int8_t ret = -1;
+  if (_win) {
+    Atom UTF8      = XInternAtom(_dpy, "UTF8_STRING", True);
+    Atom CLIPBOARD = XInternAtom(_dpy, "CLIPBOARD", 0);
+    Atom XSEL_DATA = XInternAtom(_dpy, "XSEL_DATA", 0);
+    XConvertSelection(_dpy, CLIPBOARD, UTF8, XSEL_DATA, _win, CurrentTime);
+    ret = 0;
+  }
+  return ret;
+}
+
+/*
+* Dispatch a request to see the current clipboard.
+*/
+int8_t C3Px11Window::_request_selection_buffer() {
+  int8_t ret = -1;
+  if (_win) {
+    Atom UTF8      = XInternAtom(_dpy, "UTF8_STRING", True);
+    Atom PRIMARY   = XInternAtom(_dpy, "PRIMARY", 0);
+    Atom XSEL_DATA = XInternAtom(_dpy, "XSEL_DATA", 0);
+    XConvertSelection(_dpy, PRIMARY, UTF8, XSEL_DATA, _win, CurrentTime);
+    ret = 0;
+  }
+  return ret;
+}
+
+
 
 
 /*

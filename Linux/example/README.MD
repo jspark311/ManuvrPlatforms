@@ -10,4 +10,4 @@ Console is a small program meant to illustrate the operation of ParsingConsole.
 ## rhom (Right Hand of Manuvr)
 
 An example program for connecting to a serial link with another device running
-a compatible firmware.
+a compatible firmware. Attempts to be a full-exercise of CppPotpourri.

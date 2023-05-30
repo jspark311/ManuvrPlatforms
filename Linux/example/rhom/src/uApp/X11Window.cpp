@@ -48,6 +48,7 @@ GfxUITabbedContentPane _main_nav(
   0 //(GFXUI_FLAG_DRAW_FRAME_MASK)
 );
 
+
 GfxUIGroup _main_nav_data_viewer(0, 0, 0, 0);
 GfxUIGroup _main_nav_crypto(0, 0, 0, 0);
 GfxUIGroup _main_nav_links(0, 0, 0, 0);
@@ -308,9 +309,9 @@ GfxUITextArea _program_info_txt(
 GfxUITextArea _txt_area_0(
   GfxUILayout(
     0, 0,
-    400, 145,
+    _main_nav.internalWidth(), (_main_nav.internalHeight() - 80),
     ELEMENT_MARGIN, ELEMENT_MARGIN, ELEMENT_MARGIN, ELEMENT_MARGIN,
-    1, 0, 0, 0               // Border_px(t, b, l, r)
+    0, 2, 0, 0               // Border_px(t, b, l, r)
   ),
   GfxUIStyle(0, // bg
     0xFFFFFF,   // border
@@ -321,7 +322,27 @@ GfxUITextArea _txt_area_0(
     0x202020,   // unselected
     2           // t_size
   ),
-  (GFXUI_FLAG_DRAW_FRAME_U)
+  (GFXUI_FLAG_DRAW_FRAME_D | GFXUI_TXTAREA_FLAG_SCROLLABLE)
+);
+
+// Create a simple console entry line, with a full frame.
+GfxUITextArea _txt_area_1(
+  GfxUILayout(
+    0, _txt_area_0.xCornerLowerLeft(),
+    _txt_area_0.elementWidth(), 80,
+    ELEMENT_MARGIN, ELEMENT_MARGIN, ELEMENT_MARGIN, ELEMENT_MARGIN,
+    0, 0, 0, 0               // Border_px(t, b, l, r)
+  ),
+  GfxUIStyle(0, // bg
+    0xFFFFFF,   // border
+    0xFFFFFF,   // header
+    0xC0C0C0,   // active
+    0xA0A0A0,   // inactive
+    0xFFFFFF,   // selected
+    0x202020,   // unselected
+    2           // t_size
+  ),
+  (0)
 );
 
 
@@ -329,7 +350,7 @@ GfxUITextArea _txt_area_0(
 GfxUICryptoBurrito crypto_pane(
   GfxUILayout(
     0, 0,                    // Position(x, y)
-    TEST_FILTER_DEPTH, 500,  // Size(w, h)
+    _main_nav.internalWidth(), _main_nav.internalHeight()-20,
     ELEMENT_MARGIN, ELEMENT_MARGIN, ELEMENT_MARGIN, ELEMENT_MARGIN,  // Margins_px(t, b, l, r)
     0, 0, 0, 0               // Border_px(t, b, l, r)
   ),
@@ -349,7 +370,7 @@ GfxUICryptoBurrito crypto_pane(
 GfxUIC3PScheduler _scheduler_gui(
   GfxUILayout(
     0, 0,                    // Position(x, y)
-    TEST_FILTER_DEPTH, 500,  // Size(w, h)
+    _main_nav.internalWidth(), _main_nav.internalHeight()-20,
     ELEMENT_MARGIN, ELEMENT_MARGIN, ELEMENT_MARGIN, ELEMENT_MARGIN,  // Margins_px(t, b, l, r)
     0, 0, 0, 0               // Border_px(t, b, l, r)
   ),
@@ -410,7 +431,9 @@ MouseButtonDef mouse_buttons[] = {
 C3PScheduledLambda schedule_ts_update(
   31000, -1, true,
   []() {
-    sleep_us((randomUInt32() >> 24) + 100);
+    const uint32_t RAND_NUM = (randomUInt32() & 0x000FFFFF);
+    for (uint32_t i = 0; i < RAND_NUM; i++) {
+    }
     return 0;
   }
 );
@@ -462,6 +485,13 @@ void ui_value_change_callback(GfxUIElement* element) {
 }
 
 
+void MainGuiWindow::setConsole(ParsingConsole* con) {
+  con->setOutputTarget(&_txt_area_0);
+  con->hasColor(false);
+  con->localEcho(false);
+  _txt_area_0.scrollbackLength(16384);
+}
+
 
 
 int8_t MainGuiWindow::createWindow() {
@@ -490,6 +520,7 @@ int8_t MainGuiWindow::createWindow() {
     _main_nav_crypto.add_child(&crypto_pane);
 
     _main_nav_console.add_child(&_txt_area_0);
+    _main_nav_console.add_child(&_txt_area_1);
 
     _main_nav_internals.add_child(&_scheduler_gui);
 
@@ -504,10 +535,6 @@ int8_t MainGuiWindow::createWindow() {
     _main_nav.addTab("Settings", &_main_nav_settings);
 
     root.add_child(&_main_nav);
-
-    console.setOutputTarget(&_txt_area_0);
-    console.hasColor(false);
-    console.localEcho(true);
 
     _filter_txt_0.enableFrames(GFXUI_FLAG_DRAW_FRAME_U);
 
@@ -594,12 +621,50 @@ int8_t MainGuiWindow::poll() {
 
   if (0 < XPending(_dpy)) {
     Atom WM_DELETE_WINDOW = XInternAtom(_dpy, "WM_DELETE_WINDOW", False);
+    Atom UTF8      = XInternAtom(_dpy, "UTF8_STRING", True);
+    Atom CLIPBOARD = XInternAtom(_dpy, "CLIPBOARD", 0);
+    Atom PRIMARY   = XInternAtom(_dpy, "PRIMARY", 0);
     XEvent e;
     XNextEvent(_dpy, &e);
 
     switch (e.type) {
+      case SelectionNotify:
+        c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "SelectionNotify");
+        if ((CLIPBOARD == e.xselection.selection) || (PRIMARY == e.xselection.selection)) {
+          if (e.xselection.property) {
+            uint8_t* data = nullptr;
+            Atom target;
+            int format;
+            unsigned long ele_count;
+            unsigned long size;
+            XGetWindowProperty(e.xselection.display, e.xselection.requestor, e.xselection.property, 0L,(~0L), 0, AnyPropertyType, &target, &format, &size, &ele_count, &data);
+            if ((target == UTF8) || (target == XA_STRING)) {
+              StringBuilder deep_copy(data, size);
+              c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, &deep_copy);
+              XFree(data);
+            }
+            else {
+              c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "target: %d", (int) target);
+            }
+            XDeleteProperty(e.xselection.display, e.xselection.requestor, e.xselection.property);
+          }
+        }
+        break;
+      case SelectionRequest:
+        c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "SelectionRequest");
+        break;
+      case SelectionClear:
+        c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "SelectionClear");
+        break;
+      case PropertyNotify:
+        c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "PropertyNotify");
+        break;
+
+
       case Expose:
         {
+          // Try to resize the window. If it isn't required, _refit_window()
+          //   will return zero.
           int8_t local_ret = _refit_window();
           if (0 != local_ret) {
             c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Window resize failed (%d).", local_ret);
@@ -630,6 +695,23 @@ int8_t MainGuiWindow::poll() {
         }
         break;
 
+
+      case KeyRelease:
+        {
+          char buf[128] = {0, };
+          KeySym keysym;
+          XLookupString(&e.xkey, buf, sizeof(buf), &keysym, nullptr);
+          if ((keysym == XK_Control_L) | (keysym == XK_Control_R)) {
+            _modifiers.clear(RHOM_GUI_MOD_CTRL_HELD);
+            //c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "CTRL release");
+          }
+          else if ((keysym == XK_Alt_L) | (keysym == XK_Alt_R)) {
+            _modifiers.clear(RHOM_GUI_MOD_ALT_HELD);
+          }
+        }
+        break;
+
+
       case KeyPress:
         {
           char buf[128] = {0, };
@@ -643,6 +725,15 @@ int8_t MainGuiWindow::poll() {
             _tmp_sbldr.concat('\n');
             console.provideBuffer(&_tmp_sbldr);
           }
+          else if ((keysym == XK_Control_L) | (keysym == XK_Control_R)) {
+            _modifiers.set(RHOM_GUI_MOD_CTRL_HELD);
+            //c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "CTRL press");
+            _request_clipboard();
+          }
+          else if ((keysym == XK_Alt_L) | (keysym == XK_Alt_R)) {
+            _modifiers.set(RHOM_GUI_MOD_ALT_HELD);
+            _request_selection_buffer();
+          }
           else if (1 == ret_local) {
             StringBuilder _tmp_sbldr;
             _tmp_sbldr.concat(buf[0]);
@@ -654,10 +745,12 @@ int8_t MainGuiWindow::poll() {
         }
         break;
 
-
       case ClientMessage:
         if (static_cast<unsigned int>(e.xclient.data.l[0]) == WM_DELETE_WINDOW) {
           _keep_polling = false;
+        }
+        else {
+          //c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "ClientMessage");
         }
         break;
 

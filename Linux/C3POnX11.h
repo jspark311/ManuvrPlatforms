@@ -124,6 +124,7 @@ class C3Px11Window {
     ValueChangeCallback _vc_callback;
     PriorityQueue<MouseButtonDef*> _btn_defs;
     bool            _keep_polling;
+    GfxUIElement*   _paste_target;
 
     int8_t _init_window();
     int8_t _deinit_window();
@@ -131,6 +132,8 @@ class C3Px11Window {
     int8_t _refit_window();
     int8_t _process_motion();
     int8_t _query_pointer();
+    int8_t _request_clipboard();
+    int8_t _request_selection_buffer();
     int8_t _proc_changelog(PriorityQueue<GfxUIElement*>* resp_list);
     int8_t _proc_mouse_button(uint16_t btn_id, uint32_t x, uint32_t y, bool pressed);
 };

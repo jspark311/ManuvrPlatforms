@@ -34,6 +34,8 @@
 
 #define PROGRAM_VERSION    "0.0.3"    // Program version.
 
+#define RHOM_GUI_MOD_CTRL_HELD           0x00000001   //
+#define RHOM_GUI_MOD_ALT_HELD            0x00000002   //
 
 
 class CryptoLogShunt : public CryptOpCallback {
@@ -88,9 +90,12 @@ class MainGuiWindow : public C3Px11Window {
       ui_magnifier(&_fb, 0, 0,
         200, 200, 0xFFFFFF,
         (GFXUI_FLAG_DRAW_FRAME_U | GFXUI_FLAG_DRAW_FRAME_L | GFXUI_MAGNIFIER_FLAG_SHOW_FEED_FRAME)
-      )
-      {};
+      ),
+      _modifiers(0),
+      _key_target(nullptr),
+      _paste_target(nullptr) {};
 
+    void setConsole(ParsingConsole*);
 
     /* Obligatory overrides from C3Px11Window. */
     int8_t poll();
@@ -98,6 +103,12 @@ class MainGuiWindow : public C3Px11Window {
     int8_t closeWindow();
     int8_t render(bool force);
     int8_t render_overlay();
+
+
+  private:
+    FlagContainer32 _modifiers;
+    GfxUIElement*   _key_target;
+    GfxUIElement*   _paste_target;
 };
 
 #endif  // __RHOM_HEADER_H__

@@ -345,7 +345,6 @@ C3PScheduler* scheduler = nullptr;
 *******************************************************************************/
 int main(int argc, const char *argv[]) {
   program_name = argv[0];   // Our name.
-  bool gui_takes_console = false;
   StringBuilder output;
 
   platform.init();
@@ -378,6 +377,7 @@ int main(int argc, const char *argv[]) {
       if (c3p_root_window) {
         if (0 == c3p_root_window->createWindow()) {
           // The window thread is running.
+          c3p_root_window->setConsole(&console);
         }
         else {
           c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Failed to instance the root GUI window.");
