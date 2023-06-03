@@ -429,6 +429,7 @@ MouseButtonDef mouse_buttons[] = {
 
 
 C3PScheduledLambda schedule_ts_update(
+  "ts_update",
   31000, -1, true,
   []() {
     const uint32_t RAND_NUM = (randomUInt32() & 0x000FFFFF);
