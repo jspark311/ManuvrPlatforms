@@ -428,6 +428,7 @@ void LinuxPlatform::printDebug(StringBuilder* output) {
 *  / / / / / / / / /  __/  / /_/ / / / / /_/ /  / /_/ / /_/ / /_/  __/
 * /_/ /_/_/ /_/ /_/\___/   \__,_/_/ /_/\__,_/  /_____/\__,_/\__/\___/
 *******************************************************************************/
+static long unsigned timer_rebase = 0;  // Used to assure that system time starts at zero.
 
 /*******************************************************************************
 * Time, date, and RTC abstraction
@@ -527,9 +528,7 @@ void currentDateTime(StringBuilder* target) {
 * Not provided elsewhere on a linux platform.
 */
 long unsigned millis() {
-  struct timespec ts;
-  clock_gettime(CLOCK_MONOTONIC, &ts);
-  return (ts.tv_sec * 1000 + ts.tv_nsec / 1000000L);
+  return (micros() / 1000L);
 }
 
 /*
@@ -538,7 +537,12 @@ long unsigned millis() {
 long unsigned micros() {
   struct timespec ts;
   clock_gettime(CLOCK_MONOTONIC, &ts);
-  return (ts.tv_sec * 1000000L + ts.tv_nsec / 1000L);
+  long unsigned raw = (ts.tv_sec * 1000000L + ts.tv_nsec / 1000L);
+  if (timer_rebase) {
+    return (raw - timer_rebase);
+  }
+  timer_rebase = raw;
+  return 0;
 }
 
 
