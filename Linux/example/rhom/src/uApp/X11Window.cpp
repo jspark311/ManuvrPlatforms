@@ -584,7 +584,7 @@ int8_t MainGuiWindow::render(bool force) {
     }
     pitxt.concatf("Window: %dx%d", _fb.x(), _fb.y());
     _program_info_txt.clear();
-    _program_info_txt.provideBuffer(&pitxt);
+    _program_info_txt.pushBuffer(&pitxt);
   }
   return ret;
 }
@@ -724,7 +724,7 @@ int8_t MainGuiWindow::poll() {
           else if (keysym == XK_Return) {
             StringBuilder _tmp_sbldr;
             _tmp_sbldr.concat('\n');
-            console.provideBuffer(&_tmp_sbldr);
+            console.pushBuffer(&_tmp_sbldr);
           }
           else if ((keysym == XK_Control_L) | (keysym == XK_Control_R)) {
             _modifiers.set(RHOM_GUI_MOD_CTRL_HELD);
@@ -738,7 +738,7 @@ int8_t MainGuiWindow::poll() {
           else if (1 == ret_local) {
             StringBuilder _tmp_sbldr;
             _tmp_sbldr.concat(buf[0]);
-            console.provideBuffer(&_tmp_sbldr);
+            console.pushBuffer(&_tmp_sbldr);
           }
           else {
             c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "Key press: %s (%s)", buf, XKeysymToString(keysym));
@@ -782,7 +782,7 @@ int8_t MainGuiWindow::poll() {
       _tmp_sbldr.concatf("SNR:      %.2f\n", (double) test_filter_0.snr());
       _tmp_sbldr.concatf("Min/Max:  %.2f / %.2f\n", (double) test_filter_0.minValue(), (double) test_filter_0.maxValue());
       _filter_txt_0.clear();
-      _filter_txt_0.provideBuffer(&_tmp_sbldr);
+      _filter_txt_0.pushBuffer(&_tmp_sbldr);
     }
     if (1 == _redraw_window()) {
       if (1 == test_filter_0.feedFilter(_redraw_timer.lastTime())) {

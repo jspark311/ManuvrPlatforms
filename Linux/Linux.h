@@ -55,7 +55,9 @@ class LinuxStdIO : public BufferAccepter {
     ~LinuxStdIO();
 
     /* Implementation of BufferAccepter. */
-    inline int8_t provideBuffer(StringBuilder* buf) {  _tx_buffer.concatHandoff(buf); return 1;   };
+    inline int8_t pushBuffer(StringBuilder* buf) {  _tx_buffer.concatHandoff(buf); return 1;   };
+    inline int32_t bufferAvailable() {  return 0xFFFF;   };   // TODO: Use real value.
+
     inline void readCallback(BufferAccepter* cb) {   _read_cb_obj = cb;   };
     inline void write(const char* str) {  _tx_buffer.concat((uint8_t*) str, strlen(str));  };
     int8_t poll();
@@ -111,17 +113,18 @@ class LinuxSockPipe : public BufferAccepter {
     virtual ~LinuxSockPipe();
 
     /* Implementation of BufferAccepter. */
-    inline int8_t provideBuffer(StringBuilder* buf) {  _tx_buffer.concatHandoff(buf); return 1;   };
+    inline int8_t pushBuffer(StringBuilder* buf) {  _tx_buffer.concatHandoff(buf); return 1;   };
+    inline int32_t bufferAvailable() {  return 0xFFFF;   };   // TODO: Use real value.
 
     inline void readCallback(BufferAccepter* cb) {   _read_cb_obj = cb;   };
     int8_t poll();
     void   printDebug(StringBuilder* out);
 
     inline void write(const char* str) {  _tx_buffer.concat((uint8_t*) str, strlen(str));  };
-    uint   read(StringBuilder* buf);
-    uint   read(uint8_t* buf, uint len);
-    uint   write(char c);
-    uint   write(uint8_t* buf, uint len);
+    uint32_t read(StringBuilder* buf);
+    uint32_t read(uint8_t* buf, uint32_t len);
+    uint32_t write(char c);
+    uint32_t write(uint8_t* buf, uint32_t len);
 
     int    connected();  // Returns the number of connections, or -1 if not connected.
     int    connect(char* path = nullptr);  // Open an existing socket.

@@ -84,7 +84,9 @@ class ESP32StdIO : public BufferAccepter {
     ~ESP32StdIO();
 
     /* Implementation of BufferAccepter. */
-    inline int8_t provideBuffer(StringBuilder* buf) {  _tx_buffer.concatHandoff(buf); return 1;   };
+    inline int8_t pushBuffer(StringBuilder* buf) {  _tx_buffer.concatHandoff(buf); return 1;   };
+    inline int32_t bufferAvailable() {  return 1024;  };   // TODO: Use real value.
+
     inline void readCallback(BufferAccepter* cb) {   _read_cb_obj = cb;   };
 
     inline void write(const char* str) {  _tx_buffer.concat((uint8_t*) str, strlen(str));  };

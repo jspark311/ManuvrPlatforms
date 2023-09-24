@@ -34,66 +34,50 @@ int8_t UARTAdapter::poll() {
 
   if (txCapable() && (0 < _tx_buffer.length())) {
     // Refill the TX buffer...
-    int tx_count = strict_min((int32_t) 64, (int32_t) _tx_buffer.length());
-    if (0 < tx_count) {
+    const uint32_t TX_COUNT = strict_min((uint32_t) 64, (uint32_t) _tx_buffer.count());
+    if (0 < TX_COUNT) {
+      uint8_t side_buffer[TX_COUNT] = {0, };
+      const int32_t PEEK_COUNT = _tx_buffer.peek(side_buffer, TX_COUNT);
+      const int32_t BYTES_WRITTEN = uart_write_bytes((uart_port_t) ADAPTER_NUM, (const char*) side_buffer, (size_t) PEEK_COUNT);
       switch (ADAPTER_NUM) {
         case 0:
-          if (Serial) {
-            Serial.write(_tx_buffer.string(), tx_count);
-            _tx_buffer.cull(tx_count);
-            _adapter_set_flag(UART_FLAG_FLUSHED, (0 == _tx_buffer.length()));
-          }
+          if (Serial) {  Serial.write(_tx_buffer.string(), tx_count);   }
           break;
-
         default:
-          if (s_port) {
-            s_port->write(_tx_buffer.string(), tx_count);
-            _tx_buffer.cull(tx_count);
-            _adapter_set_flag(UART_FLAG_FLUSHED, (0 == _tx_buffer.length()));
-          }
+          if (s_port) {  s_port->write(_tx_buffer.string(), tx_count);  }
           break;
+      }
+      _flushed = _tx_buffer.isEmpty();
+      if (BYTES_WRITTEN > 0) {
+        _tx_buffer.cull(BYTES_WRITTEN);
       }
     }
   }
   if (rxCapable()) {
+    const uint8_t RX_BUF_LEN = 64;
+    uint8_t ser_buffer[RX_BUF_LEN] = {0, };
+    uint8_t rx_len = 0;
     switch (ADAPTER_NUM) {
       case 0:
         if (Serial) {
-          const uint8_t RX_BUF_LEN = 64;
-          uint8_t ser_buffer[RX_BUF_LEN];
-          uint8_t rx_len = 0;
-          memset(ser_buffer, 0, RX_BUF_LEN);
           while ((RX_BUF_LEN > rx_len) && (0 < Serial.available())) {
             ser_buffer[rx_len++] = Serial.read();
-          }
-          if (rx_len > 0) {
-            _rx_buffer.concat(ser_buffer, rx_len);
           }
         }
         break;
 
       default:
         if (s_port) {
-          const uint8_t RX_BUF_LEN = 64;
-          uint8_t ser_buffer[RX_BUF_LEN];
-          uint8_t rx_len = 0;
-          memset(ser_buffer, 0, RX_BUF_LEN);
           while ((RX_BUF_LEN > rx_len) && (0 < s_port->available())) {
             ser_buffer[rx_len++] = s_port->read();
-          }
-          if (rx_len > 0) {
-            _rx_buffer.concat(ser_buffer, rx_len);
           }
         }
         break;
     }
-    if (0 < _rx_buffer.length()) {
-      if (nullptr != _read_cb_obj) {
-        if (0 == _read_cb_obj->provideBuffer(&_rx_buffer)) {
-          _rx_buffer.clear();
-        }
-      }
+    if (rx_len > 0) {
+      _rx_buffer.insert(ser_buffer, rx_len);
     }
+    _handle_rx_push();
   }
   return return_value;
 }
@@ -144,56 +128,6 @@ int8_t UARTAdapter::_pf_deinit() {
     }
     _adapter_set_flag(UART_FLAG_FLUSHED);
     ret = 0;
-  }
-  return ret;
-}
-
-
-
-/*
-* Write to the UART.
-*/
-uint UARTAdapter::write(uint8_t* buf, uint len) {
-  if (txCapable()) {
-    _tx_buffer.concat(buf, len);
-    _adapter_clear_flag(UART_FLAG_FLUSHED);
-  }
-  return len;  // TODO: StringBuilder needs an API enhancement to make this safe.
-}
-
-
-/*
-* Write to the UART.
-*/
-uint UARTAdapter::write(char c) {
-  if (txCapable()) {
-    _tx_buffer.concat(c);
-    _adapter_clear_flag(UART_FLAG_FLUSHED);
-  }
-  return 1;  // TODO: StringBuilder needs an API enhancement to make this safe.
-}
-
-
-/*
-* Read from the class buffer.
-*/
-uint UARTAdapter::read(uint8_t* buf, uint len) {
-  uint ret = strict_min((int32_t) len, (int32_t) _rx_buffer.length());
-  if (0 < ret) {
-    memcpy(buf, _rx_buffer.string(), ret);
-    _rx_buffer.cull(ret);
-  }
-  return ret;
-}
-
-
-/*
-* Read from the class buffer.
-*/
-uint UARTAdapter::read(StringBuilder* buf) {
-  uint ret = _rx_buffer.length();
-  if (0 < ret) {
-    buf->concatHandoff(&_rx_buffer);
   }
   return ret;
 }

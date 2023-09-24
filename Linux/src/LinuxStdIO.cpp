@@ -71,7 +71,7 @@ int8_t LinuxStdIO::poll() {
 
   if (0 < _rx_buffer.length()) {
     if (nullptr != _read_cb_obj) {
-      if (0 == _read_cb_obj->provideBuffer(&_rx_buffer)) {
+      if (0 == _read_cb_obj->pushBuffer(&_rx_buffer)) {
         _rx_buffer.clear();
       }
     }

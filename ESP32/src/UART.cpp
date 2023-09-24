@@ -76,7 +76,7 @@ void UARTAdapter::irq_handler() {
               bzero(dtmp, dlen + 4);
               int rlen = uart_read_bytes((uart_port_t) ADAPTER_NUM, dtmp, dlen, portMAX_DELAY);
               if (rlen > 0) {
-                _rx_buffer.concat(dtmp, dlen);
+                _rx_buffer.insert(dtmp, dlen);
               }
             }
           }
@@ -155,26 +155,20 @@ void UARTAdapter::irq_handler() {
 */
 int8_t UARTAdapter::poll() {
   int8_t return_value = 0;
-  if (txCapable() && (0 < _tx_buffer.length())) {
+  if (txCapable() & (0 < _tx_buffer.count())) {
     // Refill the TX buffer...
-    int tx_count = strict_min((int32_t) (UART_FIFO_CAPACITY - 16), (int32_t) _tx_buffer.length());
-    if (0 < tx_count) {
-      int bytes_written = uart_write_bytes((uart_port_t) ADAPTER_NUM, (const char*) _tx_buffer.string(), (size_t) tx_count);
-      if (bytes_written > 0) {
-        _tx_buffer.cull(bytes_written);
-        _adapter_set_flag(UART_FLAG_FLUSHED, (0 == _tx_buffer.length()));
+    const uint32_t TX_COUNT = strict_min((uint32_t) (UART_FIFO_CAPACITY - 16), (uint32_t) _tx_buffer.count());
+    if (0 < TX_COUNT) {
+      uint8_t side_buffer[TX_COUNT] = {0, };
+      const int32_t PEEK_COUNT = _tx_buffer.peek(side_buffer, TX_COUNT);
+      const int32_t BYTES_WRITTEN = uart_write_bytes((uart_port_t) ADAPTER_NUM, (const char*) side_buffer, (size_t) PEEK_COUNT);
+      _flushed = _tx_buffer.isEmpty();
+      if (BYTES_WRITTEN > 0) {
+        _tx_buffer.cull(BYTES_WRITTEN);
       }
     }
   }
-  if (rxCapable()) {
-    if (0 < _rx_buffer.length()) {
-      if (nullptr != _read_cb_obj) {
-        if (0 == _read_cb_obj->provideBuffer(&_rx_buffer)) {
-          _rx_buffer.clear();
-        }
-      }
-    }
-  }
+  _handle_rx_push();
   return return_value;
 }
 
@@ -251,8 +245,9 @@ int8_t UARTAdapter::_pf_init() {
                 .rxfifo_full_thresh       = 16
               };
               if (ESP_OK == uart_intr_config((uart_port_t) ADAPTER_NUM, &intr_conf)) {
-                _adapter_set_flag(UART_FLAG_UART_READY | UART_FLAG_FLUSHED);
+                _adapter_set_flag(UART_FLAG_UART_READY);
                 _adapter_clear_flag(UART_FLAG_PENDING_CONF | UART_FLAG_PENDING_RESET);
+                _flushed = true;
                 if (spawn_thread) {
                   xTaskCreate(uart_event_task, "uart_task", 3000, NULL, 12, NULL);
                 }
@@ -278,61 +273,11 @@ int8_t UARTAdapter::_pf_deinit() {
   if (ADAPTER_NUM < 3) {
     if (txCapable()) {
       uart_wait_tx_idle_polling((uart_port_t) ADAPTER_NUM);
-      _adapter_set_flag(UART_FLAG_FLUSHED);
+      _flushed = true;
     }
     if (ESP_OK == uart_driver_delete((uart_port_t) ADAPTER_NUM)) {
     }
     ret = 0;
-  }
-  return ret;
-}
-
-
-
-/*
-* Write to the UART.
-*/
-uint UARTAdapter::write(uint8_t* buf, uint len) {
-  if (txCapable()) {
-    _tx_buffer.concat(buf, len);
-    _adapter_clear_flag(UART_FLAG_FLUSHED);
-  }
-  return len;  // TODO: StringBuilder needs an API enhancement to make this safe.
-}
-
-
-/*
-* Write to the UART.
-*/
-uint UARTAdapter::write(char c) {
-  if (txCapable()) {
-    _tx_buffer.concat(c);
-    _adapter_clear_flag(UART_FLAG_FLUSHED);
-  }
-  return 1;  // TODO: StringBuilder needs an API enhancement to make this safe.
-}
-
-
-/*
-* Read from the class buffer.
-*/
-uint UARTAdapter::read(uint8_t* buf, uint len) {
-  uint ret = strict_min((int32_t) len, (int32_t) _rx_buffer.length());
-  if (0 < ret) {
-    memcpy(buf, _rx_buffer.string(), ret);
-    _rx_buffer.cull(ret);
-  }
-  return ret;
-}
-
-
-/*
-* Read from the class buffer.
-*/
-uint UARTAdapter::read(StringBuilder* buf) {
-  uint ret = _rx_buffer.length();
-  if (0 < ret) {
-    buf->concatHandoff(&_rx_buffer);
   }
   return ret;
 }

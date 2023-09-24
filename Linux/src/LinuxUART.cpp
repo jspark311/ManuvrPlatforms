@@ -46,6 +46,7 @@ typedef struct {
   char*          path;     // This tracks the device under Linux.
   int            sock;     // This tracks the open port under Linux.
   struct termios termAttr; // This tracks the port settings under Linux.
+  //StringBuilder  unpushed_rx;  // This eases the conversion to a reliable BufferAccepter.
 } LinuxUARTLookup;
 
 
@@ -179,24 +180,31 @@ int8_t UARTAdapter::poll() {
   LinuxUARTLookup* lookup = _uart_table_get_by_adapter_ref(this);
   if (nullptr != lookup) {
     if (lookup->sock > 0) {
-      if (txCapable() && (0 < _tx_buffer.length())) {
+      if (txCapable() & (0 < _tx_buffer.count())) {
         // Refill the TX buffer...
-        int tx_count = strict_min((int32_t) 64, (int32_t) _tx_buffer.length());
-        if (0 < tx_count) {
-          int bytes_written = (int) ::write(lookup->sock, _tx_buffer.string(), tx_count);
+        const uint32_t TX_COUNT = strict_min((uint32_t) 64, _tx_buffer.count());
+        if (0 < TX_COUNT) {
+          uint8_t side_buffer[TX_COUNT] = {0, };
+          const int32_t PEEK_COUNT = _tx_buffer.peek(side_buffer, TX_COUNT);
+          const int BYTES_WRITTEN = (int) ::write(lookup->sock, side_buffer, TX_COUNT);
+
           //StringBuilder tmp_log;
           //tmp_log.concatf("\n\n__________Bytes written (%d)________\n", bytes_written);
           //_tx_buffer.printDebug(&tmp_log);
           //printf("%s\n\n", tmp_log.string());
-          _tx_buffer.cull(bytes_written);
-          _adapter_set_flag(UART_FLAG_FLUSHED, _tx_buffer.isEmpty());
+          //_tx_buffer.cull(bytes_written);
+          _flushed = _tx_buffer.isEmpty();
+          if (BYTES_WRITTEN > 0) {
+            _tx_buffer.cull(BYTES_WRITTEN);
+          }
         }
       }
       if (rxCapable()) {
-        uint8_t* buf = (uint8_t*) alloca(255);
-        int n = ::read(lookup->sock, buf, 255);
+        const uint32_t RX_COUNT = strict_min((uint32_t) _rx_buffer.vacancy(), (uint32_t) 255);
+        uint8_t buf[RX_COUNT] = {0, };
+        int n = ::read(lookup->sock, buf, RX_COUNT);
         if (n > 0) {
-          _rx_buffer.concat(buf, n);
+          _rx_buffer.insert(buf, n);
           last_byte_rx_time = millis();
           //StringBuilder tmp_log;
           //tmp_log.concatf("\n\n__________Bytes read (%d)________\n", n);
@@ -204,13 +212,7 @@ int8_t UARTAdapter::poll() {
           //printf("%s\n\n", tmp_log.string());
           return_value = 1;
         }
-        if (0 < _rx_buffer.length()) {
-          if (nullptr != _read_cb_obj) {
-            if (0 == _read_cb_obj->provideBuffer(&_rx_buffer)) {
-              _rx_buffer.clear();
-            }
-          }
-        }
+        _handle_rx_push();
       }
     }
   }
@@ -263,7 +265,7 @@ int8_t UARTAdapter::_pf_init() {
           return ret;
       }
       // If an input buffer was desired, we turn on RX.
-      if (0 < _BUF_LEN_RX) {
+      if (0 < _rx_buffer.capacity()) {
         lookup->termAttr.c_cflag |= CREAD;
         _adapter_set_flag(UART_FLAG_HAS_RX);
       }
@@ -275,9 +277,9 @@ int8_t UARTAdapter::_pf_init() {
       lookup->termAttr.c_cc[VMIN]  = 0;
       lookup->termAttr.c_cc[VTIME] = 0;
       if (tcsetattr(lookup->sock, TCSANOW, &(lookup->termAttr)) == 0) {
-        _adapter_set_flag(UART_FLAG_HAS_TX);
-        _adapter_set_flag(UART_FLAG_UART_READY | UART_FLAG_FLUSHED);
+        _adapter_set_flag(UART_FLAG_UART_READY | UART_FLAG_HAS_TX);
         _adapter_clear_flag(UART_FLAG_PENDING_CONF | UART_FLAG_PENDING_RESET);
+        _flushed = true;
         if (0 == _uart_polling_thread_id) {
           platform.createThread(&_uart_polling_thread_id, nullptr, uart_polling_handler, nullptr, nullptr);
         }
@@ -302,7 +304,7 @@ int8_t UARTAdapter::_pf_deinit() {
     _adapter_clear_flag(UART_FLAG_UART_READY | UART_FLAG_PENDING_RESET | UART_FLAG_PENDING_CONF);
     if (txCapable()) {
       //uart_wait_tx_idle_polling((uart_port_t) ADAPTER_NUM);
-      _adapter_set_flag(UART_FLAG_FLUSHED);
+      _flushed = true;
     }
     if (0 < lookup->sock) {
       close(lookup->sock);  // Close the socket.
@@ -312,55 +314,6 @@ int8_t UARTAdapter::_pf_deinit() {
     _tx_buffer.clear();
     _rx_buffer.clear();
     ret = 0;
-  }
-  return ret;
-}
-
-
-/*
-* Write to the UART.
-*/
-uint UARTAdapter::write(uint8_t* buf, uint len) {
-  if (txCapable()) {
-    _tx_buffer.concat(buf, len);
-    _adapter_clear_flag(UART_FLAG_FLUSHED);
-  }
-  return len;  // TODO: StringBuilder needs an API enhancement to make this safe.
-}
-
-
-/*
-* Write to the UART.
-*/
-uint UARTAdapter::write(char c) {
-  if (txCapable()) {
-    _tx_buffer.concat(c);
-    _adapter_clear_flag(UART_FLAG_FLUSHED);
-  }
-  return 1;  // TODO: StringBuilder needs an API enhancement to make this safe.
-}
-
-
-/*
-* Read from the class buffer.
-*/
-uint UARTAdapter::read(uint8_t* buf, uint len) {
-  uint ret = strict_min((int32_t) len, (int32_t) _rx_buffer.length());
-  if (0 < ret) {
-    memcpy(buf, _rx_buffer.string(), ret);
-    _rx_buffer.cull(ret);
-  }
-  return ret;
-}
-
-
-/*
-* Read from the class buffer.
-*/
-uint UARTAdapter::read(StringBuilder* buf) {
-  uint ret = _rx_buffer.length();
-  if (0 < ret) {
-    buf->concatHandoff(&_rx_buffer);
   }
   return ret;
 }

@@ -49,10 +49,9 @@ ESP32StdIO::~ESP32StdIO() {
 * Read input from local keyboard.
 */
 int8_t ESP32StdIO::poll() {
-  char* input_text = (char*) alloca(256);  // Buffer to hold user-input.
+  char input_text[256] = {0, };  // Buffer to hold user-input.
   int read_len = 0;
 
-  bzero(input_text, 256);
   while (_tx_buffer.count()) {
     const char* working_chunk = (const char*) _tx_buffer.position(0);
     printf("%s", working_chunk);
@@ -72,7 +71,7 @@ int8_t ESP32StdIO::poll() {
 
   if (0 < _rx_buffer.length()) {
     if (nullptr != _read_cb_obj) {
-      if (0 == _read_cb_obj->provideBuffer(&_rx_buffer)) {
+      if (0 == _read_cb_obj->pushBuffer(&_rx_buffer)) {
         _rx_buffer.clear();
       }
     }

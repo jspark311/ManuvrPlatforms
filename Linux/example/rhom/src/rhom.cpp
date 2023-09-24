@@ -120,7 +120,7 @@ void link_callback_message(uint32_t session_tag, M2MMsg* msg) {
         //   handle the response.
         if (ping_nonce) {
           if (ping_nonce == msg->uniqueId()) {
-            log.concatf("\tPing returned in %ums.\n", wrap_accounted_delta((uint32_t) micros(), ping_req_time));
+            log.concatf("\tPing returned in %ums.\n", micros_since(ping_req_time));
             ping_req_time = 0;
             ping_nonce    = 0;
           }
@@ -329,7 +329,7 @@ int callback_socket_tools(StringBuilder* text_return, StringBuilder* args) {
   }
   else if (0 == StringBuilder::strcasecmp(cmd, "twrite")) {
     args->drop_position(0);
-    text_return->concatf("write(%s) returned %d\n", (char*) args->string(), socket_adapter.provideBuffer(args));
+    text_return->concatf("write(%s) returned %d\n", (char*) args->string(), socket_adapter.pushBuffer(args));
   }
   else {
     ret = socket_adapter.console_handler(text_return, args);
