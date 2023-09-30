@@ -550,16 +550,16 @@ long unsigned micros() {
 void sleep_ms(uint32_t ms) {
   struct timespec t = {(long) (ms / 1000), (long) ((ms % 1000) * 1000000UL)};
   struct timespec r;
-  if (0 != nanosleep(&t, &r)) {
-    while (0 != nanosleep(&r, &r)) {}
+  if (0 != clock_nanosleep(CLOCK_MONOTONIC, 0, &t, &r)) {
+    while (0 != clock_nanosleep(CLOCK_MONOTONIC, 0, &r, &r)) {}
   }
 }
 
 void sleep_us(uint32_t us) {
-  struct timespec t = {(long) (us / 1000000), (long) ((us % 1000000) * 1000000UL)};
+  struct timespec t = {(long) (us / 1000000), (long) ((us % 1000000) * 1000UL)};
   struct timespec r;
-  if (0 != nanosleep(&t, &r)) {
-    while (0 != nanosleep(&r, &r)) {}
+  if (0 != clock_nanosleep(CLOCK_MONOTONIC, 0, &t, &r)) {
+    while (0 != clock_nanosleep(CLOCK_MONOTONIC, 0, &r, &r)) {}
   }
 }
 

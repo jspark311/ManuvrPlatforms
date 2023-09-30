@@ -117,7 +117,7 @@ class C3Px11Window {
     Display*        _dpy;
     Visual*         _visual;
     int             _screen_num;
-    PeriodicTimeout _refresh_period;
+    MillisTimeout   _refresh_period;
     StopWatch       _redraw_timer;
     Image           _fb;
     Image           _overlay;
