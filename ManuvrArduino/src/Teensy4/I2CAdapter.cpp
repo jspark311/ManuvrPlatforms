@@ -4,7 +4,7 @@
 #if defined(__IMXRT1052__) || defined(__IMXRT1062__)
 
 #include <AbstractPlatform.h>
-#include <I2CAdapter.h>
+#include <BusQueue/I2CAdapter.h>
 #include "ManuvrArduino.h"
 #include "imx_rt1060/imx_rt1060_i2c_driver.h"
 

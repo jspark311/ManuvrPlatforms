@@ -21,18 +21,60 @@
 extern void* gui_thread_handler(void*);
 int callback_gui_tools(StringBuilder*, StringBuilder*);
 
+using namespace std;
 
 /*******************************************************************************
 * TODO: Pending mitosis into a header file....
 *******************************************************************************/
+IdentityUUID ident_uuid("BIN_ID", (char*) "29c6e2b9-9e68-4e52-9af0-03e9ca10e217");
 
-IdentityUUID ident_uuid("BIN_ID", "29c6e2b9-9e68-4e52-9af0-03e9ca10e217");
+
+/*******************************************************************************
+* The program has a set of configurations that it defines and loads at runtime.
+* This defines everything required to handle that conf fluidly and safely.
+*
+* TODO: Pending mitosis into a header file....
+*******************************************************************************/
+// First, we define (as an enum) what keys we want in the data.
+enum class RHoMConfKey : uint16_t {
+  SHOW_PANE_MLINK,
+  SHOW_PANE_BURRITO,
+  SHOW_PANE_INTERNALS,
+  MLINK_XPORT_PATH,
+  MLINK_TIMEOUT_PERIOD,
+  MLINK_KA_PERIOD,
+  MLINK_MTU,
+  INVALID
+};
+
+// Then, we bind those enum values each to a type code, and to a semantic string
+//   suitable for storage or transmission to a counterparty.
+const EnumDef<RHoMConfKey> CONF_KEY_LIST[] = {
+  { RHoMConfKey::SHOW_PANE_MLINK,       "SHOW_PANE_MLINK",        0, (uint8_t) TCode::BOOLEAN    },
+  { RHoMConfKey::SHOW_PANE_BURRITO,     "SHOW_PANE_BURRITO",      0, (uint8_t) TCode::BOOLEAN    },
+  { RHoMConfKey::SHOW_PANE_INTERNALS,   "SHOW_PANE_INTERNALS",    0, (uint8_t) TCode::BOOLEAN    },
+  { RHoMConfKey::MLINK_XPORT_PATH,      "MLINK_XPORT_PATH",       0, (uint8_t) TCode::STR        },
+  { RHoMConfKey::MLINK_TIMEOUT_PERIOD,  "MLINK_TIMEOUT_PERIOD",   0, (uint8_t) TCode::UINT32     },
+  { RHoMConfKey::MLINK_KA_PERIOD,       "MLINK_KA_PERIOD",        0, (uint8_t) TCode::UINT32     },
+  { RHoMConfKey::MLINK_MTU,             "MLINK_MTU",              0, (uint8_t) TCode::UINT16     },
+  { RHoMConfKey::INVALID,               "INVALID",                (ENUM_FLAG_MASK_INVALID_CATCHALL), 0}
+};
+
+// The top-level enum wrapper binds the above definitions into a tidy wad
+//   of contained concerns.
+const EnumDefList<RHoMConfKey> CONF_LIST(
+  CONF_KEY_LIST, (sizeof(CONF_KEY_LIST) / sizeof(CONF_KEY_LIST[0])),
+  "RHoMConfKey"  // Doesn't _need_ to be the enum name...
+);
+
+// After all that definition, we can finally create the conf object.
+ConfRecordValidation<RHoMConfKey> rhom_conf(0, &CONF_LIST);
 
 
 /*******************************************************************************
 * Globals
 *******************************************************************************/
-using namespace std;
+
 
 CryptoLogShunt crypto_logger;
 const char*   program_name;
@@ -70,7 +112,7 @@ LinuxUART*  uart   = nullptr;
 M2MLink* m_link = nullptr;
 
 /* But some transports (socket servers) have 1:x relationships to sessions. */
-LinuxSockListener socket_listener("/tmp/c3p-test.sock");
+LinuxSockListener socket_listener((char*) "/tmp/c3p-test.sock");
 
 SensorFilter<uint32_t> _filter(128, FilteringStrategy::RAW);
 
@@ -367,6 +409,16 @@ int main(int argc, const char *argv[]) {
       printf("\n\n");
       exit(0);
     }
+    else if (strcasestr(argv[i], "--conf-dump")) {
+      StringBuilder tmp_str;
+      StringBuilder serialized;
+      printf("Serializing conf returns %d.\n", rhom_conf.serialize(&serialized, TCode::CBOR));
+      serialized.printDebug(&tmp_str);
+      rhom_conf.printConfRecord(&tmp_str);
+      printf("%s\n", (char*) tmp_str.string());
+      exit(0);
+    }
+
     else if ((strcasestr(argv[i], "--version")) || (strcasestr(argv[i], "-v") == argv[i])) {
       printf("RHoM v%s\n\n", PROGRAM_VERSION);
       exit(0);

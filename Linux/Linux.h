@@ -24,9 +24,9 @@ This file forms the catch-all for linux platforms that have no support.
 
 #ifndef __PLATFORM_VANILLA_LINUX_H__
 #define __PLATFORM_VANILLA_LINUX_H__
-#include <AbstractPlatform.h>
-#include <UARTAdapter.h>
-#include <I2CAdapter.h>
+#include "AbstractPlatform.h"
+#include "BusQueue/UARTAdapter.h"
+#include "BusQueue/I2CAdapter.h"
 #include "CryptoBurrito/CryptoBurrito.h"
 #include "C3PEvents/C3PScheduler.h"
 

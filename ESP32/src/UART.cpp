@@ -1,5 +1,5 @@
 #include "../ESP32.h"
-#include <UARTAdapter.h>
+#include <BusQueue/UARTAdapter.h>
 
 #ifdef __cplusplus
 extern "C" {

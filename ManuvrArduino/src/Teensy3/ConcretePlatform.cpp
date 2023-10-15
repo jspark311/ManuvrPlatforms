@@ -427,7 +427,7 @@ int8_t Teensy3::platformPostInit() {
   #else
   // No threads. We are responsible for pinging our own scheduler.
   // Turn on the periodic interrupts...
-  timer0.begin(timerCallbackScheduler, 1000*MANUVR_PLATFORM_TIMER_PERIOD_MS);
+  timer0.begin(timerCallbackScheduler, (1000 * CONFIG_C3P_TIMER_PERIOD_MS));
   #endif
   return 0;
 }

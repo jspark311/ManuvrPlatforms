@@ -9,7 +9,7 @@ Hardware-specific SPI implementation for Teensy4.
 #if defined(__IMXRT1052__) || defined(__IMXRT1062__)
 
 #include <AbstractPlatform.h>
-#include <SPIAdapter.h>
+#include <BusQueue/SPIAdapter.h>
 #include <SPI.h>
 
 

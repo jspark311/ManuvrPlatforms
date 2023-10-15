@@ -1,4 +1,4 @@
-#include <UARTAdapter.h>
+#include <BusQueue/UARTAdapter.h>
 
 
 static const HardwareSerial* _uart_get_by_adapter_num(const uint8_t A_NUM) {

@@ -1,4 +1,4 @@
-#include <I2CAdapter.h>
+#include <BusQueue/I2CAdapter.h>
 
 #if defined(__MK20DX256__) || defined(__MK20DX128__)
 #if defined(CONFIG_C3P_I2C)

@@ -19,7 +19,7 @@ limitations under the License.
 
 */
 #include "../ESP32.h"
-#include <SPIAdapter.h>
+#include <BusQueue/SPIAdapter.h>
 
 #ifdef __cplusplus
 extern "C" {

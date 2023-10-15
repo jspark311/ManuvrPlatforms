@@ -9,13 +9,14 @@
 #include "StringBuilder.h"
 #include "ParsingConsole.h"
 #include "ElementPool.h"
-#include "GPSWrapper.h"
-#include "UARTAdapter.h"
-#include "I2CAdapter.h"
-#include "KeyValuePair.h"
+#include "BufferAccepter/GPSWrapper/GPSWrapper.h"
+#include "BusQueue/UARTAdapter.h"
+#include "BusQueue/I2CAdapter.h"
+#include "C3PValue/KeyValuePair.h"
 #include "SensorFilter.h"
 #include "Vector3.h"
-#include "StopWatch.h"
+#include "TimerTools.h"
+#include "Storage/RecordTypes/ConfRecord.h"
 #include "uuid.h"
 #include "cbor-cpp/cbor.h"
 #include "Image/Image.h"
@@ -36,6 +37,7 @@
 
 #define RHOM_GUI_MOD_CTRL_HELD           0x00000001   //
 #define RHOM_GUI_MOD_ALT_HELD            0x00000002   //
+
 
 
 class CryptoLogShunt : public CryptOpCallback {
