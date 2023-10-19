@@ -31,7 +31,7 @@ For instance: On a RasPi v1 with the kernel driver loaded we have...
 
 #include "../Linux.h"
 #include <AbstractPlatform.h>
-#include <SPIAdapter.h>
+#include <BusQueue/SPIAdapter.h>
 
 #include <stdint.h>
 #include <unistd.h>

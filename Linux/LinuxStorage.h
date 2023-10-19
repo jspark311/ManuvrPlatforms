@@ -27,7 +27,7 @@ Implemented as a CBOR object within a single file. This feature therefore
 #ifndef __MANUVR_LINUX_STORAGE_H__
 #define __MANUVR_LINUX_STORAGE_H__
 
-#include <Storage.h>
+#include <Storage/Storage.h>
 
 class LinuxFileStorage : public Storage {
   public:

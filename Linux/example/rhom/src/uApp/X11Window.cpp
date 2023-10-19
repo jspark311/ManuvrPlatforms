@@ -304,6 +304,88 @@ GfxUITextArea _program_info_txt(
   )
 );
 
+const char* C3P_VAL_TEST_STR = "About 3";
+C3PValue _c3p_value_0(C3P_VAL_TEST_STR);
+C3PValue _c3p_value_1((uint32_t) PI);
+C3PValue _c3p_value_2((float)  PI);
+C3PValue _c3p_value_3((double) PI);
+
+GfxUIC3PValue _value_test_0(
+  &_c3p_value_0,
+  GfxUILayout(
+    _program_info_txt.elementPosX(), (_program_info_txt.elementPosY() + _program_info_txt.elementHeight()),
+    100, 20,
+    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+    0, 0, 0, 0               // Border_px(t, b, l, r)
+  ),
+  GfxUIStyle(0, // bg
+    0xFFFFFF,   // border
+    0xFFFFFF,   // header
+    0xC0C0C0,   // active
+    0xA0A0A0,   // inactive
+    0xFFFFFF,   // selected
+    0x202020,   // unselected
+    1           // t_size
+  )
+);
+
+GfxUIC3PValue _value_test_1(
+  &_c3p_value_1,
+  GfxUILayout(
+    _program_info_txt.elementPosX(), (_value_test_0.elementPosY() + _value_test_0.elementHeight()),
+    100, 20,
+    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+    0, 0, 0, 0               // Border_px(t, b, l, r)
+  ),
+  GfxUIStyle(0, // bg
+    0xFFFFFF,   // border
+    0xFFFFFF,   // header
+    0xC0C0C0,   // active
+    0xA0A0A0,   // inactive
+    0xFFFFFF,   // selected
+    0x202020,   // unselected
+    1           // t_size
+  )
+);
+
+GfxUIC3PValue _value_test_2(
+  &_c3p_value_2,
+  GfxUILayout(
+    _program_info_txt.elementPosX(), (_value_test_1.elementPosY() + _value_test_1.elementHeight()),
+    100, 20,
+    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+    0, 0, 0, 0               // Border_px(t, b, l, r)
+  ),
+  GfxUIStyle(0, // bg
+    0xFFFFFF,   // border
+    0xFFFFFF,   // header
+    0xC0C0C0,   // active
+    0xA0A0A0,   // inactive
+    0xFFFFFF,   // selected
+    0x202020,   // unselected
+    1           // t_size
+  )
+);
+
+GfxUIC3PValue _value_test_3(
+  &_c3p_value_3,
+  GfxUILayout(
+    _program_info_txt.elementPosX(), (_value_test_2.elementPosY() + _value_test_2.elementHeight()),
+    100, 20,
+    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+    0, 0, 0, 0               // Border_px(t, b, l, r)
+  ),
+  GfxUIStyle(0, // bg
+    0xFFFFFF,   // border
+    0xFFFFFF,   // header
+    0xC0C0C0,   // active
+    0xA0A0A0,   // inactive
+    0xFFFFFF,   // selected
+    0x202020,   // unselected
+    1           // t_size
+  )
+);
+
 
 // Create a simple console window, with a full frame.
 GfxUITextArea _txt_area_0(
@@ -514,6 +596,10 @@ int8_t MainGuiWindow::createWindow() {
     _main_nav_settings.add_child(&_slider_3);
     _main_nav_settings.add_child(&_slider_4);
     _main_nav_settings.add_child(&_program_info_txt);
+    _main_nav_settings.add_child(&_value_test_0);
+    _main_nav_settings.add_child(&_value_test_1);
+    _main_nav_settings.add_child(&_value_test_2);
+    _main_nav_settings.add_child(&_value_test_3);
 
     _main_nav_data_viewer.add_child(&data_examiner);
     _main_nav_data_viewer.add_child(&_filter_txt_0);
@@ -781,6 +867,7 @@ int8_t MainGuiWindow::poll() {
       _tmp_sbldr.concatf("STDEV:    %.2f\n", (double) test_filter_0.stdev());
       _tmp_sbldr.concatf("SNR:      %.2f\n", (double) test_filter_0.snr());
       _tmp_sbldr.concatf("Min/Max:  %.2f / %.2f\n", (double) test_filter_0.minValue(), (double) test_filter_0.maxValue());
+      _c3p_value_3.set(test_filter_0.snr());
       _filter_txt_0.clear();
       _filter_txt_0.pushBuffer(&_tmp_sbldr);
     }

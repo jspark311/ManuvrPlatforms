@@ -9,7 +9,7 @@
 #include "StringBuilder.h"
 #include "ParsingConsole.h"
 #include "ElementPool.h"
-#include "BufferAccepter/GPSWrapper/GPSWrapper.h"
+#include "Pipes/BufferAccepter/GPSWrapper/GPSWrapper.h"
 #include "BusQueue/UARTAdapter.h"
 #include "BusQueue/I2CAdapter.h"
 #include "C3PValue/KeyValuePair.h"
