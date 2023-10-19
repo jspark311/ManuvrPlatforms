@@ -26,7 +26,7 @@ limitations under the License.
 #include <StringBuilder.h>
 
 #if defined(CONFIG_C3P_STORAGE)
-  #include <Storage.h>
+  #include <Storage/Storage.h>
 #endif
 
 /* These includes from ESF-IDF need to be under C linkage. */

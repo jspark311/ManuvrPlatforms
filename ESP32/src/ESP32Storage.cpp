@@ -40,7 +40,6 @@ Noteworth snippit from the ESP-IDF doc:
 */
 #include "../ESP32.h"
 
-
 #if defined(CONFIG_C3P_STORAGE)
 
 #if !defined(CONFIG_C3P_CBOR)
@@ -161,7 +160,7 @@ StorageErr ESP32Storage::persistentRead(uint8_t* buf, unsigned int len, uint32_t
     ret = StorageErr::NOT_READABLE;
     if (isReadable()) {
       ret = StorageErr::BAD_PARAM;
-      if (0 <= len) {
+      if (0 < len) {
         size_t nvs_len = 0;
         ret = StorageErr::KEY_NOT_FOUND;
         //if (ESP_OK == nvs_get_blob(store_handle, key, (void*) buf, &nvs_len)) {
