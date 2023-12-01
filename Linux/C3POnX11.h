@@ -30,7 +30,7 @@
 #include "CppPotpourri.h"
 #include "StringBuilder.h"
 #include "PriorityQueue.h"
-#include "TimerTools.h"
+#include "TimerTools/TimerTools.h"
 #include "Image/Image.h"
 #include "Image/ImageUtils.h"
 #include "Image/GfxUI.h"

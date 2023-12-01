@@ -22,6 +22,7 @@ MANUVR_CONF  = -DCONFIG_C3P_CBOR
 MANUVR_CONF += -DCONFIG_C3P_IMG_SUPPORT
 MANUVR_CONF += -DCONFIG_C3P_M2M_SUPPORT
 MANUVR_CONF += -DCONFIG_C3P_SOCKET_WRAPPER
+MANUVR_CONF += -DCONFIG_C3P_TRACE_ENABLED
 
 
 ###########################################################################
@@ -45,6 +46,7 @@ CXX_SRCS  = src/*.cpp
 CXX_SRCS += src/uApp/*.cpp
 CXX_SRCS += ../CppPotpourri/src/*.cpp
 CXX_SRCS += ../CppPotpourri/src/BusQueue/*.cpp
+CXX_SRCS += ../CppPotpourri/src/TimerTools/*.cpp
 CXX_SRCS += ../CppPotpourri/src/Identity/*.cpp
 CXX_SRCS += ../CppPotpourri/src/cbor-cpp/*.cpp
 CXX_SRCS += ../CppPotpourri/src/C3PValue/*.cpp
@@ -53,6 +55,7 @@ CXX_SRCS += ../CppPotpourri/src/Pipes/TripleAxisPipe/*.cpp
 CXX_SRCS += ../CppPotpourri/src/Pipes/BufferAccepter/*.cpp
 CXX_SRCS += ../CppPotpourri/src/Storage/*.cpp
 CXX_SRCS += ../CppPotpourri/src/Storage/RecordTypes/*.cpp
+CXX_SRCS += ../CppPotpourri/src/Console/*.cpp
 CXX_SRCS += ../CppPotpourri/src/Image/*.cpp
 CXX_SRCS += ../CppPotpourri/src/Image/GfxUI/*.cpp
 CXX_SRCS += ../CppPotpourri/src/Image/ImageUtils/*.cpp

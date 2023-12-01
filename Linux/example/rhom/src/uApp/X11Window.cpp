@@ -304,87 +304,186 @@ GfxUITextArea _program_info_txt(
   )
 );
 
+Vector3f   v3_float(1.0f, 0.8f, 0.7f);
+Vector3u32 v3_u32(0, 0, 0);
+Vector3i32 v3_i32(0, 0, 0);
+Vector3u16 v3_u16(0, 0, 0);
+Vector3i16 v3_i16(0, 0, 0);
+
+uint8_t demo_bin_field[17] = {0, };
+
 const char* C3P_VAL_TEST_STR = "About 3";
 C3PValue _c3p_value_0(C3P_VAL_TEST_STR);
 C3PValue _c3p_value_1((uint32_t) PI);
 C3PValue _c3p_value_2((float)  PI);
 C3PValue _c3p_value_3((double) PI);
+C3PValue _c3p_value_4(&v3_float);
+C3PValue _c3p_value_5(&v3_u32);
+C3PValue _c3p_value_6(&v3_i32);
+C3PValue _c3p_value_7(&v3_u16);
+C3PValue _c3p_value_8(&v3_i16);
+C3PValue _c3p_value_9(demo_bin_field, sizeof(demo_bin_field));
+C3PValue _c3p_value_10((Identity*) &ident_uuid);
+
+
+// C3PValue demo styling.
+GfxUIStyle c3pvalue_style(
+  0,          // bg
+  0xA0A0A0,   // border
+  0xFFFFFF,   // header
+  0xC0C0C0,   // active
+  0xA0A0A0,   // inactive
+  0xFFFFFF,   // selected
+  0x202020,   // unselected
+  1           // t_size
+);
+
 
 GfxUIC3PValue _value_test_0(
   &_c3p_value_0,
   GfxUILayout(
     _program_info_txt.elementPosX(), (_program_info_txt.elementPosY() + _program_info_txt.elementHeight()),
-    100, 20,
+    240, 20,
     0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
     0, 0, 0, 0               // Border_px(t, b, l, r)
-  ),
-  GfxUIStyle(0, // bg
-    0xFFFFFF,   // border
-    0xFFFFFF,   // header
-    0xC0C0C0,   // active
-    0xA0A0A0,   // inactive
-    0xFFFFFF,   // selected
-    0x202020,   // unselected
-    1           // t_size
-  )
+  ), c3pvalue_style,
+  (GFXUI_C3PVAL_FLAG_SHOW_TYPE_INFO)
 );
 
 GfxUIC3PValue _value_test_1(
   &_c3p_value_1,
   GfxUILayout(
     _program_info_txt.elementPosX(), (_value_test_0.elementPosY() + _value_test_0.elementHeight()),
-    100, 20,
+    240, 20,
     0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
     0, 0, 0, 0               // Border_px(t, b, l, r)
-  ),
-  GfxUIStyle(0, // bg
-    0xFFFFFF,   // border
-    0xFFFFFF,   // header
-    0xC0C0C0,   // active
-    0xA0A0A0,   // inactive
-    0xFFFFFF,   // selected
-    0x202020,   // unselected
-    1           // t_size
-  )
+  ), c3pvalue_style,
+  (GFXUI_C3PVAL_FLAG_SHOW_TYPE_INFO)
 );
 
 GfxUIC3PValue _value_test_2(
   &_c3p_value_2,
   GfxUILayout(
     _program_info_txt.elementPosX(), (_value_test_1.elementPosY() + _value_test_1.elementHeight()),
-    100, 20,
+    240, 20,
     0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
     0, 0, 0, 0               // Border_px(t, b, l, r)
-  ),
-  GfxUIStyle(0, // bg
-    0xFFFFFF,   // border
-    0xFFFFFF,   // header
-    0xC0C0C0,   // active
-    0xA0A0A0,   // inactive
-    0xFFFFFF,   // selected
-    0x202020,   // unselected
-    1           // t_size
-  )
+  ), c3pvalue_style,
+  (GFXUI_C3PVAL_FLAG_SHOW_TYPE_INFO)
 );
 
 GfxUIC3PValue _value_test_3(
   &_c3p_value_3,
   GfxUILayout(
     _program_info_txt.elementPosX(), (_value_test_2.elementPosY() + _value_test_2.elementHeight()),
-    100, 20,
+    240, 20,
     0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
     0, 0, 0, 0               // Border_px(t, b, l, r)
+  ), c3pvalue_style,
+  (GFXUI_C3PVAL_FLAG_SHOW_TYPE_INFO)
+);
+
+GfxUIC3PValue _value_test_4(
+  &_c3p_value_4,
+  GfxUILayout(
+    _program_info_txt.elementPosX(), (_value_test_3.elementPosY() + _value_test_3.elementHeight()),
+    240, 20,
+    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+    0, 0, 0, 0               // Border_px(t, b, l, r)
+  ), c3pvalue_style,
+  (GFXUI_C3PVAL_FLAG_SHOW_TYPE_INFO)
+);
+
+GfxUIC3PValue _value_test_5(
+  &_c3p_value_5,
+  GfxUILayout(
+    _program_info_txt.elementPosX(), (_value_test_4.elementPosY() + _value_test_4.elementHeight()),
+    240, 20,
+    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+    0, 0, 0, 0               // Border_px(t, b, l, r)
+  ), c3pvalue_style,
+  (GFXUI_C3PVAL_FLAG_SHOW_TYPE_INFO)
+);
+
+GfxUIC3PValue _value_test_6(
+  &_c3p_value_6,
+  GfxUILayout(
+    _program_info_txt.elementPosX(), (_value_test_5.elementPosY() + _value_test_5.elementHeight()),
+    240, 20,
+    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+    0, 0, 0, 0               // Border_px(t, b, l, r)
+  ), c3pvalue_style,
+  (GFXUI_C3PVAL_FLAG_SHOW_TYPE_INFO)
+);
+
+GfxUIC3PValue _value_test_7(
+  &_c3p_value_7,
+  GfxUILayout(
+    _program_info_txt.elementPosX(), (_value_test_6.elementPosY() + _value_test_6.elementHeight()),
+    240, 20,
+    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+    0, 0, 0, 0               // Border_px(t, b, l, r)
+  ), c3pvalue_style,
+  (GFXUI_C3PVAL_FLAG_SHOW_TYPE_INFO)
+);
+
+GfxUIC3PValue _value_test_8(
+  &_c3p_value_8,
+  GfxUILayout(
+    _program_info_txt.elementPosX(), (_value_test_7.elementPosY() + _value_test_7.elementHeight()),
+    240, 20,
+    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+    0, 0, 0, 0               // Border_px(t, b, l, r)
+  ), c3pvalue_style,
+  (GFXUI_C3PVAL_FLAG_SHOW_TYPE_INFO)
+);
+
+GfxUIC3PValue _value_test_9(
+  &_c3p_value_9,
+  GfxUILayout(
+    _program_info_txt.elementPosX(), (_value_test_8.elementPosY() + _value_test_8.elementHeight()),
+    240, 32,
+    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+    1, 1, 1, 1               // Border_px(t, b, l, r)
+  ), c3pvalue_style,
+  (GFXUI_C3PVAL_FLAG_SHOW_TYPE_INFO)
+);
+
+GfxUIC3PValue _value_test_10(
+  &_c3p_value_10,
+  GfxUILayout(
+    _program_info_txt.elementPosX(), (_value_test_9.elementPosY() + _value_test_9.elementHeight()),
+    240, 32,
+    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+    0, 0, 0, 0               // Border_px(t, b, l, r)
+  ), c3pvalue_style,
+  (GFXUI_C3PVAL_FLAG_SHOW_TYPE_INFO)
+);
+
+
+
+GfxUIKeyValuePair _kvp_test_0(
+  rhom_conf.getKVP(),
+  GfxUILayout(
+    _program_info_txt.elementPosX(), (_value_test_10.elementPosY() + _value_test_10.elementHeight()),
+    240, 140,
+    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+    1, 1, 1, 1               // Border_px(t, b, l, r)
   ),
   GfxUIStyle(0, // bg
     0xFFFFFF,   // border
     0xFFFFFF,   // header
-    0xC0C0C0,   // active
+    0xfefe00,   // active
     0xA0A0A0,   // inactive
     0xFFFFFF,   // selected
     0x202020,   // unselected
     1           // t_size
-  )
+  ),
+  (0)
 );
+
+
+
 
 
 // Create a simple console window, with a full frame.
@@ -600,6 +699,14 @@ int8_t MainGuiWindow::createWindow() {
     _main_nav_settings.add_child(&_value_test_1);
     _main_nav_settings.add_child(&_value_test_2);
     _main_nav_settings.add_child(&_value_test_3);
+    _main_nav_settings.add_child(&_value_test_4);
+    _main_nav_settings.add_child(&_value_test_5);
+    _main_nav_settings.add_child(&_value_test_6);
+    _main_nav_settings.add_child(&_value_test_7);
+    _main_nav_settings.add_child(&_value_test_8);
+    _main_nav_settings.add_child(&_value_test_9);
+    _main_nav_settings.add_child(&_value_test_10);
+    _main_nav_settings.add_child(&_kvp_test_0);
 
     _main_nav_data_viewer.add_child(&data_examiner);
     _main_nav_data_viewer.add_child(&_filter_txt_0);
@@ -868,6 +975,19 @@ int8_t MainGuiWindow::poll() {
       _tmp_sbldr.concatf("SNR:      %.2f\n", (double) test_filter_0.snr());
       _tmp_sbldr.concatf("Min/Max:  %.2f / %.2f\n", (double) test_filter_0.minValue(), (double) test_filter_0.maxValue());
       _c3p_value_3.set(test_filter_0.snr());
+      Vector3u32 tmp_v3_u32(
+        (randomUInt32() & 0x0000FFFF),
+        (randomUInt32() & 0x0000FFFF),
+        (randomUInt32() & 0x0000FFFF)
+      );
+      _c3p_value_5.set(&tmp_v3_u32);
+      Vector3u32 tmp_v3_f(
+        1.0,
+        -0.8,
+        0.984
+      );
+      _c3p_value_4.set(&tmp_v3_f);
+
       _filter_txt_0.clear();
       _filter_txt_0.pushBuffer(&_tmp_sbldr);
     }

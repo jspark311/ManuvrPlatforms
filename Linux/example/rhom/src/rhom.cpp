@@ -35,18 +35,6 @@ IdentityUUID ident_uuid("BIN_ID", (char*) "29c6e2b9-9e68-4e52-9af0-03e9ca10e217"
 *
 * TODO: Pending mitosis into a header file....
 *******************************************************************************/
-// First, we define (as an enum) what keys we want in the data.
-enum class RHoMConfKey : uint16_t {
-  SHOW_PANE_MLINK,
-  SHOW_PANE_BURRITO,
-  SHOW_PANE_INTERNALS,
-  MLINK_XPORT_PATH,
-  MLINK_TIMEOUT_PERIOD,
-  MLINK_KA_PERIOD,
-  MLINK_MTU,
-  INVALID
-};
-
 // Then, we bind those enum values each to a type code, and to a semantic string
 //   suitable for storage or transmission to a counterparty.
 const EnumDef<RHoMConfKey> CONF_KEY_LIST[] = {

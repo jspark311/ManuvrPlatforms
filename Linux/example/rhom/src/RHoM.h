@@ -7,7 +7,7 @@
 #include "CppPotpourri.h"
 #include "AbstractPlatform.h"
 #include "StringBuilder.h"
-#include "ParsingConsole.h"
+#include "Console/C3PConsole.h"
 #include "ElementPool.h"
 #include "Pipes/BufferAccepter/GPSWrapper/GPSWrapper.h"
 #include "BusQueue/UARTAdapter.h"
@@ -15,7 +15,7 @@
 #include "C3PValue/KeyValuePair.h"
 #include "SensorFilter.h"
 #include "Vector3.h"
-#include "TimerTools.h"
+#include "TimerTools/TimerTools.h"
 #include "Storage/RecordTypes/ConfRecord.h"
 #include "uuid.h"
 #include "cbor-cpp/cbor.h"
@@ -38,6 +38,17 @@
 #define RHOM_GUI_MOD_CTRL_HELD           0x00000001   //
 #define RHOM_GUI_MOD_ALT_HELD            0x00000002   //
 
+
+enum class RHoMConfKey : uint16_t {
+  SHOW_PANE_MLINK,
+  SHOW_PANE_BURRITO,
+  SHOW_PANE_INTERNALS,
+  MLINK_XPORT_PATH,
+  MLINK_TIMEOUT_PERIOD,
+  MLINK_KA_PERIOD,
+  MLINK_MTU,
+  INVALID
+};
 
 
 class CryptoLogShunt : public CryptOpCallback {
@@ -112,5 +123,12 @@ class MainGuiWindow : public C3Px11Window {
     GfxUIElement*   _key_target;
     GfxUIElement*   _paste_target;
 };
+
+
+
+
+extern IdentityUUID ident_uuid;
+extern ConfRecordValidation<RHoMConfKey> rhom_conf;
+
 
 #endif  // __RHOM_HEADER_H__
