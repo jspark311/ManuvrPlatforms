@@ -189,7 +189,7 @@ int8_t C3Px11Window::_process_motion() {
 /*
 * Dispatch a request to see the current clipboard.
 */
-int8_t C3Px11Window::_request_clipboard() {
+int8_t C3Px11Window::request_clipboard() {
   int8_t ret = -1;
   if (_win) {
     Atom UTF8      = XInternAtom(_dpy, "UTF8_STRING", True);
@@ -202,9 +202,9 @@ int8_t C3Px11Window::_request_clipboard() {
 }
 
 /*
-* Dispatch a request to see the current clipboard.
+* Dispatch a request to see the current selection buffer.
 */
-int8_t C3Px11Window::_request_selection_buffer() {
+int8_t C3Px11Window::request_selection_buffer() {
   int8_t ret = -1;
   if (_win) {
     Atom UTF8      = XInternAtom(_dpy, "UTF8_STRING", True);

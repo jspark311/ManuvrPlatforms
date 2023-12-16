@@ -100,7 +100,8 @@ class C3Px11Window {
     GfxUIElement* elementUnderPointer();
 
     int8_t map_button_inputs(MouseButtonDef*, uint32_t count);
-    //int8_t console_callback(StringBuilder* text_return, StringBuilder* args);
+    int8_t request_clipboard();
+    int8_t request_selection_buffer();
 
     friend void* gui_thread_handler(void*);  // We allow the ISR access to private members.
 
@@ -132,8 +133,6 @@ class C3Px11Window {
     int8_t _refit_window();
     int8_t _process_motion();
     int8_t _query_pointer();
-    int8_t _request_clipboard();
-    int8_t _request_selection_buffer();
     int8_t _proc_changelog(PriorityQueue<GfxUIElement*>* resp_list);
     int8_t _proc_mouse_button(uint16_t btn_id, uint32_t x, uint32_t y, bool pressed);
 };

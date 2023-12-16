@@ -45,13 +45,11 @@ LinuxStdIO::~LinuxStdIO() {
 
 
 /**
-* Read input from local keyboard.
+* Write output to STDOUT, and read input from STDIN.
 */
 int8_t LinuxStdIO::poll() {
-  char* input_text = (char*) alloca(2048);  // Buffer to hold user-input.
   int read_len = 0;
 
-  bzero(input_text, 2048);
   while (_tx_buffer.count()) {
     const char* working_chunk = (const char*) _tx_buffer.position(0);
     printf("%s", working_chunk);
@@ -59,20 +57,21 @@ int8_t LinuxStdIO::poll() {
   }
   fflush(stdout);
 
-  if (nullptr != fgets(input_text, 256-1, stdin)) {
+  // If there is an object to feed the
+  char input_text[256];    // Buffer to hold user-input.
+  bzero(input_text, sizeof(input_text));
+  if (nullptr != fgets(input_text, (sizeof(input_text)-1), stdin)) {
     read_len = strlen(input_text);
     // NOTE: This should suffice to be binary-safe.
     //read_len = fread(input_text, 1, getMTU(), stdin);
-
-    if (read_len > 0) {
-      _rx_buffer.concat((uint8_t*) input_text, read_len);
-    }
-  }
-
-  if (0 < _rx_buffer.length()) {
     if (nullptr != _read_cb_obj) {
-      if (0 == _read_cb_obj->pushBuffer(&_rx_buffer)) {
-        _rx_buffer.clear();
+      if (read_len > 0) {
+        _rx_buffer.concat((uint8_t*) input_text, read_len);
+      }
+      if (0 < _rx_buffer.length()) {
+        if (0 == _read_cb_obj->pushBuffer(&_rx_buffer)) {
+          _rx_buffer.clear();
+        }
       }
     }
   }
