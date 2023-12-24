@@ -29,41 +29,74 @@ Implemented as a CBOR object within a single file. This feature therefore
 
 #include <Storage/Storage.h>
 
-class LinuxFileStorage : public Storage {
+class C3PFile {
   public:
-    LinuxStorage(Argument*);
-    ~LinuxStorage();
+    C3PFile(char*);
+    ~C3PFile();
 
-    /* Overrides from Storage. */
-    uint64_t   freeSpace();     // How many bytes are availible for use?
-    StorageErr wipe();          // Call to wipe the data store.
-    //StorageErr flush();             // Blocks until commit completes.
+    inline char* path() {             return _path;              };
+    inline bool  exists() {           return _exists;            };
+    inline bool  isDirectory() {      return _is_dir;            };
+    inline bool  isFile() {           return _is_file;           };
+    inline bool  isLink() {           return _is_link;           };
+    inline bool  closelyExamined() {  return _closely_examined;  };
 
-    /* Raw buffer API. Might have more overhead on some platforms. */
-    StorageErr persistentWrite(const char*, uint8_t*, unsigned int, uint16_t);
-    StorageErr persistentRead(const char*, uint8_t*, unsigned int*, uint16_t);
-
-    /* StringBuilder API to avoid pedantic copying. */
-    StorageErr persistentWrite(const char*, StringBuilder*, uint16_t);
-    StorageErr persistentRead(const char*, StringBuilder*, uint16_t);
+    int32_t read(StringBuilder* buf);
+    int32_t write(StringBuilder* buf);
 
 
-    /* Overrides from EventReceiver */
     void printDebug(StringBuilder*);
-    int8_t notify(M2MMsg*);
-    int8_t callback_proc(M2MMsg*);
-
-
-  protected:
-    int8_t attached();
 
 
   private:
-    char*          _filename   = nullptr;
-    StringBuilder  _disk_buffer;
+    char    _mode[12];
+    char*   _path    = nullptr;
+    ulong   _fsize   = 0;
+    uid_t   _uid     = 0;
+    gid_t   _gid     = 0;
+    time_t  _ctime;
+    time_t  _mtime;
+    bool    _exists  = false;
+    bool    _is_dir  = false;
+    bool    _is_file = false;
+    bool    _is_link = false;
+    bool    _closely_examined = false;
 
-    StorageErr _save_file(StringBuilder* b);
-    StorageErr _load_file(StringBuilder* b);
+    int _fill_from_stat();
 };
+
+
+//class LinuxFileStorage : public Storage {
+//  public:
+//    LinuxStorage(KeyValuePair*);
+//    ~LinuxStorage();
+//
+//    /* Overrides from Storage. */
+//    uint64_t   freeSpace();     // How many bytes are availible for use?
+//    StorageErr wipe();          // Call to wipe the data store.
+//    //StorageErr flush();             // Blocks until commit completes.
+//
+//    /* Raw buffer API. Might have more overhead on some platforms. */
+//    StorageErr persistentWrite(const char*, uint8_t*, unsigned int, uint16_t);
+//    StorageErr persistentRead(const char*, uint8_t*, unsigned int*, uint16_t);
+//
+//    /* StringBuilder API to avoid pedantic copying. */
+//    StorageErr persistentWrite(const char*, StringBuilder*, uint16_t);
+//    StorageErr persistentRead(const char*, StringBuilder*, uint16_t);
+//
+//    void printDebug(StringBuilder*);
+//
+//
+//  protected:
+//    int8_t attached();
+//
+//
+//  private:
+//    char*          _filename   = nullptr;
+//    StringBuilder  _disk_buffer;
+//
+//    StorageErr _save_file(StringBuilder* b);
+//    StorageErr _load_file(StringBuilder* b);
+//};
 
 #endif // __MANUVR_LINUX_STORAGE_H__
