@@ -922,11 +922,11 @@ int8_t MainGuiWindow::poll() {
           else if ((keysym == XK_Control_L) | (keysym == XK_Control_R)) {
             _modifiers.set(RHOM_GUI_MOD_CTRL_HELD);
             //c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "CTRL press");
-            _request_clipboard();
+            request_clipboard();
           }
           else if ((keysym == XK_Alt_L) | (keysym == XK_Alt_R)) {
             _modifiers.set(RHOM_GUI_MOD_ALT_HELD);
-            _request_selection_buffer();
+            request_selection_buffer();
           }
           else if (1 == ret_local) {
             StringBuilder _tmp_sbldr;

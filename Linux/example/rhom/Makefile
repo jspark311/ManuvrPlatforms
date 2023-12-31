@@ -50,7 +50,6 @@ CXX_SRCS += ../CppPotpourri/src/TimerTools/*.cpp
 CXX_SRCS += ../CppPotpourri/src/Identity/*.cpp
 CXX_SRCS += ../CppPotpourri/src/cbor-cpp/*.cpp
 CXX_SRCS += ../CppPotpourri/src/C3PValue/*.cpp
-CXX_SRCS += ../CppPotpourri/src/C3PEvents/*.cpp
 CXX_SRCS += ../CppPotpourri/src/Pipes/TripleAxisPipe/*.cpp
 CXX_SRCS += ../CppPotpourri/src/Pipes/BufferAccepter/*.cpp
 CXX_SRCS += ../CppPotpourri/src/Storage/*.cpp
