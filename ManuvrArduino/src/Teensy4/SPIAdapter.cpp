@@ -12,11 +12,12 @@ Hardware-specific SPI implementation for Teensy4.
 #include <BusQueue/SPIAdapter.h>
 #include <SPI.h>
 
+static uint8_t clock_mode = SPI_MODE0;
+
 
 /*******************************************************************************
 * BusOp functions below...
 *******************************************************************************/
-static SPISettings spi_settings(10000000, MSBFIRST, SPI_MODE0);  // Max is 20MHz
 
 /**
 * Calling this member will cause the bus operation to be started.
@@ -28,6 +29,7 @@ XferFault SPIBusOp::begin() {
   // NOTE: Short-circuit eval and the order of args to the if() is very important to not crash.
   if ((nullptr == callback) || (0 == callback->io_op_callahead(this))) {
     set_state(XferState::INITIATE);  // Indicate that we now have bus control.
+    SPISettings spi_settings(_bus->frequency(), MSBFIRST, clock_mode);
     SPI.beginTransaction(spi_settings);
     _assert_cs(true);
     set_state(XferState::ADDR);
@@ -142,6 +144,43 @@ int8_t SPIAdapter::io_op_callback(BusOp* _op) {
 * _|_ /  \_/ o   /--\ (_| (_| |_) |_ (/_ |   Adapters must be instanced with
 *                             |              a BusOp as the template param.
 *******************************************************************************/
+void SPIAdapter::printDebug(StringBuilder* output) {
+  printAdapter(output);
+  printHardwareState(output);
+}
+
+void SPIAdapter::printHardwareState(StringBuilder* output) {
+}
+
+
+FAST_FUNC int8_t SPIAdapter::frequency(const uint32_t f) {
+  int8_t ret = -1;
+  if (0 < f) {
+    ret--;
+    if (2 > ADAPTER_NUM) {
+      _current_freq = f;
+      ret = 0;
+    }
+  }
+  return ret;
+}
+
+
+FAST_FUNC int8_t SPIAdapter::setMode(const uint8_t m) {
+  int8_t   ret = -2;
+  if (2 > ADAPTER_NUM) {
+    ret = 0;
+    switch (m) {
+      case 0:   clock_mode = SPI_MODE0;   break;
+      case 1:   clock_mode = SPI_MODE1;   break;
+      case 2:   clock_mode = SPI_MODE2;   break;
+      case 3:   clock_mode = SPI_MODE3;   break;
+      default:  ret = -3;   break;
+    }
+  }
+  return ret;
+}
+
 
 int8_t SPIAdapter::bus_init() {
   int8_t ret = 0;

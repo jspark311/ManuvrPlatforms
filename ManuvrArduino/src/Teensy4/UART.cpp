@@ -1,7 +1,7 @@
 #include <BusQueue/UARTAdapter.h>
 
 
-static const HardwareSerial* _uart_get_by_adapter_num(const uint8_t A_NUM) {
+static HardwareSerial* _uart_get_by_adapter_num(const uint8_t A_NUM) {
   switch (A_NUM) {
     case 1:   return &Serial1;
     case 2:   return &Serial2;
@@ -32,25 +32,25 @@ int8_t UARTAdapter::poll() {
   int8_t return_value = 0;
   HardwareSerial* s_port = _uart_get_by_adapter_num(ADAPTER_NUM);
 
-  if (txCapable() && (0 < _tx_buffer.length())) {
+  if (txCapable() && (0 < _tx_buffer.count())) {
     // Refill the TX buffer...
     const uint32_t TX_COUNT = strict_min((uint32_t) 64, (uint32_t) _tx_buffer.count());
     if (0 < TX_COUNT) {
-      uint8_t side_buffer[TX_COUNT] = {0, };
+      uint8_t side_buffer[TX_COUNT] = {0};
       const int32_t PEEK_COUNT = _tx_buffer.peek(side_buffer, TX_COUNT);
-      const int32_t BYTES_WRITTEN = uart_write_bytes((uart_port_t) ADAPTER_NUM, (const char*) side_buffer, (size_t) PEEK_COUNT);
+      //const int32_t BYTES_WRITTEN = uart_write_bytes((uart_port_t) ADAPTER_NUM, (const char*) side_buffer, (size_t) PEEK_COUNT);
       switch (ADAPTER_NUM) {
         case 0:
-          if (Serial) {  Serial.write(_tx_buffer.string(), tx_count);   }
+          if (Serial) {  Serial.write(side_buffer, TX_COUNT);   }
           break;
         default:
-          if (s_port) {  s_port->write(_tx_buffer.string(), tx_count);  }
+          if (s_port) {  s_port->write(side_buffer, TX_COUNT);  }
           break;
       }
-      _flushed = _tx_buffer.isEmpty();
-      if (BYTES_WRITTEN > 0) {
-        _tx_buffer.cull(BYTES_WRITTEN);
+      if (TX_COUNT > 0) {
+        _tx_buffer.cull(TX_COUNT);
       }
+      _flushed = _tx_buffer.isEmpty();
     }
   }
   if (rxCapable()) {
@@ -90,8 +90,9 @@ int8_t UARTAdapter::_pf_init() {
     case 0:
       Serial.begin(_opts.bitrate);   // USB
       _adapter_set_flag(UART_FLAG_HAS_TX | UART_FLAG_HAS_RX);
-      _adapter_set_flag(UART_FLAG_UART_READY | UART_FLAG_FLUSHED);
+      _adapter_set_flag(UART_FLAG_UART_READY);
       _adapter_clear_flag(UART_FLAG_PENDING_CONF | UART_FLAG_PENDING_RESET);
+      _flushed = true;
       ret = 0;
       break;
 
@@ -103,7 +104,8 @@ int8_t UARTAdapter::_pf_init() {
       if (255 != _CTS_PIN) {   s_port->attachCts(_CTS_PIN);  }
       _adapter_set_flag(UART_FLAG_HAS_RX, (255 != _RXD_PIN));
       _adapter_set_flag(UART_FLAG_HAS_TX, (255 != _TXD_PIN));
-      _adapter_set_flag(UART_FLAG_UART_READY | UART_FLAG_FLUSHED);
+      _adapter_set_flag(UART_FLAG_UART_READY);
+      _flushed = true;
       _adapter_clear_flag(UART_FLAG_PENDING_CONF | UART_FLAG_PENDING_RESET);
       ret = 0;
       break;
@@ -126,7 +128,7 @@ int8_t UARTAdapter::_pf_deinit() {
         s_port->flush();
         break;
     }
-    _adapter_set_flag(UART_FLAG_FLUSHED);
+    _flushed = true;
     ret = 0;
   }
   return ret;
