@@ -1,5 +1,4 @@
-#include <BusQueue/UARTAdapter.h>
-
+#include "../ManuvrArduino.h"
 
 static HardwareSerial* _uart_get_by_adapter_num(const uint8_t A_NUM) {
   switch (A_NUM) {
@@ -18,7 +17,7 @@ static HardwareSerial* _uart_get_by_adapter_num(const uint8_t A_NUM) {
 /*
 * In-class ISR handler. Be careful about state mutation....
 */
-void UARTAdapter::irq_handler() {
+void PlatformUART::irq_handler() {
 }
 
 
@@ -26,9 +25,9 @@ void UARTAdapter::irq_handler() {
 * Execute any I/O callbacks that are pending. The function is present because
 *   this class contains the bus implementation.
 *
-* @return 0 on success.
+* @return 0 on no action, 1 on successful action, -1 on error.
 */
-int8_t UARTAdapter::poll() {
+int8_t PlatformUART::_pf_poll() {
   int8_t return_value = 0;
   HardwareSerial* s_port = _uart_get_by_adapter_num(ADAPTER_NUM);
 
@@ -49,6 +48,7 @@ int8_t UARTAdapter::poll() {
       }
       if (TX_COUNT > 0) {
         _tx_buffer.cull(TX_COUNT);
+        return_value |= 1;
       }
       _flushed = _tx_buffer.isEmpty();
     }
@@ -76,14 +76,17 @@ int8_t UARTAdapter::poll() {
     }
     if (rx_len > 0) {
       _rx_buffer.insert(ser_buffer, rx_len);
+      return_value |= 1;
     }
-    _handle_rx_push();
+    if (0 < _handle_rx_push()) {
+      return_value |= 1;
+    }
   }
   return return_value;
 }
 
 
-int8_t UARTAdapter::_pf_init() {
+int8_t PlatformUART::_pf_init() {
   int8_t ret = -1;
   HardwareSerial* s_port = _uart_get_by_adapter_num(ADAPTER_NUM);
   switch (ADAPTER_NUM) {
@@ -114,7 +117,7 @@ int8_t UARTAdapter::_pf_init() {
 }
 
 
-int8_t UARTAdapter::_pf_deinit() {
+int8_t PlatformUART::_pf_deinit() {
   int8_t ret = -2;
   _adapter_clear_flag(UART_FLAG_UART_READY | UART_FLAG_PENDING_RESET | UART_FLAG_PENDING_CONF);
   HardwareSerial* s_port = _uart_get_by_adapter_num(ADAPTER_NUM);
