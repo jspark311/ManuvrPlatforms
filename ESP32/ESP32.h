@@ -24,6 +24,7 @@ limitations under the License.
 
 #include <AbstractPlatform.h>
 #include <StringBuilder.h>
+#include <BusQueue/UARTAdapter.h>
 
 #if defined(CONFIG_C3P_STORAGE)
   #include <Storage/Storage.h>

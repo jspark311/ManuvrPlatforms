@@ -44,16 +44,58 @@ For instance: On a RasPi v1 with the kernel driver loaded we have...
 #include <linux/spi/spidev.h>
 
 /*******************************************************************************
-* ######## ##     ## ######## ##    ## ########  ######
-* ##       ##     ## ##       ###   ##    ##    ##    ##
-* ##       ##     ## ##       ####  ##    ##    ##
-* ######   ##     ## ######   ## ## ##    ##     ######
-* ##        ##   ##  ##       ##  ####    ##          ##
-* ##         ## ##   ##       ##   ###    ##    ##    ##
-* ########    ###    ######## ##    ##    ##     ######
-*
-* These are overrides from EventReceiver interface...
+* ___     _                                  This is a template class for
+*  |   / / \ o    /\   _|  _. ._ _|_  _  ._  defining arbitrary I/O adapters.
+* _|_ /  \_/ o   /--\ (_| (_| |_) |_ (/_ |   Adapters must be instanced with
+*                             |              a BusOp as the template param.
 *******************************************************************************/
+void SPIAdapter::printDebug(StringBuilder* output) {
+  printAdapter(output);
+  printHardwareState(output);
+}
+
+void SPIAdapter::printHardwareState(StringBuilder* output) {
+}
+
+
+FAST_FUNC int8_t SPIAdapter::frequency(const uint32_t f) {
+  int8_t ret = -1;
+  if (0 < f) {
+    ret--;
+    if (2 > ADAPTER_NUM) {
+      _current_freq = f;
+      ret = 0;
+    }
+  }
+  return ret;
+}
+
+
+FAST_FUNC int8_t SPIAdapter::setMode(const uint8_t m) {
+  int8_t   ret = -2;
+  if (2 > ADAPTER_NUM) {
+    ret = 0;
+    switch (m) {
+      case 0:   clock_mode = SPI_MODE0;   break;
+      case 1:   clock_mode = SPI_MODE1;   break;
+      case 2:   clock_mode = SPI_MODE2;   break;
+      case 3:   clock_mode = SPI_MODE3;   break;
+      default:  ret = -3;   break;
+    }
+  }
+  return ret;
+}
+
+
+int8_t SPIAdapter::_bus_init() {
+  return -1;
+}
+
+
+int8_t SPIAdapter::_bus_deinit() {
+  return 0;
+}
+
 
 /**
 * This is called when the kernel attaches the module.

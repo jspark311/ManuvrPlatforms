@@ -21,21 +21,24 @@ limitations under the License.
 
 #include "../ESP32.h"
 #include <BusQueue/I2CAdapter.h>
-
 #include "driver/i2c.h"
 
 
-static const char* LOG_TAG = "I2CAdapter";
-
 TaskHandle_t static_i2c_thread_id[2] = {0, 0};
+//static const char* LOG_TAG = "I2CAdapter";
 
 
 static void* IRAM_ATTR i2c_worker_thread(void* arg) {
   I2CAdapter* BUSPTR = (I2CAdapter*) arg;
-  uint8_t anum = BUSPTR->adapterNumber();
+  //uint8_t anum = BUSPTR->adapterNumber();
   while (1) {
-    if (0 == BUSPTR->poll()) {
-      platform.yieldThread();
+    switch (BUSPTR->poll()) {
+      case PollResult::NO_ACTION:
+        //platform.suspendThread();
+        platform.yieldThread();
+      case PollResult::ACTION:
+      default:
+        break;
     }
   }
   return nullptr;
@@ -50,7 +53,8 @@ static void* IRAM_ATTR i2c_worker_thread(void* arg) {
 *                             |              a BusOp as the template param.
 *******************************************************************************/
 
-int8_t I2CAdapter::bus_init() {
+int8_t I2CAdapter::_bus_init() {
+  int8_t ret = -1;
   i2c_config_t conf;
   conf.mode             = I2C_MODE_MASTER;  // TODO: We only support master mode right now.
   conf.sda_io_num       = (gpio_num_t) _bus_opts.sda_pin;
@@ -66,7 +70,7 @@ int8_t I2CAdapter::bus_init() {
       if (ESP_OK == i2c_param_config(((0 == a_id) ? I2C_NUM_0 : I2C_NUM_1), &conf)) {
         if (ESP_OK == i2c_driver_install(((0 == a_id) ? I2C_NUM_0 : I2C_NUM_1), conf.mode, 0, 0, 0)) {
           PlatformThreadOpts topts;
-          topts.thread_name = "I2C";
+          topts.thread_name = (char*) "I2C";
           topts.stack_sz    = 2560;
           topts.priority    = 0;
           topts.core        = 1;   // TODO: Is this the best choice? Might use a preprocessor define.
@@ -74,7 +78,7 @@ int8_t I2CAdapter::bus_init() {
           platform.createThread(&_thread_id, nullptr, i2c_worker_thread, (void*) this, &topts);
           static_i2c_thread_id[a_id] = (TaskHandle_t) _thread_id;
           c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Spawned i2c thread: %lu", _thread_id);
-          _bus_online(true);
+          ret = 0;
         }
       }
       break;
@@ -83,18 +87,19 @@ int8_t I2CAdapter::bus_init() {
       c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Unsupported adapter: %d", a_id);
       break;
   }
-  return (busOnline() ? 0:-1);
+  return ret;
 }
 
 
-int8_t I2CAdapter::bus_deinit() {
+int8_t I2CAdapter::_bus_deinit() {
   // TODO: This.
+  _bus_online(false);
   return 0;
 }
 
 
 void I2CAdapter::printHardwareState(StringBuilder* output) {
-  output->concatf("-- I2C%d (%sline)\n", adapterNumber(), (_adapter_flag(I2C_BUS_FLAG_BUS_ONLINE)?"on":"OFF"));
+  output->concatf("-- I2C%d (%sline)\n", adapterNumber(), (busOnline() ? "on":"OFF"));
 }
 
 

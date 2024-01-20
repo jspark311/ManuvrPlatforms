@@ -151,9 +151,9 @@ void UARTAdapter::irq_handler() {
 * Execute any I/O callbacks that are pending. The function is present because
 *   this class contains the bus implementation.
 *
-* @return 0 on success.
+* @return 0 on no action, 1 on successful action, -1 on error.
 */
-int8_t UARTAdapter::poll() {
+int8_t UARTAdapter::_pf_poll() {
   int8_t return_value = 0;
   if (txCapable() & (0 < _tx_buffer.count())) {
     // Refill the TX buffer...
@@ -165,10 +165,15 @@ int8_t UARTAdapter::poll() {
       _flushed = _tx_buffer.isEmpty();
       if (BYTES_WRITTEN > 0) {
         _tx_buffer.cull(BYTES_WRITTEN);
+        return_value |= 1;
       }
     }
   }
-  _handle_rx_push();
+  if (rxCapable()) {
+    if (0 < _handle_rx_push()) {
+      return_value |= 1;
+    }
+  }
   return return_value;
 }
 

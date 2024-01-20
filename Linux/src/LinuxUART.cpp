@@ -153,19 +153,7 @@ LinuxUART::~LinuxUART() {
 /*
 * This doesn't get used on Linux.
 */
-void UARTAdapter::irq_handler() {}
-
-
-int8_t UARTAdapter::reset() {
-  int8_t ret = -1;
-  if (0 == _pf_deinit()) {
-    if (0 == _pf_init()) {
-      ret = 0;
-    }
-  }
-  return ret;
-}
-
+void LinuxUART::irq_handler() {}
 
 
 
@@ -173,9 +161,9 @@ int8_t UARTAdapter::reset() {
 * Execute any I/O callbacks that are pending. The function is present because
 *   this class contains the bus implementation.
 *
-* @return 0 or greater on success.
+* @return 0 on no action, 1 on successful action, -1 on error.
 */
-int8_t UARTAdapter::poll() {
+int8_t LinuxUART::_pf_poll() {
   int8_t return_value = 0;
   LinuxUARTLookup* lookup = _uart_table_get_by_adapter_ref(this);
   if (nullptr != lookup) {
@@ -196,6 +184,7 @@ int8_t UARTAdapter::poll() {
           _flushed = _tx_buffer.isEmpty();
           if (BYTES_WRITTEN > 0) {
             _tx_buffer.cull(BYTES_WRITTEN);
+            return_value |= 1;
           }
         }
       }
@@ -210,9 +199,10 @@ int8_t UARTAdapter::poll() {
           //tmp_log.concatf("\n\n__________Bytes read (%d)________\n", n);
           //_rx_buffer.printDebug(&tmp_log);
           //printf("%s\n\n", tmp_log.string());
-          return_value = 1;
         }
-        _handle_rx_push();
+        if (0 < _handle_rx_push()) {
+          return_value |= 1;
+        }
       }
     }
   }
@@ -220,7 +210,7 @@ int8_t UARTAdapter::poll() {
 }
 
 
-int8_t UARTAdapter::_pf_init() {
+int8_t LinuxUART::_pf_init() {
   int8_t ret = -1;
   LinuxUARTLookup* lookup = _uart_table_get_by_adapter_ref(this);
   if (nullptr != lookup) {
@@ -297,7 +287,7 @@ int8_t UARTAdapter::_pf_init() {
 }
 
 
-int8_t UARTAdapter::_pf_deinit() {
+int8_t LinuxUART::_pf_deinit() {
   int8_t ret = -2;
   LinuxUARTLookup* lookup = _uart_table_get_by_adapter_ref(this);
   if (nullptr != lookup) {

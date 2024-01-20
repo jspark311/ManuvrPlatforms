@@ -25,6 +25,7 @@ This file forms the catch-all for linux platforms that have no support.
 #ifndef __PLATFORM_VANILLA_LINUX_H__
 #define __PLATFORM_VANILLA_LINUX_H__
 #include "AbstractPlatform.h"
+#include "LightLinkedList.h"
 #include "BusQueue/UARTAdapter.h"
 #include "BusQueue/I2CAdapter.h"
 #include "CryptoBurrito/CryptoBurrito.h"
@@ -158,7 +159,17 @@ class LinuxUART : public UARTAdapter {
   public:
     LinuxUART(char* path);
     ~LinuxUART();
+
+    void irq_handler();
+
+
+  protected:
+    /* Obligatory overrides from UARTAdapter */
+    int8_t _pf_init();
+    int8_t _pf_poll();
+    int8_t _pf_deinit();
 };
+
 
 class LinuxI2C : public I2CAdapter {
   public:

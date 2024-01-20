@@ -31,45 +31,45 @@ uint8_t _dead_buf[2][256] = {0, };
 * Init the hardware for the bus.
 * There is only one correct pin combination for each i2c bus (surprisingly).
 */
-int8_t I2CAdapter::bus_init() {
+int8_t I2CAdapter::_bus_init() {
+  int8_t ret = -1;
   switch (ADAPTER_NUM) {
     case 0:
       if ((18 == _bus_opts.sda_pin) && (19 == _bus_opts.scl_pin)) {
         master0.end();
         master0.begin(_bus_opts.freq);
-        _bus_online(true);
         _pf_needs_op_advance(true);
+        ret = 0;
       }
       break;
     case 1:
       if ((17 == _bus_opts.sda_pin) && (16 == _bus_opts.scl_pin)) {
         master1.end();
         master1.begin(_bus_opts.freq);
-        _bus_online(true);
         _pf_needs_op_advance(true);
+        ret = 0;
       }
       break;
     default:
       break;
   }
-  return (busOnline() ? 0:-1);
+  return ret;
 }
 
 
-int8_t I2CAdapter::bus_deinit() {
+int8_t I2CAdapter::_bus_deinit() {
   _bus_online(false);
   switch (ADAPTER_NUM) {
     case 0:   master0.end();   break;
     case 1:   master1.end();   break;
-    default:
-      return -1;
+    default:  return -1;
   }
   return 0;
 }
 
 
 void I2CAdapter::printHardwareState(StringBuilder* output) {
-  output->concatf("-- I2C%d (%sline)\n", adapterNumber(), (_adapter_flag(I2C_BUS_FLAG_BUS_ONLINE)?"on":"OFF"));
+  output->concatf("-- I2C%d (%sline)\n", adapterNumber(), (busOnline()?"on":"OFF"));
 }
 
 

@@ -182,7 +182,7 @@ FAST_FUNC int8_t SPIAdapter::setMode(const uint8_t m) {
 }
 
 
-int8_t SPIAdapter::bus_init() {
+int8_t SPIAdapter::_bus_init() {
   int8_t ret = 0;
   SPI.setSCK(_CLK_PIN);
   SPI.setMISO(_MISO_PIN);
@@ -192,7 +192,7 @@ int8_t SPIAdapter::bus_init() {
 }
 
 
-int8_t SPIAdapter::bus_deinit() {
+int8_t SPIAdapter::_bus_deinit() {
   return 0;
 }
 

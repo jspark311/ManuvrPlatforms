@@ -54,9 +54,15 @@ static void* IRAM_ATTR spi_worker_thread(void* arg) {
 			_threaded_op[anum] = nullptr;
       platform.yieldThread();
     }
-    else if (0 == BUSPTR->poll()) {
-      //platform.suspendThread();
-      platform.yieldThread();
+    else {
+      switch (BUSPTR->poll()) {
+        case PollResult::NO_ACTION:
+          //platform.suspendThread();
+          platform.yieldThread();
+        case PollResult::ACTION:
+        default:
+          break;
+      }
     }
   }
   return nullptr;
@@ -76,7 +82,7 @@ static void* IRAM_ATTR spi_worker_thread(void* arg) {
 *                             |              a BusOp as the template param.
 *******************************************************************************/
 
-int8_t SPIAdapter::bus_init() {
+int8_t SPIAdapter::_bus_init() {
 	spi_bus_config_t bus_config;
 	uint32_t b_flags = 0;
 	spi_host_device_t host_id;
@@ -156,7 +162,7 @@ int8_t SPIAdapter::bus_init() {
 
   unsigned long _thread_id = 0;
   PlatformThreadOpts topts;
-  topts.thread_name = "SPI";
+  topts.thread_name = (char*) "SPI";
   topts.stack_sz    = 2048;
   topts.priority    = 0;
   topts.core        = 1;   // TODO: Is this the best choice? Might use a preprocessor define.
@@ -164,13 +170,12 @@ int8_t SPIAdapter::bus_init() {
 	platform.createThread(&_thread_id, nullptr, spi_worker_thread, (void*) this, &topts);
   static_spi_thread_id = (TaskHandle_t) _thread_id;
   c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Spawned SPI thread: %lu", _thread_id);
-  _adapter_set_flag(SPI_FLAG_SPI_READY);
   return 0;
 }
 
 
-int8_t SPIAdapter::bus_deinit() {
-  _adapter_clear_flag(SPI_FLAG_SPI_READY);
+int8_t SPIAdapter::_bus_deinit() {
+  _bus_online(false);
   return 0;
 }
 

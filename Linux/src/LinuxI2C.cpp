@@ -56,7 +56,7 @@ static LinuxI2CLookup* _i2c_table_get_by_adapter_ref(I2CAdapter* adapter) {
 */
 static void* i2c_polling_handler(void*) {
   bool keep_polling = true;
-  printf("Started i2c polling thread.\n");
+  c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "Started i2c polling thread.\n");
   while (keep_polling) {
     for (int i = 0; i < i2c_instances.size(); i++) {
       LinuxI2CLookup* temp = i2c_instances.get(i);
@@ -68,7 +68,7 @@ static void* i2c_polling_handler(void*) {
     }
     keep_polling = (0 < i2c_instances.size());
   }
-  printf("Exiting i2c polling thread...\n");
+  c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "Exiting i2c polling thread...\n");
   _i2c_polling_thread_id = 0;  // Allow the thread to be restarted later.
   return NULL;
 }
@@ -144,17 +144,13 @@ bool switch_device(I2CAdapter* adapter, uint8_t nu_addr) {
     if (open_bus_handle < 0) {
       // If the bus is either uninitiallized or not idle, decline
       // to switch the device. Return false;
-      #ifdef MANUVR_DEBUG
-      Kernel::log("i2c bus is not online, so won't switch device. Failing....\n");
-      #endif
+      c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "i2c bus is not online, so won't switch device. Failing....\n");
       return return_value;
     }
     else {
       while (adapter->busError() && (timeout > 0)) { timeout--; }
       if (adapter->busError()) {
-        #ifdef MANUVR_DEBUG
-        Kernel::log("i2c bus was held for too long. Failing....\n");
-        #endif
+        c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "i2c bus was held for too long. Failing...\n");
         return return_value;
       }
 
@@ -163,11 +159,7 @@ bool switch_device(I2CAdapter* adapter, uint8_t nu_addr) {
         return_value = true;
       }
       else {
-        #ifdef MANUVR_DEBUG
-        StringBuilder local_log;
-        local_log.concatf("Failed to acquire bus access and/or talk to slave at %d.\n", nu_addr);
-        Kernel::log(&local_log);
-        #endif
+        c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Failed to acquire bus access and/or talk to slave at %d.\n", nu_addr);
         adapter->busError(true);
       }
     }
@@ -186,7 +178,8 @@ bool switch_device(I2CAdapter* adapter, uint8_t nu_addr) {
 *                             |              a BusOp as the template param.
 *******************************************************************************/
 
-int8_t I2CAdapter::bus_init() {
+int8_t I2CAdapter::_bus_init() {
+  int8_t ret = -1;
   char *filename = (char *) alloca(24);
   *filename = 0;
   if (sprintf(filename, "/dev/i2c-%d", adapterNumber()) > 0) {
@@ -194,33 +187,23 @@ int8_t I2CAdapter::bus_init() {
     if (open_bus_handle < 0) {
       // TODO?
       // http://stackoverflow.com/questions/15337799/configure-linux-i2c-speed
-      #ifdef MANUVR_DEBUG
-      if (getVerbosity() > 2) {
-        local_log.concatf("Failed to open the i2c bus represented by %s.\n", filename);
-        Kernel::log(&local_log);
-      }
-      #endif
+      c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Failed to open the i2c bus represented by %s.\n", filename);
     }
     else {
       createThread(&_thread_id, nullptr, i2c_worker_thread, (void*) this, nullptr);
-      busOnline(true);
+      ret = 0;
     }
   }
-  #if defined(MANUVR_DEBUG)
-  else if (getVerbosity() > 2) {
-    local_log.concatf("Somehow we failed to sprintf and build a filename to open i2c bus %d.\n", adapterNumber());
-    Kernel::log(&local_log);
+  else {
+    c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Somehow we failed to sprintf and build a filename to open i2c bus %d.\n", adapterNumber());
   }
-  #endif
-  return (busOnline() ? 0:-1);
+  return ret;
 }
 
 
-int8_t I2CAdapter::bus_deinit() {
+int8_t I2CAdapter::_bus_deinit() {
+  _bus_online(false);
   if (open_bus_handle >= 0) {
-    #ifdef MANUVR_DEBUG
-    Kernel::log("Closing the open i2c bus...\n");
-    #endif
     close(open_bus_handle);
   }
   return 0;
