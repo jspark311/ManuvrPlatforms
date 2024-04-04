@@ -17,7 +17,7 @@ void* gui_thread_handler(void* _ptr) {
   c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "Started GUI thread.");
   C3Px11Window* ptr = (C3Px11Window*) _ptr;
   // The thread's polling loop. Repeat forever until told otherwise.
-  while (0 <= ptr->poll()) {}
+  while (ptr->keepPolling() && 0 <= ptr->poll()) {}
   c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "Exiting GUI thread...");
   ptr->_thread_id = 0;
   return nullptr;
@@ -27,12 +27,6 @@ void* gui_thread_handler(void* _ptr) {
 /*******************************************************************************
 * Class members
 *******************************************************************************/
-
-// TODO: This is NOT a class member, but will be once it is decided if it ought
-//   to be a list or a singleton.
-GfxUIElement*   _pointer_client = nullptr;
-GfxUIElement*   _mrtlhne = nullptr;  // Most-recent top-level hover-notified element. Suffer.
-
 
 /**
 * Constructor
@@ -45,7 +39,10 @@ C3Px11Window::C3Px11Window(uint32_t win_x, uint32_t win_y, uint32_t win_w, uint3
   _fb(win_w, win_h, ImgBufferFormat::R8_G8_B8_ALPHA),
   _overlay(win_w, win_h, ImgBufferFormat::R8_G8_B8_ALPHA),
   _vc_callback(nullptr),
-  _keep_polling(true) {}
+  _paste_target(nullptr),
+  _pointer_client(nullptr),
+  _mrtlhne(nullptr),
+  _keep_polling(false) {}
 
 
 /**
@@ -108,8 +105,8 @@ int8_t C3Px11Window::_init_window() {
         Atom WM_DELETE_WINDOW = XInternAtom(_dpy, "WM_DELETE_WINDOW", False);
         XSetWMProtocols(_dpy, _win, &WM_DELETE_WINDOW, 1);
         _keep_polling = true;
-        ret = 0;
         platform.createThread(&_thread_id, nullptr, gui_thread_handler, (void*) this, nullptr);
+        ret = 0;
       }
     }
   }
@@ -314,7 +311,6 @@ int8_t C3Px11Window::_proc_mouse_button(uint16_t btn_id, uint32_t x, uint32_t y,
     PriorityQueue<GfxUIElement*> change_log;
     GfxUIElement* current_hover = elementUnderPointer();
     const GfxUIEvent event = pressed ? btn->gfx_event_down : btn->gfx_event_up;
-
     switch (event) {
       case GfxUIEvent::RELEASE:
         if ((nullptr != _pointer_client) && (_pointer_client != current_hover)) {

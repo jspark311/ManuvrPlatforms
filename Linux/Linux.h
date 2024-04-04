@@ -198,7 +198,7 @@ class LinuxPlatform : public AbstractPlatform {
     int deleteThread(unsigned long*);
     int wakeThread(unsigned long);
 
-    inline int  yieldThread() {    return pthread_yield();   };
+    inline int  yieldThread() {    return sched_yield();     };
     inline void suspendThread() {  sleep_ms(100);            };   // TODO
 
 

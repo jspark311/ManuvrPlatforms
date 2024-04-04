@@ -89,6 +89,7 @@ class C3Px11Window {
     inline Image*   frameBuffer() {   return &_fb;      };
     inline Image*   overlay() {       return &_overlay; };
     inline bool     windowReady() {   return ((nullptr != _ximage) && _fb.allocated());   };
+    inline bool     keepPolling() {   return _keep_polling;   };
     inline void setCallback(ValueChangeCallback x) {  _vc_callback = x;   };
     inline bool pointerInWindow() {   return ((0 <= _pointer_x) && (0 <= _pointer_y) && (width() > (uint32_t) _pointer_x) && (height() > (uint32_t) _pointer_y));  };
 
@@ -126,6 +127,8 @@ class C3Px11Window {
     PriorityQueue<MouseButtonDef*> _btn_defs;
     bool            _keep_polling;
     GfxUIElement*   _paste_target;
+    GfxUIElement*   _pointer_client;
+    GfxUIElement*   _mrtlhne;  // Most-recent top-level hover-notified element. Suffer.
 
     int8_t _init_window();
     int8_t _deinit_window();
