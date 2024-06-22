@@ -110,7 +110,7 @@ static void* uart_polling_handler(void*) {
 * NOTE: Because this constructor modifies static data, it can't be relied upon
 *   if an instance of it is ever allocated statically. So don't do that.
 */
-LinuxUART::LinuxUART(char* path) : UARTAdapter(0, 0, 0, 0, 0, 256, 256) {
+LinuxUART::LinuxUART(char* path) : UARTAdapter(0, 0, 0, 0, 0, 1024, 1024) {
   const int slen = strlen(path);
   LinuxUARTLookup* lookup = (LinuxUARTLookup*) malloc(sizeof(LinuxUARTLookup));
   if (lookup) {
@@ -145,6 +145,14 @@ LinuxUART::~LinuxUART() {
   }
 }
 
+
+char* LinuxUART::path() {
+  LinuxUARTLookup* lookup = _uart_table_get_by_adapter_ref(this);
+  if (lookup) {
+    return lookup->path;
+  }
+  return "";
+}
 
 /*******************************************************************************
 * Implementation of UARTAdapter.

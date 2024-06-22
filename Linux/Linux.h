@@ -161,6 +161,7 @@ class LinuxUART : public UARTAdapter {
     ~LinuxUART();
 
     void irq_handler();
+    char* path();
 
 
   protected:
