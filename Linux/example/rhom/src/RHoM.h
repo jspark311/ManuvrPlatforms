@@ -33,41 +33,33 @@
 #define __RHOM_HEADER_H__
 
 
-#define PROGRAM_VERSION    "0.0.3"    // Program version.
+#define PROGRAM_VERSION    "0.0.4"    // Program version.
 
 #define RHOM_GUI_MOD_CTRL_HELD           0x00000001   //
 #define RHOM_GUI_MOD_ALT_HELD            0x00000002   //
 
-
+/* This program loads configuration data from a file. These are the keys. */
 enum class RHoMConfKey : uint16_t {
   SHOW_PANE_MLINK,
-  SHOW_PANE_BURRITO,
-  SHOW_PANE_INTERNALS,
   MLINK_XPORT_PATH,
   MLINK_TIMEOUT_PERIOD,
   MLINK_KA_PERIOD,
   MLINK_MTU,
+  MLINK_MAX_QUEUED_MSGS,
+  MLINK_MAX_PARSE_FAILS,
+  MLINK_MAX_ACK_FAILS,
+  MLINK_DEFAULT_ENCODING,
+  MLINK_REQUIRE_AUTH,
+  MLINK_FARSIDE_LOGGING,
+  UART_BITRATE,
+  UART_START_BITS,
+  UART_BIT_PER_WORD,
+  UART_STOP_BITS,
+  UART_PARITY,
+  UART_FLOW_CONTROL,
   INVALID
 };
 
-
-class CryptoLogShunt : public CryptOpCallback {
-  public:
-    CryptoLogShunt() {};
-    ~CryptoLogShunt() {};
-
-    /* Mandatory overrides from the CryptOpCallback interface... */
-    int8_t op_callahead(CryptOp* op) {
-      return JOB_Q_CALLBACK_NOMINAL;
-    };
-
-    int8_t op_callback(CryptOp* op) {
-      StringBuilder output;
-      op->printOp(&output);
-      c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, &output);
-      return JOB_Q_CALLBACK_NOMINAL;
-    };
-};
 
 
 // TODO: Don't code against this too much. It will probably be templated and promoted to C3P.
@@ -127,8 +119,24 @@ class MainGuiWindow : public C3Px11Window {
 
 
 
+
+class GfxUIUART : public GfxUIElement {
+  public:
+    GfxUIUART(LinuxUART*, const GfxUILayout, const GfxUIStyle, uint32_t f = 0);
+    ~GfxUIUART() {};
+
+    /* Implementation of GfxUIElement. */
+    virtual int  _render(UIGfxWrapper* ui_gfx);
+    virtual bool _notify(const GfxUIEvent GFX_EVNT, PixUInt x, PixUInt y, PriorityQueue<GfxUIElement*>* change_log);
+
+
+  private:
+    LinuxUART*  _uart;
+};
+
+
+
 extern IdentityUUID ident_uuid;
 extern ConfRecordValidation<RHoMConfKey> rhom_conf;
-
 
 #endif  // __RHOM_HEADER_H__

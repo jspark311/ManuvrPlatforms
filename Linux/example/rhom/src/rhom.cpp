@@ -38,14 +38,24 @@ IdentityUUID ident_uuid("BIN_ID", (char*) "29c6e2b9-9e68-4e52-9af0-03e9ca10e217"
 // Then, we bind those enum values each to a type code, and to a semantic string
 //   suitable for storage or transmission to a counterparty.
 const EnumDef<RHoMConfKey> CONF_KEY_LIST[] = {
-  { RHoMConfKey::SHOW_PANE_MLINK,       "SHOW_PANE_MLINK",        0, (uint8_t) TCode::BOOLEAN    },
-  { RHoMConfKey::SHOW_PANE_BURRITO,     "SHOW_PANE_BURRITO",      0, (uint8_t) TCode::BOOLEAN    },
-  { RHoMConfKey::SHOW_PANE_INTERNALS,   "SHOW_PANE_INTERNALS",    0, (uint8_t) TCode::BOOLEAN    },
-  { RHoMConfKey::MLINK_XPORT_PATH,      "MLINK_XPORT_PATH",       0, (uint8_t) TCode::STR        },
-  { RHoMConfKey::MLINK_TIMEOUT_PERIOD,  "MLINK_TIMEOUT_PERIOD",   0, (uint8_t) TCode::UINT32     },
-  { RHoMConfKey::MLINK_KA_PERIOD,       "MLINK_KA_PERIOD",        0, (uint8_t) TCode::UINT32     },
-  { RHoMConfKey::MLINK_MTU,             "MLINK_MTU",              0, (uint8_t) TCode::UINT16     },
-  { RHoMConfKey::INVALID,               "INVALID",                (ENUM_FLAG_MASK_INVALID_CATCHALL), 0}
+  { RHoMConfKey::SHOW_PANE_MLINK,        "SHOW_PANE_MLINK",        0, (uint8_t) TCode::BOOLEAN    },
+  { RHoMConfKey::MLINK_XPORT_PATH,       "MLINK_XPORT_PATH",       0, (uint8_t) TCode::STR        },
+  { RHoMConfKey::MLINK_TIMEOUT_PERIOD,   "MLINK_TIMEOUT_PERIOD",   0, (uint8_t) TCode::UINT32     },
+  { RHoMConfKey::MLINK_KA_PERIOD,        "MLINK_KA_PERIOD",        0, (uint8_t) TCode::UINT32     },
+  { RHoMConfKey::MLINK_MTU,              "MLINK_MTU",              0, (uint8_t) TCode::UINT16     },
+  { RHoMConfKey::MLINK_MAX_QUEUED_MSGS,  "MLINK_MAX_QUEUED_MSGS",  0, (uint8_t) TCode::UINT8      },
+  { RHoMConfKey::MLINK_MAX_PARSE_FAILS,  "MLINK_MAX_PARSE_FAILS",  0, (uint8_t) TCode::UINT8      },
+  { RHoMConfKey::MLINK_MAX_ACK_FAILS,    "MLINK_MAX_ACK_FAILS",    0, (uint8_t) TCode::UINT8      },
+  { RHoMConfKey::MLINK_DEFAULT_ENCODING, "MLINK_DEFAULT_ENCODING", 0, (uint8_t) TCode::UINT8      },
+  { RHoMConfKey::MLINK_REQUIRE_AUTH,     "MLINK_REQUIRE_AUTH",     0, (uint8_t) TCode::BOOLEAN    },
+  { RHoMConfKey::MLINK_FARSIDE_LOGGING,  "MLINK_FARSIDE_LOGGING",  0, (uint8_t) TCode::BOOLEAN    },
+  { RHoMConfKey::UART_BITRATE,           "UART_BITRATE",           0, (uint8_t) TCode::UINT32     },
+  { RHoMConfKey::UART_START_BITS,        "UART_START_BITS",        0, (uint8_t) TCode::UINT8      },
+  { RHoMConfKey::UART_BIT_PER_WORD,      "UART_BIT_PER_WORD",      0, (uint8_t) TCode::UINT8      },
+  { RHoMConfKey::UART_STOP_BITS,         "UART_STOP_BITS",         0, (uint8_t) TCode::UINT8      },
+  { RHoMConfKey::UART_PARITY,            "UART_PARITY",            0, (uint8_t) TCode::UINT8      },
+  { RHoMConfKey::UART_FLOW_CONTROL,      "UART_FLOW_CONTROL",      0, (uint8_t) TCode::UINT8      },
+  { RHoMConfKey::INVALID,                "INVALID", (ENUM_FLAG_MASK_INVALID_CATCHALL), 0}
 };
 
 // The top-level enum wrapper binds the above definitions into a tidy wad
@@ -62,16 +72,12 @@ ConfRecordValidation<RHoMConfKey> rhom_conf(0, &CONF_LIST);
 /*******************************************************************************
 * Globals
 *******************************************************************************/
-
-
-CryptoLogShunt crypto_logger;
 const char*   program_name;
 bool          continue_running  = true;
 
 uint32_t ping_req_time = 0;
 uint32_t ping_nonce    = 0;
 MainGuiWindow* c3p_root_window   = nullptr;
-
 
 M2MLinkOpts link_opts(
   100,   // ACK timeout is 100ms.
@@ -97,19 +103,14 @@ UARTOpts uart_opts {
 
 /* Transports such as UARTs are generally 1:1 with sessions. */
 LinuxUART*  uart   = nullptr;
-M2MLink* m_link = nullptr;
+M2MLink*    m_link = nullptr;
 
 /* But some transports (socket servers) have 1:x relationships to sessions. */
 LinuxSockListener socket_listener((char*) "/tmp/c3p-test.sock");
 
-SensorFilter<uint32_t> _filter(128, FilteringStrategy::RAW);
-
 ParsingConsole console(U_INPUT_BUFF_SIZE);
 LinuxStdIO console_adapter;
 LinuxSockPipe socket_adapter;
-
-
-
 LinkedList<LinkSockPair*> active_links;
 
 int8_t new_socket_connection_callback(LinuxSockListener* svr, LinuxSockPipe* pipe) {
@@ -131,7 +132,7 @@ int8_t new_socket_connection_callback(LinuxSockListener* svr, LinuxSockPipe* pip
 *******************************************************************************/
 
 void link_callback_state(M2MLink* cb_link) {
-  c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Link (0x%x) entered state %s.", cb_link->linkTag(), M2MLink::sessionStateStr(cb_link->getState()));
+  c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "Link (0x%x) entered state %s.", cb_link->linkTag(), M2MLink::sessionStateStr(cb_link->currentState()));
 }
 
 
@@ -212,48 +213,6 @@ int callback_program_quit(StringBuilder* text_return, StringBuilder* args) {
   return 0;
 }
 
-int callback_crypt_tools(StringBuilder* text_return, StringBuilder* args) {
-  int ret = 0;
-  char* cmd = args->position_trimmed(0);
-  if (0 == StringBuilder::strcasecmp(cmd, "info")) {
-    platformObj()->crypto->printDebug(text_return);
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "queue")) {
-    platformObj()->crypto->printQueues(text_return);
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "poll")) {
-    int8_t ret_local = platformObj()->crypto->poll();
-    text_return->concatf("poll() returned %d\n", ret_local);
-  }
-
-  else if (0 == StringBuilder::strcasecmp(cmd, "rng")) {
-    uint depth = (uint) args->position_as_int(1);
-    if (0 == depth) {
-      depth = 10;
-    }
-    CryptOpRNG* rng_op = new CryptOpRNG(&crypto_logger);
-    uint8_t* buf = (uint8_t*) malloc(depth);
-    if (buf) {
-      memset(buf, 0, depth);
-      rng_op->setResBuffer(buf, depth);
-      rng_op->freeResBuffer(true);
-      rng_op->reapJob(true);
-      text_return->concatf("queue_job() returned %d\n", platformObj()->crypto->queue_job(rng_op));
-    }
-  }
-
-  else if (0 == StringBuilder::strcasecmp(cmd, "rng2")) {
-    // uint depth = _main_img.bytesUsed();
-    // if (0 != depth) {
-    //   CryptOpRNG* rng_op = new CryptOpRNG(nullptr);
-    //   rng_op->setResBuffer(_main_img.buffer(), depth);
-    //   rng_op->reapJob(true);
-    //   text_return->concatf("queue_job() returned %d\n", platformObj()->crypto->queue_job(rng_op));
-    // }
-  }
-  return ret;
-}
-
 
 int callback_uart_tools(StringBuilder* text_return, StringBuilder* args) {
   int ret = 0;
@@ -295,7 +254,7 @@ int callback_uart_tools(StringBuilder* text_return, StringBuilder* args) {
         if (nullptr != uart) {
           uart->init(&uart_opts);
           uart->readCallback(m_link);      // Attach the UART to M2MLink...
-          m_link->setOutputTarget(uart);   // ...and M2MLink to UART.
+          m_link->setEfferant(uart);   // ...and M2MLink to UART.
         }
         else print_alloc_fail = true;
       }
@@ -305,7 +264,7 @@ int callback_uart_tools(StringBuilder* text_return, StringBuilder* args) {
   }
   else if (0 == StringBuilder::strcasecmp(cmd, "free")) {
     if (nullptr != uart) {
-      m_link->setOutputTarget(nullptr);   // Remove refs held elsewhere.
+      m_link->setEfferant(nullptr);   // Remove refs held elsewhere.
       delete uart;
       uart = nullptr;
     }
@@ -378,22 +337,15 @@ int main(int argc, const char *argv[]) {
   StringBuilder output;
 
   platform.init();
-  _filter.init();
-
-  m_link = new M2MLink(&link_opts);
-  m_link->setCallback(link_callback_state);
-  m_link->setCallback(link_callback_message);
-  m_link->localIdentity(&ident_uuid);
-  //m_link->verbosity(6);
 
   // Parse through all the command line arguments and flags...
   // Please note that the order matters. Put all the most-general matches at the bottom of the loop.
   for (int i = 1; i < argc; i++) {
     if ((strcasestr(argv[i], "--help")) || (strcasestr(argv[i], "-h"))) {
       printf("-u  --uart <path>   Instance a UART to talk to the hardware.\n");
-      printf("-v  --version       Print the version and exit.\n");
-      printf("    --gui           Run the GUI.\n");
       printf("-h  --help          Print this output and exit.\n");
+      printf("-c  --conf          Use a non-default conf blob.\n");
+      printf("    --conf-dump     Load the program configuration, dump it, and exit.\n");
       printf("\n\n");
       exit(0);
     }
@@ -407,26 +359,6 @@ int main(int argc, const char *argv[]) {
       exit(0);
     }
 
-    else if ((strcasestr(argv[i], "--version")) || (strcasestr(argv[i], "-v") == argv[i])) {
-      printf("RHoM v%s\n\n", PROGRAM_VERSION);
-      exit(0);
-    }
-    else if (strcasestr(argv[i], "--gui")) {
-      // Instance an X11 window.
-      c3p_root_window = new MainGuiWindow(0, 0, 1024, 768, program_name);
-      if (c3p_root_window) {
-        if (0 == c3p_root_window->createWindow()) {
-          // The window thread is running.
-          c3p_root_window->setConsole(&console);
-        }
-        else {
-          c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Failed to instance the root GUI window.");
-        }
-      }
-      else {
-        c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Failed to instance the root GUI window.");
-      }
-    }
     else if (argc - i >= 2) {    // Compound arguments go in this case block...
       if ((strcasestr(argv[i], "--uart")) || (strcasestr(argv[i], "-u"))) {
         if (argc - i < 2) {  // Mis-use of flag...
@@ -435,10 +367,15 @@ int main(int argc, const char *argv[]) {
         }
         i++;
         // Instance a UART.
-        uart = new LinuxUART((char*) argv[i++]);
-        uart->init(&uart_opts);
+        char* uart_path = (char*) argv[i++];
+        uart = new LinuxUART(uart_path);
+        int8_t uart_init_ret = uart->init(&uart_opts);
+        if (0 != uart_init_ret) {
+          printf("Failed to initialize %s (returned %d).\n", uart_path, uart_init_ret);
+          exit(1);
+        }
         uart->readCallback(m_link);      // Attach the UART to M2MLink...
-        m_link->setOutputTarget(uart);   // ...and M2MLink to UART.
+        m_link->setEfferant(uart);       // ...and M2MLink to UART.
       }
       else if ((strcasestr(argv[i], "--listen")) || (strcasestr(argv[i], "-L"))) {
         if (argc - i < 2) {  // Mis-use of flag...
@@ -461,54 +398,53 @@ int main(int argc, const char *argv[]) {
     }
   }
 
-  console.setTXTerminator(LineTerm::LF);
-  console.setRXTerminator(LineTerm::LF);
-  StringBuilder prompt_string;   // We want to have a nice prompt string...
-  if (nullptr == c3p_root_window) {
-    // The GUI thread handles the console, if it was enabled. If there is no
-    //   GUI, mutually connect the console class to STDIO.
-    console.defineCommand("gui",         'G', "GUi tools.", "[echo|prompt|force|rxterm|txterm]", 0, callback_gui_tools);
-    console.localEcho(false);
-    console_adapter.readCallback(&console);
-    console.setOutputTarget(&console_adapter);
-    console.hasColor(true);
-    prompt_string.concatf("%c[36m%s> %c[39m", 0x1B, argv[0], 0x1B);
-  }
-  else {
-    prompt_string.concatf("%s> ", argv[0]);
-  }
-  console.setPromptString((const char*) prompt_string.string());
-  console.emitPrompt(true);
-
-  console.defineCommand("console",   '\0', "Console conf.", "[echo|prompt|force|rxterm|txterm]", 0, callback_console_tools);
-  console.defineCommand("crypto",     'C', "Cryptographic tools.", "", 0, callback_crypt_tools);
-  console.defineCommand("link",       'l', "Linked device tools.", "", 0, callback_link_tools);
-  console.defineCommand("uart",       'u', "UART tools.", "", 0, callback_uart_tools);
-  console.defineCommand("socket",     'S', "Socket tools.", "", 0, callback_socket_tools);
-  console.defineCommand("quit",       'Q', "Commit sudoku.", "", 0, callback_program_quit);
-  console.defineCommand("help",       '?', "Prints help to console.", "[<specific command>]", 0, callback_help);
-  platform.configureConsole(&console);
-
-  console.init();
-  output.concatf("%s initialized.\n", argv[0]);
-  console.printToLog(&output);
-  console.printPrompt();
-
   scheduler = C3PScheduler::getInstance();
+  //if (nullptr == uart) {
+  //  printf("You must supply a path to a UART.\n");
+  //  exit(1);
+  //}
 
-  // The main loop. Run until told to stop.
-  while (continue_running) {
-    if (nullptr != m_link) {
-      m_link->poll(&output);
-      if (!output.isEmpty()) {
-        console.printToLog(&output);
-      }
+  m_link = new M2MLink(&link_opts);
+  m_link->setCallback(link_callback_state);
+  m_link->setCallback(link_callback_message);
+  m_link->localIdentity(&ident_uuid);
+  //m_link->verbosity(6);
+
+
+  // Instance an X11 window.
+  // NOTE: The window destructor will block until the GUI thread is shut down.
+  //   So for the sake of enforcing thread termination order, we empty-scope the
+  //   existance of the window such that the process will naturally wait for all
+  //   the complicated cleanup to happen before it flushes its output buffer,
+  //   and slams the door on the process.
+  {
+    MainGuiWindow c3p_root_window(0, 0, 1280, 1024, argv[0]);
+    if (0 == c3p_root_window.createWindow()) {
+      // The window thread is running.
+      StringBuilder output(program_name);
+      output.concatf(" v%s initialized\n\n", PROGRAM_VERSION);
+      c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, &output);
+      do {   // The main loop. Run until told to stop.
+        if (nullptr != m_link) {
+          m_link->poll(&output);
+          if (!output.isEmpty()) {
+            console.printToLog(&output);
+          }
+        }
+        console_adapter.poll();
+        if (nullptr != uart) {
+          uart->poll();
+        }
+
+        scheduler->serviceSchedules();
+      } while (continue_running);   // GUI thread handles the heavy-lifting.
     }
-    console_adapter.poll();
-    scheduler->serviceSchedules();
+    else {
+      c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Failed to create the root GUI window (not great, not terrible).");
+    }
   }
-  console.emitPrompt(false);  // Avoid a trailing prompt.
 
+  // Clean up any allocated stuff. It should already be hung up.
   if (nullptr != m_link) {
     m_link->hangup();
     delete m_link;
@@ -518,9 +454,7 @@ int main(int argc, const char *argv[]) {
     delete uart;
     uart = nullptr;
   }
-  console_adapter.poll();
-
-  delete c3p_root_window;   // Will block until the GUI thread is shut down.
+  console_adapter.poll();   // Final chance for output to make it to the user.
   platform.firmware_shutdown(0);     // Clean up the platform.
-  return 0;  // Should never execute.
+  exit(0);  // Should never execute.
 }
