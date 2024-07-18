@@ -49,6 +49,7 @@ CXX_SRCS += ../CppPotpourri/src/TimerTools/*.cpp
 CXX_SRCS += ../CppPotpourri/src/Identity/*.cpp
 CXX_SRCS += ../CppPotpourri/src/cbor-cpp/*.cpp
 CXX_SRCS += ../CppPotpourri/src/C3PValue/*.cpp
+CXX_SRCS += ../CppPotpourri/src/TimeSeries/*.cpp
 CXX_SRCS += ../CppPotpourri/src/Pipes/TripleAxisPipe/*.cpp
 CXX_SRCS += ../CppPotpourri/src/Pipes/BufferAccepter/*.cpp
 CXX_SRCS += ../CppPotpourri/src/Storage/*.cpp
@@ -66,7 +67,7 @@ CXX_SRCS += ../../src/LinuxStdIO.cpp
 CXX_SRCS += ../../src/LinuxUART.cpp
 CXX_SRCS += ../../src/LinuxSocketPipe.cpp
 CXX_SRCS += ../../src/LinuxSockListener.cpp
-#CXX_SRCS += ../../src/LinuxStorage.cpp
+CXX_SRCS += ../../src/C3PLinuxFile.cpp
 #CXX_SRCS += ../../src/I2CAdapter.cpp
 
 # Libraries to link against.

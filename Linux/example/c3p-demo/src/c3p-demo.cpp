@@ -3,66 +3,19 @@
 *
 */
 
-#include <cstdio>
-#include <stdlib.h>
-#include <stdarg.h>
-#include <string.h>
-#include <ctype.h>
-#include <unistd.h>
-#include <math.h>
-
-#include <fstream>
-#include <iostream>
+using namespace std;
 
 #include "c3p-demo.h"
 
-#define U_INPUT_BUFF_SIZE      512    // The maximum size of user input.
-
 extern void* gui_thread_handler(void*);
 int callback_gui_tools(StringBuilder*, StringBuilder*);
-
-using namespace std;
-
-/*******************************************************************************
-* TODO: Pending mitosis into a header file....
-*******************************************************************************/
-IdentityUUID ident_uuid("BIN_ID", (char*) "29c6e2b9-9e68-4e52-9af0-03e9ca10e217");
-
-
-/*******************************************************************************
-* The program has a set of configurations that it defines and loads at runtime.
-* This defines everything required to handle that conf fluidly and safely.
-*
-* TODO: Pending mitosis into a header file....
-*******************************************************************************/
-// Then, we bind those enum values each to a type code, and to a semantic string
-//   suitable for storage or transmission to a counterparty.
-const EnumDef<RHoMConfKey> CONF_KEY_LIST[] = {
-  { RHoMConfKey::SHOW_PANE_MLINK,       "SHOW_PANE_MLINK",        0, (uint8_t) TCode::BOOLEAN    },
-  { RHoMConfKey::SHOW_PANE_BURRITO,     "SHOW_PANE_BURRITO",      0, (uint8_t) TCode::BOOLEAN    },
-  { RHoMConfKey::SHOW_PANE_INTERNALS,   "SHOW_PANE_INTERNALS",    0, (uint8_t) TCode::BOOLEAN    },
-  { RHoMConfKey::MLINK_XPORT_PATH,      "MLINK_XPORT_PATH",       0, (uint8_t) TCode::STR        },
-  { RHoMConfKey::MLINK_TIMEOUT_PERIOD,  "MLINK_TIMEOUT_PERIOD",   0, (uint8_t) TCode::UINT32     },
-  { RHoMConfKey::MLINK_KA_PERIOD,       "MLINK_KA_PERIOD",        0, (uint8_t) TCode::UINT32     },
-  { RHoMConfKey::MLINK_MTU,             "MLINK_MTU",              0, (uint8_t) TCode::UINT16     },
-  { RHoMConfKey::INVALID,               "INVALID",                (ENUM_FLAG_MASK_INVALID_CATCHALL), 0}
-};
-
-// The top-level enum wrapper binds the above definitions into a tidy wad
-//   of contained concerns.
-const EnumDefList<RHoMConfKey> CONF_LIST(
-  CONF_KEY_LIST, (sizeof(CONF_KEY_LIST) / sizeof(CONF_KEY_LIST[0])),
-  "RHoMConfKey"  // Doesn't _need_ to be the enum name...
-);
-
-// After all that definition, we can finally create the conf object.
-ConfRecordValidation<RHoMConfKey> rhom_conf(0, &CONF_LIST);
 
 
 /*******************************************************************************
 * Globals
 *******************************************************************************/
-
+StaticHub hub;
+StringBuilder  conf_path;
 
 CryptoLogShunt crypto_logger;
 const char*   program_name;
@@ -70,8 +23,6 @@ bool          continue_running  = true;
 
 uint32_t ping_req_time = 0;
 uint32_t ping_nonce    = 0;
-MainGuiWindow* c3p_root_window   = nullptr;
-
 
 M2MLinkOpts link_opts(
   100,   // ACK timeout is 100ms.
@@ -96,18 +47,18 @@ UARTOpts uart_opts {
 };
 
 /* Transports such as UARTs are generally 1:1 with sessions. */
-LinuxUART*  uart   = nullptr;
 M2MLink* m_link = nullptr;
 
 /* But some transports (socket servers) have 1:x relationships to sessions. */
 LinuxSockListener socket_listener((char*) "/tmp/c3p-test.sock");
 
-SensorFilter<uint32_t> _filter(128, FilteringStrategy::RAW);
+TimeSeries<uint32_t> _filter(128);
 
 ParsingConsole console(U_INPUT_BUFF_SIZE);
 LinuxStdIO console_adapter;
 LinuxSockPipe socket_adapter;
 
+C3PLogger c3p_log_obj(0, &console_adapter);
 
 
 LinkedList<LinkSockPair*> active_links;
@@ -123,7 +74,6 @@ int8_t new_socket_connection_callback(LinuxSockListener* svr, LinuxSockPipe* pip
   }
   return ret;
 }
-
 
 
 /*******************************************************************************
@@ -260,42 +210,42 @@ int callback_uart_tools(StringBuilder* text_return, StringBuilder* args) {
   char* cmd = args->position_trimmed(0);
   bool print_alloc_fail = false;
   if (0 == StringBuilder::strcasecmp(cmd, "info")) {
-    if (nullptr != uart) {
-      uart->printDebug(text_return);
+    if (nullptr != hub.uart) {
+      hub.uart->printDebug(text_return);
     }
     else print_alloc_fail = true;
   }
   else if (0 == StringBuilder::strcasecmp(cmd, "reset")) {
-    if (nullptr != uart) {
-      uart->reset();
+    if (nullptr != hub.uart) {
+      hub.uart->reset();
       text_return->concat("UART was reset().\n");
     }
     else print_alloc_fail = true;
   }
   else if (0 == StringBuilder::strcasecmp(cmd, "bitrate")) {
-    if (nullptr != uart) {
+    if (nullptr != hub.uart) {
       switch (args->count()) {
         case 2:
-          uart->uartOpts()->bitrate = args->position_as_int(1);
-          uart->reset();
+          hub.uart->uartOpts()->bitrate = args->position_as_int(1);
+          hub.uart->reset();
           text_return->concat("Attempting to set bitrate on UART...\n");
           break;
         default:
-          text_return->concatf("UART bitrate is %u\n", uart->uartOpts()->bitrate);
+          text_return->concatf("UART bitrate is %u\n", hub.uart->uartOpts()->bitrate);
           break;
       }
     }
     else print_alloc_fail = true;
   }
   else if (0 == StringBuilder::strcasecmp(cmd, "new")) {
-    if (nullptr == uart) {
+    if (nullptr == hub.uart) {
       if (2 == args->count()) {
         // Instance a UART.
-        uart = new LinuxUART(args->position_trimmed(1));
-        if (nullptr != uart) {
-          uart->init(&uart_opts);
-          uart->readCallback(m_link);      // Attach the UART to M2MLink...
-          m_link->setEfferant(uart);   // ...and M2MLink to UART.
+        hub.uart = new LinuxUART(args->position_trimmed(1));
+        if (nullptr != hub.uart) {
+          hub.uart->init(&uart_opts);
+          hub.uart->readCallback(m_link);      // Attach the UART to M2MLink...
+          m_link->setEfferant(hub.uart);   // ...and M2MLink to UART.
         }
         else print_alloc_fail = true;
       }
@@ -304,10 +254,10 @@ int callback_uart_tools(StringBuilder* text_return, StringBuilder* args) {
     else text_return->concat("Program currently only allows one UART at a time.\n");
   }
   else if (0 == StringBuilder::strcasecmp(cmd, "free")) {
-    if (nullptr != uart) {
+    if (nullptr != hub.uart) {
       m_link->setEfferant(nullptr);   // Remove refs held elsewhere.
-      delete uart;
-      uart = nullptr;
+      delete hub.uart;
+      hub.uart = nullptr;
     }
     else print_alloc_fail = true;
   }
@@ -383,7 +333,7 @@ int main(int argc, const char *argv[]) {
   m_link = new M2MLink(&link_opts);
   m_link->setCallback(link_callback_state);
   m_link->setCallback(link_callback_message);
-  m_link->localIdentity(&ident_uuid);
+  m_link->localIdentity(&hub.ident_program);
   //m_link->verbosity(6);
 
   // Parse through all the command line arguments and flags...
@@ -400,9 +350,9 @@ int main(int argc, const char *argv[]) {
     else if (strcasestr(argv[i], "--conf-dump")) {
       StringBuilder tmp_str;
       StringBuilder serialized;
-      printf("Serializing conf returns %d.\n", rhom_conf.serialize(&serialized, TCode::CBOR));
+      printf("Serializing conf returns %d.\n", hub.main_config.serialize(&serialized, TCode::CBOR));
       serialized.printDebug(&tmp_str);
-      rhom_conf.printConfRecord(&tmp_str);
+      hub.main_config.printConfRecord(&tmp_str);
       printf("%s\n", (char*) tmp_str.string());
       exit(0);
     }
@@ -413,11 +363,11 @@ int main(int argc, const char *argv[]) {
     }
     else if (strcasestr(argv[i], "--gui")) {
       // Instance an X11 window.
-      c3p_root_window = new MainGuiWindow(0, 0, 1024, 768, program_name);
-      if (c3p_root_window) {
-        if (0 == c3p_root_window->createWindow()) {
+      hub.main_window = new MainGuiWindow(0, 0, 1284, 1024, program_name);
+      if (hub.main_window) {
+        if (0 == hub.main_window->createWindow()) {
           // The window thread is running.
-          c3p_root_window->setConsole(&console);
+          hub.main_window->setConsole(&console);
         }
         else {
           c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Failed to instance the root GUI window.");
@@ -435,10 +385,10 @@ int main(int argc, const char *argv[]) {
         }
         i++;
         // Instance a UART.
-        uart = new LinuxUART((char*) argv[i++]);
-        uart->init(&uart_opts);
-        uart->readCallback(m_link);      // Attach the UART to M2MLink...
-        m_link->setEfferant(uart);   // ...and M2MLink to UART.
+        hub.uart = new LinuxUART((char*) argv[i++]);
+        hub.uart->init(&uart_opts);
+        hub.uart->readCallback(m_link);      // Attach the UART to M2MLink...
+        m_link->setEfferant(hub.uart);   // ...and M2MLink to UART.
       }
       else if ((strcasestr(argv[i], "--listen")) || (strcasestr(argv[i], "-L"))) {
         if (argc - i < 2) {  // Mis-use of flag...
@@ -464,7 +414,7 @@ int main(int argc, const char *argv[]) {
   //console.setTXTerminator(LineTerm::LF);
   //console.setRXTerminator(LineTerm::LF);
   StringBuilder prompt_string;   // We want to have a nice prompt string...
-  if (nullptr == c3p_root_window) {
+  if (nullptr == hub.main_window) {
     // The GUI thread handles the console, if it was enabled. If there is no
     //   GUI, mutually connect the console class to STDIO.
     console.defineCommand("gui",         'G', "GUi tools.", "[echo|prompt|force|rxterm|txterm]", 0, callback_gui_tools);
@@ -514,13 +464,13 @@ int main(int argc, const char *argv[]) {
     delete m_link;
     m_link = nullptr;
   }
-  if (nullptr != uart) {
-    delete uart;
-    uart = nullptr;
+  if (nullptr != hub.uart) {
+    delete hub.uart;
+    hub.uart = nullptr;
   }
   console_adapter.poll();
 
-  delete c3p_root_window;   // Will block until the GUI thread is shut down.
+  delete hub.main_window;   // Will block until the GUI thread is shut down.
   platform.firmware_shutdown(0);     // Clean up the platform.
   return 0;  // Should never execute.
 }

@@ -7,18 +7,13 @@
 #include "c3p-demo.h"
 #include "C3POnX11.h"
 
-#define CONSOLE_INPUT_HEIGHT  200
-#define TEST_FILTER_DEPTH     700
-#define ELEMENT_MARGIN          3
-
-extern bool continue_running;         // TODO: (rolled up newspaper) Bad...
-extern SensorFilter<uint32_t> _filter;
+extern TimeSeries<uint32_t> _filter;
 extern M2MLink* m_link;
 extern ParsingConsole console;
 
-SensorFilter<uint32_t> test_filter_0(TEST_FILTER_DEPTH, FilteringStrategy::RAW);
-SensorFilter<float> test_filter_1(TEST_FILTER_DEPTH, FilteringStrategy::RAW);
-SensorFilter<float> test_filter_stdev(TEST_FILTER_DEPTH, FilteringStrategy::RAW);
+TimeSeries<uint32_t> test_filter_0(TEST_FILTER_DEPTH);
+TimeSeries<float> test_filter_1(TEST_FILTER_DEPTH);
+TimeSeries<float> test_filter_stdev(TEST_FILTER_DEPTH);
 
 bool gravepact      = true;   // Closing the GUI window should terminate the main thread?
 bool mlink_onscreen = false;  // Has the Link object been rendered?
@@ -73,7 +68,7 @@ AsyncSequencer example_checklist(CHKLST_CONTENTS, (sizeof(CHKLST_CONTENTS) / siz
 GfxUITabbedContentPane _main_nav(
   GfxUILayout(
     0, 0,
-    1024, 768,
+    1280, 1024,
     ELEMENT_MARGIN, ELEMENT_MARGIN, ELEMENT_MARGIN, ELEMENT_MARGIN,
     0, 0, 0, 0               // Border_px(t, b, l, r)
   ),
@@ -96,18 +91,6 @@ GfxUIGroup _main_nav_links(0, 0, 0, 0);
 GfxUIGroup _main_nav_console(0, 0, 0, 0);
 GfxUIGroup _main_nav_internals(0, 0, 0, 0);
 GfxUIGroup _main_nav_settings(0, 0, 0, 0);
-
-
-GfxUIStyle base_style;
-
-//base_style.color_bg          = 0;
-//base_style.color_border      = 0xFFFFFF;
-//base_style.color_header      = 0x20B2AA;
-//base_style.color_active      = 0x20B2AA;
-//base_style.color_inactive    = 0xA0A0A0;
-//base_style.color_selected    = 0x202020;
-//base_style.color_unselected  = 0x202020;
-//base_style.text_size         = 2;
 
 
 
@@ -151,8 +134,6 @@ GfxUITextArea _filter_txt_0(
     2           // t_size
   )
 );
-
-
 
 
 GfxUITextButton _button_0(
@@ -345,25 +326,6 @@ GfxUITextArea _program_info_txt(
   )
 );
 
-GfxUIChecklist checklist_render(
-  &example_checklist,
-  GfxUILayout(
-    0, 0,                    // Position(x, y)
-    TEST_FILTER_DEPTH, 500,  // Size(w, h)
-    ELEMENT_MARGIN, ELEMENT_MARGIN, ELEMENT_MARGIN, ELEMENT_MARGIN,  // Margins_px(t, b, l, r)
-    0, 0, 0, 0               // Border_px(t, b, l, r)
-  ),
-  GfxUIStyle(
-    0,          // bg
-    0xFFFFFF,   // border
-    0xFFFFFF,   // header
-    0x40B0D0,   // active
-    0xA0A0A0,   // inactive
-    0xFFFFFF,   // selected
-    0x202020,   // unselected
-    2           // t_size
-  )
-);
 
 
 
@@ -380,13 +342,13 @@ C3PValue _c3p_value_0(C3P_VAL_TEST_STR);
 C3PValue _c3p_value_1((uint32_t) PI);
 C3PValue _c3p_value_2((float)  PI);
 C3PValue _c3p_value_3((double) PI);
-C3PValue _c3p_value_4(&v3_float);
-C3PValue _c3p_value_5(&v3_u32);
-C3PValue _c3p_value_6(&v3_i32);
-C3PValue _c3p_value_7(&v3_u16);
-C3PValue _c3p_value_8(&v3_i16);
+//C3PValue _c3p_value_4(&v3_float);
+//C3PValue _c3p_value_5(&v3_u32);
+//C3PValue _c3p_value_6(&v3_i32);
+//C3PValue _c3p_value_7(&v3_u16);
+//C3PValue _c3p_value_8(&v3_i16);
 C3PValue _c3p_value_9(demo_bin_field, sizeof(demo_bin_field));
-C3PValue _c3p_value_10((Identity*) &ident_uuid);
+C3PValue _c3p_value_10((Identity*) &hub.ident_program);
 
 
 // C3PValue demo styling.
@@ -446,65 +408,66 @@ GfxUIC3PValue _value_test_3(
   (GFXUI_C3PVAL_FLAG_SHOW_TYPE_INFO)
 );
 
-GfxUIC3PValue _value_test_4(
-  &_c3p_value_4,
-  GfxUILayout(
-    _program_info_txt.elementPosX(), (_value_test_3.elementPosY() + _value_test_3.elementHeight()),
-    240, 20,
-    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
-    0, 0, 0, 0               // Border_px(t, b, l, r)
-  ), c3pvalue_style,
-  (GFXUI_C3PVAL_FLAG_SHOW_TYPE_INFO)
-);
+// GfxUIC3PValue _value_test_4(
+//   &_c3p_value_4,
+//   GfxUILayout(
+//     _program_info_txt.elementPosX(), (_value_test_3.elementPosY() + _value_test_3.elementHeight()),
+//     240, 20,
+//     0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+//     0, 0, 0, 0               // Border_px(t, b, l, r)
+//   ), c3pvalue_style,
+//   (GFXUI_C3PVAL_FLAG_SHOW_TYPE_INFO)
+// );
 
-GfxUIC3PValue _value_test_5(
-  &_c3p_value_5,
-  GfxUILayout(
-    _program_info_txt.elementPosX(), (_value_test_4.elementPosY() + _value_test_4.elementHeight()),
-    240, 20,
-    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
-    0, 0, 0, 0               // Border_px(t, b, l, r)
-  ), c3pvalue_style,
-  (GFXUI_C3PVAL_FLAG_SHOW_TYPE_INFO)
-);
+// GfxUIC3PValue _value_test_5(
+//   &_c3p_value_5,
+//   GfxUILayout(
+//     _program_info_txt.elementPosX(), (_value_test_4.elementPosY() + _value_test_4.elementHeight()),
+//     240, 20,
+//     0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+//     0, 0, 0, 0               // Border_px(t, b, l, r)
+//   ), c3pvalue_style,
+//   (GFXUI_C3PVAL_FLAG_SHOW_TYPE_INFO)
+// );
 
-GfxUIC3PValue _value_test_6(
-  &_c3p_value_6,
-  GfxUILayout(
-    _program_info_txt.elementPosX(), (_value_test_5.elementPosY() + _value_test_5.elementHeight()),
-    240, 20,
-    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
-    0, 0, 0, 0               // Border_px(t, b, l, r)
-  ), c3pvalue_style,
-  (GFXUI_C3PVAL_FLAG_SHOW_TYPE_INFO)
-);
+// GfxUIC3PValue _value_test_6(
+//   &_c3p_value_6,
+//   GfxUILayout(
+//     _program_info_txt.elementPosX(), (_value_test_5.elementPosY() + _value_test_5.elementHeight()),
+//     240, 20,
+//     0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+//     0, 0, 0, 0               // Border_px(t, b, l, r)
+//   ), c3pvalue_style,
+//   (GFXUI_C3PVAL_FLAG_SHOW_TYPE_INFO)
+// );
 
-GfxUIC3PValue _value_test_7(
-  &_c3p_value_7,
-  GfxUILayout(
-    _program_info_txt.elementPosX(), (_value_test_6.elementPosY() + _value_test_6.elementHeight()),
-    240, 20,
-    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
-    0, 0, 0, 0               // Border_px(t, b, l, r)
-  ), c3pvalue_style,
-  (GFXUI_C3PVAL_FLAG_SHOW_TYPE_INFO)
-);
+// GfxUIC3PValue _value_test_7(
+//   &_c3p_value_7,
+//   GfxUILayout(
+//     _program_info_txt.elementPosX(), (_value_test_6.elementPosY() + _value_test_6.elementHeight()),
+//     240, 20,
+//     0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+//     0, 0, 0, 0               // Border_px(t, b, l, r)
+//   ), c3pvalue_style,
+//   (GFXUI_C3PVAL_FLAG_SHOW_TYPE_INFO)
+// );
 
-GfxUIC3PValue _value_test_8(
-  &_c3p_value_8,
-  GfxUILayout(
-    _program_info_txt.elementPosX(), (_value_test_7.elementPosY() + _value_test_7.elementHeight()),
-    240, 20,
-    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
-    0, 0, 0, 0               // Border_px(t, b, l, r)
-  ), c3pvalue_style,
-  (GFXUI_C3PVAL_FLAG_SHOW_TYPE_INFO)
-);
+// GfxUIC3PValue _value_test_8(
+//   &_c3p_value_8,
+//   GfxUILayout(
+//     _program_info_txt.elementPosX(), (_value_test_7.elementPosY() + _value_test_7.elementHeight()),
+//     240, 20,
+//     0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+//     0, 0, 0, 0               // Border_px(t, b, l, r)
+//   ), c3pvalue_style,
+//   (GFXUI_C3PVAL_FLAG_SHOW_TYPE_INFO)
+// );
 
 GfxUIC3PValue _value_test_9(
   &_c3p_value_9,
   GfxUILayout(
-    _program_info_txt.elementPosX(), (_value_test_8.elementPosY() + _value_test_8.elementHeight()),
+    //_program_info_txt.elementPosX(), (_value_test_8.elementPosY() + _value_test_8.elementHeight()),
+    _program_info_txt.elementPosX(), (_value_test_3.elementPosY() + _value_test_3.elementHeight()),
     240, 32,
     0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
     1, 1, 1, 1               // Border_px(t, b, l, r)
@@ -525,27 +488,26 @@ GfxUIC3PValue _value_test_10(
 
 
 
-GfxUIKeyValuePair _kvp_test_0(
-  rhom_conf.getKVP(),
+GfxUIChecklist checklist_render(
+  &example_checklist,
   GfxUILayout(
     _program_info_txt.elementPosX(), (_value_test_10.elementPosY() + _value_test_10.elementHeight()),
-    240, 140,
-    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
-    1, 1, 1, 1               // Border_px(t, b, l, r)
+    500, 200,  // Size(w, h)
+    ELEMENT_MARGIN, ELEMENT_MARGIN, ELEMENT_MARGIN, ELEMENT_MARGIN,  // Margins_px(t, b, l, r)
+    0, 0, 0, 0               // Border_px(t, b, l, r)
   ),
-  GfxUIStyle(0, // bg
+  GfxUIStyle(
+    0,          // bg
     0xFFFFFF,   // border
     0xFFFFFF,   // header
-    0xfefe00,   // active
-    0xA0A0A0,   // inactive
-    0xFFFFFF,   // selected
+    0x40B0D0,   // active
+    0x808080,   // inactive
+    0xA0A0A0,   // selected
     0x202020,   // unselected
     1           // t_size
   ),
-  (0)
+  (GFXUI_CHKLST_FLAG_SHOW_SUMMARY | GFXUI_CHKLST_FLAG_SHOW_DEPS_MASKS)
 );
-
-
 
 
 
@@ -614,7 +576,7 @@ GfxUICryptoBurrito crypto_pane(
 GfxUIC3PScheduler _scheduler_gui(
   GfxUILayout(
     0, 0,                    // Position(x, y)
-    _main_nav.internalWidth(), _main_nav.internalHeight()-20,
+    1200, 460,
     ELEMENT_MARGIN, ELEMENT_MARGIN, ELEMENT_MARGIN, ELEMENT_MARGIN,  // Margins_px(t, b, l, r)
     0, 0, 0, 0               // Border_px(t, b, l, r)
   ),
@@ -632,49 +594,9 @@ GfxUIC3PScheduler _scheduler_gui(
 
 
 
-
-MouseButtonDef mouse_buttons[] = {
-  { .label = "Left",
-    .button_id = 1,
-    .gfx_event_down = GfxUIEvent::TOUCH,
-    .gfx_event_up   = GfxUIEvent::RELEASE
-  },
-  { .label = "Middle",
-    .button_id = 2,
-    .gfx_event_down = GfxUIEvent::DRAG,
-    .gfx_event_up   = GfxUIEvent::NONE
-  },
-  { .label = "Right",
-    .button_id = 3,
-    .gfx_event_down = GfxUIEvent::SELECT,
-    .gfx_event_up   = GfxUIEvent::NONE
-  },
-  { .label = "ScrlUp",
-    .button_id = 4,
-    .gfx_event_down = GfxUIEvent::MOVE_UP,
-    .gfx_event_up   = GfxUIEvent::NONE
-  },
-  { .label = "ScrlDwn",
-    .button_id = 5,
-    .gfx_event_down = GfxUIEvent::MOVE_DOWN,
-    .gfx_event_up   = GfxUIEvent::NONE
-  },
-  { .label = "TiltLeft",
-    .button_id = 6,
-    .gfx_event_down = GfxUIEvent::MOVE_LEFT,
-    .gfx_event_up   = GfxUIEvent::NONE
-  },
-  { .label = "TiltRight",
-    .button_id = 7,
-    .gfx_event_down = GfxUIEvent::MOVE_RIGHT,
-    .gfx_event_up   = GfxUIEvent::NONE
-  }
-};
-
-
 C3PScheduledLambda schedule_ts_update(
   "ts_update",
-  31000, -1, true,
+  100000, -1, true,
   []() {
     const uint32_t RAND_NUM = (randomUInt32() & 0x000FFFFF);
     for (uint32_t i = 0; i < RAND_NUM; i++) {
@@ -742,7 +664,10 @@ void MainGuiWindow::setConsole(ParsingConsole* con) {
 int8_t MainGuiWindow::createWindow() {
   int8_t ret = _init_window();
   if (0 == ret) {
-    map_button_inputs(mouse_buttons, sizeof(mouse_buttons) / sizeof(mouse_buttons[0]));
+    uint8_t mb_count = 0;
+    MouseButtonDef* mouse_buttons = hub.mouseButtonDefs(&mb_count);
+    map_button_inputs(mouse_buttons, mb_count);
+
     _overlay.reallocate();
     test_filter_0.init();
     test_filter_1.init();
@@ -757,31 +682,65 @@ int8_t MainGuiWindow::createWindow() {
     _main_nav_settings.add_child(&_slider_2);
     _main_nav_settings.add_child(&_slider_3);
     _main_nav_settings.add_child(&_slider_4);
-    _main_nav_settings.add_child(&_program_info_txt);
-    _main_nav_settings.add_child(&_value_test_0);
-    _main_nav_settings.add_child(&_value_test_1);
-    _main_nav_settings.add_child(&_value_test_2);
-    _main_nav_settings.add_child(&_value_test_3);
-    _main_nav_settings.add_child(&_value_test_4);
-    _main_nav_settings.add_child(&_value_test_5);
-    _main_nav_settings.add_child(&_value_test_6);
-    _main_nav_settings.add_child(&_value_test_7);
-    _main_nav_settings.add_child(&_value_test_8);
-    _main_nav_settings.add_child(&_value_test_9);
-    _main_nav_settings.add_child(&_value_test_10);
-    _main_nav_settings.add_child(&_kvp_test_0);
+    //_main_nav_settings.add_child(&_program_info_txt);
+    //_main_nav_settings.add_child(&_value_test_0);
+    //_main_nav_settings.add_child(&_value_test_1);
+    //_main_nav_settings.add_child(&_value_test_2);
+    //_main_nav_settings.add_child(&_value_test_3);
+    //_main_nav_settings.add_child(&_value_test_4);
+    //_main_nav_settings.add_child(&_value_test_5);
+    //_main_nav_settings.add_child(&_value_test_6);
+    //_main_nav_settings.add_child(&_value_test_7);
+    //_main_nav_settings.add_child(&_value_test_8);
+    //_main_nav_settings.add_child(&_value_test_9);
+    //_main_nav_settings.add_child(&_value_test_10);
+    _main_nav_settings.add_child(&checklist_render);
 
-    _main_nav_data_viewer.add_child(&data_examiner);
-    _main_nav_data_viewer.add_child(&_filter_txt_0);
+    //_main_nav_data_viewer.add_child(&data_examiner);
+    //_main_nav_data_viewer.add_child(&_filter_txt_0);
 
     _main_nav_crypto.add_child(&crypto_pane);
 
     _main_nav_console.add_child(&_txt_area_0);
     _main_nav_console.add_child(&_txt_area_1);
 
-    _main_nav_internals.add_child(&_scheduler_gui);
-    _main_nav_internals.add_child(&checklist_render);
 
+    GfxUIGraphWithCtrl<uint32_t>* redraw_period_graph = new GfxUIGraphWithCtrl<uint32_t>(
+      GfxUILayout(
+        _scheduler_gui.elementPosX(), (_scheduler_gui.elementPosY() + _scheduler_gui.elementHeight()),
+        1200, 500,
+        ELEMENT_MARGIN, ELEMENT_MARGIN, ELEMENT_MARGIN, ELEMENT_MARGIN,  // Margins_px(t, b, l, r)
+        1, 1, 1, 1               // Border_px(t, b, l, r)
+      ),
+      GfxUIStyle(
+        0,          // bg
+        0xFFFFFF,   // border
+        0xFFFFFF,   // header
+        0x10D4AC,   // active
+        0xA0A0A0,   // inactive
+        0xFFFFFF,   // selected
+        0x202020,   // unselected
+        2           // t_size
+      ),
+      &test_filter_0,
+      (GFXUI_FLAG_DRAW_FRAME_MASK | GFXUI_FLAG_FREE_THIS_ELEMENT | GFXUI_SENFILT_FLAG_SHOW_RANGE | GFXUI_FLAG_TRACK_POINTER | GFXUI_SENFILT_FLAG_SHOW_VALUE | GFXUI_FLAG_ALWAYS_REDRAW)
+    );
+    redraw_period_graph->showValue(false);
+    redraw_period_graph->drawCurve(false);
+    redraw_period_graph->drawGrid(true);
+    redraw_period_graph->lockGridX(false);
+    redraw_period_graph->lockGridY(false);
+    redraw_period_graph->majorDivX(100);
+    redraw_period_graph->majorDivY(1000);  // 1 ms horizontal rule
+    redraw_period_graph->showRangeX(false);
+    redraw_period_graph->showRangeY(true);
+    redraw_period_graph->graphAutoscaleX(false);
+    redraw_period_graph->graphAutoscaleY(true);
+
+    _main_nav_internals.add_child(&_scheduler_gui);
+    _main_nav_internals.add_child(redraw_period_graph);
+
+    example_checklist.requestSteps((CHKLST_STEP_1 | CHKLST_STEP_2 | CHKLST_STEP_3 | CHKLST_STEP_4 | CHKLST_STEP_5));
 
     // Adding the contant panes will cause the proper screen co-ords to be imparted
     //   to the group objects. We can then use them for element flow.
@@ -807,7 +766,7 @@ int8_t MainGuiWindow::createWindow() {
 
 
 int8_t MainGuiWindow::closeWindow() {
-  continue_running = !gravepact;
+  hub.continue_running = !gravepact;
   return _deinit_window();
 }
 
@@ -833,7 +792,7 @@ int8_t MainGuiWindow::render(bool force) {
     // _txt_area_0.reposition(CONSOLE_INPUT_X_POS, CONSOLE_INPUT_Y_POS);
     // _txt_area_0.resize(width(), CONSOLE_INPUT_HEIGHT);
     StringBuilder pitxt;
-    pitxt.concat("Right Hand of Manuvr\nBuild date " __DATE__ " " __TIME__);
+    pitxt.concat("C3P Demo\nBuild date " __DATE__ " " __TIME__);
     struct utsname sname;
     if (1 != uname(&sname)) {
       pitxt.concatf("%s %s (%s)", sname.sysname, sname.release, sname.machine);
@@ -1031,6 +990,7 @@ int8_t MainGuiWindow::poll() {
   }
   else {
     // Render the UI elements...
+    example_checklist.poll();
     // TODO: Should be in the relvant class.
     if (test_filter_0.dirty()) {
       StringBuilder _tmp_sbldr;
@@ -1039,25 +999,25 @@ int8_t MainGuiWindow::poll() {
       _tmp_sbldr.concatf("SNR:      %.2f\n", (double) test_filter_0.snr());
       _tmp_sbldr.concatf("Min/Max:  %.2f / %.2f\n", (double) test_filter_0.minValue(), (double) test_filter_0.maxValue());
       _c3p_value_3.set(test_filter_0.snr());
-      Vector3u32 tmp_v3_u32(
-        (randomUInt32() & 0x0000FFFF),
-        (randomUInt32() & 0x0000FFFF),
-        (randomUInt32() & 0x0000FFFF)
-      );
-      _c3p_value_5.set(&tmp_v3_u32);
-      Vector3u32 tmp_v3_f(
-        1.0,
-        -0.8,
-        0.984
-      );
-      _c3p_value_4.set(&tmp_v3_f);
+      //Vector3u32 tmp_v3_u32(
+      //  (randomUInt32() & 0x0000FFFF),
+      //  (randomUInt32() & 0x0000FFFF),
+      //  (randomUInt32() & 0x0000FFFF)
+      //);
+      //_c3p_value_5.set(&tmp_v3_u32);
+      //Vector3u32 tmp_v3_f(
+      //  1.0,
+      //  -0.8,
+      //  0.984
+      //);
+      //_c3p_value_4.set(&tmp_v3_f);
 
       _filter_txt_0.clear();
       _filter_txt_0.pushBuffer(&_tmp_sbldr);
     }
     if (1 == _redraw_window()) {
-      if (1 == test_filter_0.feedFilter(_redraw_timer.lastTime())) {
-        test_filter_stdev.feedFilter(test_filter_0.stdev());
+      if (1 == test_filter_0.feedSeries(_redraw_timer.lastTime())) {
+        test_filter_stdev.feedSeries(test_filter_0.stdev());
       }
     }
   }

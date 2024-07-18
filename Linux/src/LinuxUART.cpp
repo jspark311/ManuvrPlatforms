@@ -151,7 +151,7 @@ char* LinuxUART::path() {
   if (lookup) {
     return lookup->path;
   }
-  return "";
+  return (char*) "";
 }
 
 /*******************************************************************************
@@ -182,7 +182,7 @@ int8_t LinuxUART::_pf_poll() {
         if (0 < TX_COUNT) {
           uint8_t side_buffer[TX_COUNT] = {0, };
           const int32_t PEEK_COUNT = _tx_buffer.peek(side_buffer, TX_COUNT);
-          const int BYTES_WRITTEN = (int) ::write(lookup->sock, side_buffer, TX_COUNT);
+          const int BYTES_WRITTEN = (int) ::write(lookup->sock, side_buffer, PEEK_COUNT);
 
           //StringBuilder tmp_log;
           //tmp_log.concatf("\n\n__________Bytes written (%d)________\n", bytes_written);
