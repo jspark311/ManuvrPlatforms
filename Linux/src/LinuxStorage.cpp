@@ -123,13 +123,13 @@ StorageErr LinuxStorage::persistentWrite(const char* key, uint8_t* buf, unsigned
 
 StorageErr LinuxStorage::persistentRead(const char* key, uint8_t* buf, uint* len, uint16_t flags) {
   if (isMounted()) {
-    uint max_l = _disk_buffer.length();
-    uint r_len = (max_l > *len) ? *len : max_l;
+    uint32_t max_l = _disk_buffer.length();
+    uint32_t r_len = (max_l > *len) ? *len : max_l;
     uint8_t* d_buf = _disk_buffer.string();
-    for (uint i = 0; i < r_len; i++) {
+    for (uint32_t i = 0; i < r_len; i++) {
       *(buf+i) = *(d_buf+i);
     }
-    for (uint i = r_len; i < *len; i++) {
+    for (uint32_t i = r_len; i < *len; i++) {
       *(buf+i) = 0;  // Zero the  unused buffer, for safety.
     }
     *len = r_len;

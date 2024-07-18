@@ -38,9 +38,9 @@ Noteworth snippit from the ESP-IDF doc:
 > idf.py erase_flash target to erase all contents of the flash chip.
 
 */
-#include "../ESP32.h"
-
 #if defined(CONFIG_C3P_STORAGE)
+
+#include "../ESP32.h"
 
 #if !defined(CONFIG_C3P_CBOR)
   #error Enabling the storage abstraction requires CONFIG_C3P_CBOR.

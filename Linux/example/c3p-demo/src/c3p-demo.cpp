@@ -177,7 +177,7 @@ int callback_crypt_tools(StringBuilder* text_return, StringBuilder* args) {
   }
 
   else if (0 == StringBuilder::strcasecmp(cmd, "rng")) {
-    uint depth = (uint) args->position_as_int(1);
+    uint32_t depth = (uint) args->position_as_int(1);
     if (0 == depth) {
       depth = 10;
     }
@@ -193,7 +193,7 @@ int callback_crypt_tools(StringBuilder* text_return, StringBuilder* args) {
   }
 
   else if (0 == StringBuilder::strcasecmp(cmd, "rng2")) {
-    // uint depth = _main_img.bytesUsed();
+    // uint32_t depth = _main_img.bytesUsed();
     // if (0 != depth) {
     //   CryptOpRNG* rng_op = new CryptOpRNG(nullptr);
     //   rng_op->setResBuffer(_main_img.buffer(), depth);

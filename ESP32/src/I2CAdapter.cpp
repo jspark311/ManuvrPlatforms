@@ -176,7 +176,7 @@ XferFault I2CBusOp::advance(uint32_t status_reg) {
 
       if (ESP_OK == i2c_master_stop(cmd)) {
         set_state(XferState::STOP);
-        int ret = i2c_master_cmd_begin((i2c_port_t) device->adapterNumber(), cmd, 800 / portTICK_RATE_MS);
+        int ret = i2c_master_cmd_begin((i2c_port_t) device->adapterNumber(), cmd, 800 / portTICK_PERIOD_MS);
         switch (ret) {
           case ESP_OK:                 markComplete();                   break;
           case ESP_ERR_INVALID_ARG:    abort(XferFault::BAD_PARAM);      break;

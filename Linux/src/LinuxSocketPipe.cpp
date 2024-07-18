@@ -200,7 +200,7 @@ int8_t LinuxSockPipe::close() {
 /*
 * Write to the socket.
 */
-uint LinuxSockPipe::write(uint8_t* buf, uint len) {
+uint32_t LinuxSockPipe::write(uint8_t* buf, uint32_t len) {
   _tx_buffer.concat(buf, len);
   return len;  // TODO: StringBuilder needs an API enhancement to make this safe.
 }
@@ -209,7 +209,7 @@ uint LinuxSockPipe::write(uint8_t* buf, uint len) {
 /*
 * Write to the socket.
 */
-uint LinuxSockPipe::write(char c) {
+uint32_t LinuxSockPipe::write(char c) {
   _tx_buffer.concat(c);
   return 1;  // TODO: StringBuilder needs an API enhancement to make this safe.
 }
@@ -218,8 +218,8 @@ uint LinuxSockPipe::write(char c) {
 /*
 * Read from the socket buffer.
 */
-uint LinuxSockPipe::read(uint8_t* buf, uint len) {
-  uint ret = strict_min((int32_t) len, (int32_t) _rx_buffer.length());
+uint32_t LinuxSockPipe::read(uint8_t* buf, uint32_t len) {
+  uint32_t ret = strict_min((int32_t) len, (int32_t) _rx_buffer.length());
   if (0 < ret) {
     memcpy(buf, _rx_buffer.string(), ret);
     _rx_buffer.cull(ret);
@@ -231,8 +231,8 @@ uint LinuxSockPipe::read(uint8_t* buf, uint len) {
 /*
 * Read from the socket buffer.
 */
-uint LinuxSockPipe::read(StringBuilder* buf) {
-  uint ret = _rx_buffer.length();
+uint32_t LinuxSockPipe::read(StringBuilder* buf) {
+  uint32_t ret = _rx_buffer.length();
   if (0 < ret) {
     buf->concatHandoff(&_rx_buffer);
   }

@@ -594,7 +594,7 @@ int LinuxPlatform::wakeThread(unsigned long _thread_id) {
   int8_t LinuxPlatform::_load_config() {
     if (_storage_device) {
       if (_storage_device->isMounted()) {
-        uint len = 2048;
+        uint32_t len = 2048;
         uint8_t raw[len];
         StorageErr err = _storage_device->persistentRead(NULL, raw, &len, 0);
         if (err == StorageErr::NONE) {

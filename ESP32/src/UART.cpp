@@ -63,7 +63,7 @@ static void uart_event_task(void *pvParameters) {
 void UARTAdapter::irq_handler() {
   uart_event_t event;
   // Waiting for UART event.
-  if (xQueueReceive(uart_queues[ADAPTER_NUM], (void * )&event, (portTickType)portMAX_DELAY)) {
+  if (xQueueReceive(uart_queues[ADAPTER_NUM], (void * )&event, (TickType_t)portMAX_DELAY)) {
     switch (event.type) {
       //Event of UART receving data
       case UART_DATA:
@@ -223,7 +223,7 @@ int8_t UARTAdapter::_pf_init() {
         .stop_bits = stp_bits,
         .flow_ctrl = flowctrl,
         .rx_flow_ctrl_thresh = 122,  // The FIFO is 128 bytes (I think?)
-        .use_ref_tick = true
+        .source_clk = UART_SCLK_DEFAULT
       };
       if (ESP_OK == uart_param_config((uart_port_t) ADAPTER_NUM, &uart_config)) {
         unsigned int rxpin  = (255 == _RXD_PIN)  ? UART_PIN_NO_CHANGE : _RXD_PIN;
@@ -237,8 +237,8 @@ int8_t UARTAdapter::_pf_init() {
           uart_queues[ADAPTER_NUM] = (QueueHandle_t) malloc(sizeof(QueueHandle_t));
           if (nullptr != uart_queues[ADAPTER_NUM]) {
             uart_instances[ADAPTER_NUM] = this;
-            const uint rx_ring_size = rxCapable() ? UART_FIFO_CAPACITY : 4;
-            const uint tx_ring_size = txCapable() ? UART_FIFO_CAPACITY : 4;
+            const uint32_t rx_ring_size = rxCapable() ? UART_FIFO_CAPACITY : 4;
+            const uint32_t tx_ring_size = txCapable() ? UART_FIFO_CAPACITY : 4;
             if (ESP_OK == uart_driver_install((uart_port_t) ADAPTER_NUM, rx_ring_size, tx_ring_size, 10, &uart_queues[ADAPTER_NUM], 0)) {
               const uart_intr_config_t intr_conf {
                 // UART_FRM_ERR_INT: Triggered when the receiver detects a data frame error .

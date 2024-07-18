@@ -82,7 +82,7 @@ static long unsigned int rng_thread_id = 0;
 static bool using_wifi_peripheral = false;
 static bool using_adc1            = false;
 static bool using_adc2            = false;
-static xQueueHandle gpio_evt_queue = NULL;
+static QueueHandle_t gpio_evt_queue = NULL;
 
 
 /*******************************************************************************
@@ -250,13 +250,13 @@ int ESP32Platform::createThread(unsigned long* _thread_id, void* _something, Thr
 
 int ESP32Platform::deleteThread(unsigned long* _thread_id) {
   // TODO: Why didn't this work?
-  //vTaskDelete(&_thread_id);
+  //vTaskDelete((TaskHandle_t) &_thread_id);
   return 0;
 }
 
 
 int ESP32Platform::wakeThread(unsigned long _thread_id) {
-  vTaskResume(&_thread_id);
+  vTaskResume((TaskHandle_t) &_thread_id);
   return 0;
 }
 

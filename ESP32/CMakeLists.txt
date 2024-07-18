@@ -2,19 +2,20 @@
 # ESP-IDF component
 #
 message(STATUS "==============================================")
-message(STATUS "ManuvrPlatform")
+message(STATUS "ManuvrPlatform-ESP32")
 message(STATUS "==============================================")
 
-file(GLOB_RECURSE SOURCE_FILES
+file(GLOB_RECURSE srcs
   src/*.c
   src/*.cpp
 )
 
-# These are components that are known to work on ESP32.
 idf_component_register(
-  SRCS ${SOURCE_FILES}
+  SRCS "${srcs}"
   INCLUDE_DIRS "."
-  REQUIRES CppPotpourri nvs_flash esp_adc_cal
+  PRIV_INCLUDE_DIRS "."
+  REQUIRES CppPotpourri
+  PRIV_REQUIRES nvs_flash driver esp_adc efuse esp_timer esp_event esp_wifi
 )
 
-target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-ignored-qualifiers -Wno-implicit-fallthrough)
+target_compile_options(${COMPONENT_LIB} PUBLIC -Wno-ignored-qualifiers -Wno-implicit-fallthrough)

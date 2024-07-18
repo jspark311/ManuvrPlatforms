@@ -103,7 +103,7 @@ XferFault I2CBusOp::begin() {
       if (need_to_send_subaddr()) {
         set_state(XferState::TX_WAIT);
         _dead_buf[device->adapterNumber()][0] = (uint8_t) sub_addr;
-        for (uint x = 0; x < strict_min(255, _buf_len); x++) {
+        for (uint32_t x = 0; x < strict_min(255, _buf_len); x++) {
           _dead_buf[device->adapterNumber()][x+1] = _buf[x];
         }
         adptr->write_async(dev_addr, &_dead_buf[device->adapterNumber()][0], (_buf_len+1), 1);

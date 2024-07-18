@@ -44,7 +44,7 @@ XferFault SPIBusOp::begin() {
       switch (get_opcode()) {
         case BusOpcode::TX:
           set_state(XferState::TX_WAIT);
-          for (uint i = 0; i < _buf_len; i++) {
+          for (uint32_t i = 0; i < _buf_len; i++) {
             SPI.transfer(*(_buf + i));
           }
           //SPI.transfer(_buf, nullptr, _buf_len, EventResponderRef event_responder);
@@ -52,7 +52,7 @@ XferFault SPIBusOp::begin() {
           break;
         case BusOpcode::RX:
           set_state(XferState::RX_WAIT);
-          for (uint i = 0; i < _buf_len; i++) {
+          for (uint32_t i = 0; i < _buf_len; i++) {
             *(_buf + i) = SPI.transfer(0);
           }
           ret = XferFault::NONE;
