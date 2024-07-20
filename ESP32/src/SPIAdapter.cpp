@@ -19,13 +19,14 @@ limitations under the License.
 
 */
 #include "../ESP32.h"
-#include <BusQueue/SPIAdapter.h>
+#include "BusQueue/SPIAdapter.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #include "driver/spi_master.h"
+#include "driver/gpio.h"
 
 
 /*******************************************************************************

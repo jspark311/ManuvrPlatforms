@@ -23,13 +23,56 @@ This file contains platform support for the ESP32.
 
 #include "../ESP32.h"
 
-#include "sdkconfig.h"
-#include "esp_netif.h"
+/* These includes from ESF-IDF need to be under C linkage. */
+extern "C" {
+  // #include "esp_adc/adc_oneshot.h"
+  // #include "esp_adc/adc_cali.h"
+  // #include "esp_adc/adc_cali_scheme.h"
+
+  //#include "driver/periph_ctrl.h"
+  //#include "esp_netif.h"
+
+  #include "esp_attr.h"
+  #include "esp_err.h"
+  #include "esp_heap_caps.h"
+  #include "esp_intr_alloc.h"
+  #include "esp_log.h"
+  #include "esp_partition.h"
+  #include "esp_sleep.h"
+  #include "esp_system.h"
+  #include "esp_types.h"
+  #include "driver/gpio.h"
+  #include "driver/ledc.h"
+  //#include "esp_wifi.h"
+  #include "esp_netif.h"
+  #include "esp_mac.h"
+
+  #include "esp_adc/adc_oneshot.h"
+  #include "esp_adc/adc_cali.h"
+  #include "esp_adc/adc_cali_scheme.h"
+
+  #include "esp32/rom/ets_sys.h"
+  #include "esp32/rom/lldesc.h"
+  #include "nvs_flash.h"
+  #include "nvs.h"
+
+  #include "soc/dport_reg.h"
+  #include "soc/efuse_reg.h"
+  #include "soc/gpio_reg.h"
+  #include "soc/gpio_sig_map.h"
+  #include "soc/io_mux_reg.h"
+  #include "soc/rtc_cntl_reg.h"
+}
 
 
 #if !defined(PLATFORM_RNG_CARRY_CAPACITY)
   #define PLATFORM_RNG_CARRY_CAPACITY    32
 #endif
+
+#if !defined(CONFIG_GPIO_CTRL_FUNC_IN_IRAM)
+  #error The GPIO contract for CppPotpourri requires that GPIO be available under cache-disabled circumstances (ISR_FUNC). Set CONFIG_GPIO_CTRL_FUNC_IN_IRAM.
+#endif
+
 
 
 /* This is how we conceptualize a GPIO pin. */
@@ -82,7 +125,14 @@ static long unsigned int rng_thread_id = 0;
 static bool using_wifi_peripheral = false;
 static bool using_adc1            = false;
 static bool using_adc2            = false;
-static QueueHandle_t gpio_evt_queue = NULL;
+static QueueHandle_t gpio_evt_queue = nullptr;
+
+adc_oneshot_unit_handle_t adc1_handle;
+adc_oneshot_unit_handle_t adc2_handle;
+adc_cali_handle_t adc1_cali_chan0_handle = nullptr;
+adc_cali_handle_t adc1_cali_chan1_handle = nullptr;
+adc_cali_handle_t adc2_cali_handle       = nullptr;
+
 
 
 /*******************************************************************************
@@ -153,7 +203,9 @@ void c3p_log(uint8_t severity, const char* tag, StringBuilder* msg) {
 * @return   A 32-bit unsigned random number. This can be cast as needed.
 */
 uint32_t IRAM_ATTR randomUInt32() {
-  return randomness_pool[_random_pool_r_ptr++ % PLATFORM_RNG_CARRY_CAPACITY];
+  uint32_t ret = randomness_pool[_random_pool_r_ptr % PLATFORM_RNG_CARRY_CAPACITY];
+  _random_pool_r_ptr += 1;
+  return ret;
 }
 
 
@@ -170,7 +222,8 @@ static void IRAM_ATTR dev_urandom_reader(void* unused_param) {
       vTaskDelay(10 / portTICK_PERIOD_MS);
     }
     else {
-      randomness_pool[_random_pool_w_ptr++ % PLATFORM_RNG_CARRY_CAPACITY] = *((uint32_t*) 0x3FF75144);  // 32-bit RNG data register.
+      randomness_pool[_random_pool_w_ptr % PLATFORM_RNG_CARRY_CAPACITY] = *((uint32_t*) 0x3FF75144);  // 32-bit RNG data register.
+      _random_pool_w_ptr += 1;
     }
   }
 }
@@ -407,60 +460,35 @@ void gpioSetup() {
 }
 
 
-
-
-adc1_channel_t _gpio_analog_get_chan1_from_pin(uint8_t pin) {
+adc_channel_t _gpio_analog_get_chan_from_pin(uint8_t pin) {
   switch (pin) {
-    case 32:    return ADC1_CHANNEL_4;
-    case 33:    return ADC1_CHANNEL_5;
-    case 34:    return ADC1_CHANNEL_6;
-    case 35:    return ADC1_CHANNEL_7;
-    case 36:    return ADC1_CHANNEL_0;
-    case 37:    return ADC1_CHANNEL_1;
-    case 38:    return ADC1_CHANNEL_2;
-    case 39:    return ADC1_CHANNEL_3;
-    default:    return ADC1_CHANNEL_MAX;   // Invalid analog input pin.
+    // ADC2 pins...
+    case 0:     return ADC_CHANNEL_1;
+    case 2:     return ADC_CHANNEL_2;
+    case 4:     return ADC_CHANNEL_0;
+    case 12:    return ADC_CHANNEL_5;
+    case 13:    return ADC_CHANNEL_4;
+    case 14:    return ADC_CHANNEL_6;
+    case 15:    return ADC_CHANNEL_3;
+    case 25:    return ADC_CHANNEL_8;
+    case 26:    return ADC_CHANNEL_9;
+    case 27:    return ADC_CHANNEL_7;
+    // ADC1 pins...
+    case 32:    return ADC_CHANNEL_4;
+    case 33:    return ADC_CHANNEL_5;
+    case 34:    return ADC_CHANNEL_6;
+    case 35:    return ADC_CHANNEL_7;
+    case 36:    return ADC_CHANNEL_0;
+    case 37:    return ADC_CHANNEL_1;
+    case 38:    return ADC_CHANNEL_2;
+    case 39:    return ADC_CHANNEL_3;
+    default:    return (adc_channel_t) -1;   // Invalid analog input pin.
   }
 }
 
-adc2_channel_t _gpio_analog_get_chan2_from_pin(uint8_t pin) {
+uint8_t _gpio_analog_get_adc_from_pin(uint8_t pin) {
   switch (pin) {
-    case 0:     return ADC2_CHANNEL_1;
-    case 2:     return ADC2_CHANNEL_2;
-    case 4:     return ADC2_CHANNEL_0;
-    case 12:    return ADC2_CHANNEL_5;
-    case 13:    return ADC2_CHANNEL_4;
-    case 14:    return ADC2_CHANNEL_6;
-    case 15:    return ADC2_CHANNEL_3;
-    case 25:    return ADC2_CHANNEL_8;
-    case 26:    return ADC2_CHANNEL_9;
-    case 27:    return ADC2_CHANNEL_7;
-    default:    return ADC2_CHANNEL_MAX;   // Invalid analog input pin.
-  }
-}
-
-
-
-int8_t _gpio_analog_in_pin_setup(uint8_t pin) {
-  switch (pin) {
-    case 32:
-    case 33:
-    case 34:
-    case 35:
-    case 36:
-    case 37:
-    case 38:
-    case 39:
-      {
-        adc1_channel_t chan = _gpio_analog_get_chan1_from_pin(pin);
-        if (!using_adc1) {
-          using_adc1 = (ESP_OK == adc1_config_width(ADC_WIDTH_BIT_12));
-        }
-        adc1_config_channel_atten(chan, ADC_ATTEN_DB_11);
-        gpio_pins[pin].mode  = GPIOMode::ANALOG_IN;
-      }
-      return 0;
-
+    // ADC2 pins...
     case 0:
     case 2:
     case 4:
@@ -470,20 +498,62 @@ int8_t _gpio_analog_in_pin_setup(uint8_t pin) {
     case 15:
     case 25:
     case 26:
-    case 27:
-      if (!using_wifi_peripheral) {
-        adc2_channel_t chan = _gpio_analog_get_chan2_from_pin(pin);
-        if (!using_adc2) {
-          using_adc2 = true;
-        }
-        adc2_config_channel_atten(chan, ADC_ATTEN_DB_11);
-        gpio_pins[pin].mode  = GPIOMode::ANALOG_IN;
-        return 0;
-      }
-      return -1;   // Can't use ADC while wifi peripheral is using it.
-
-    default:    return -1;   // Invalid analog input pin.
+    case 27:    return 2;
+    // ADC1 pins...
+    case 32:
+    case 33:
+    case 34:
+    case 35:
+    case 36:
+    case 37:
+    case 38:
+    case 39:    return 1;
+    default:    return 0;   // Invalid analog input pin.
   }
+}
+
+
+int8_t _gpio_analog_in_pin_setup(uint8_t pin) {
+  const uint8_t ADC_IDX = _gpio_analog_get_adc_from_pin(pin);
+  const adc_channel_t CHAN = _gpio_analog_get_chan_from_pin(pin);
+  adc_oneshot_unit_handle_t* adc_handle = &adc1_handle;
+  adc_oneshot_chan_cfg_t config = {
+      .atten = ADC_ATTEN_DB_12,
+      .bitwidth = ADC_BITWIDTH_DEFAULT,
+  };
+
+  switch (ADC_IDX) {
+    case 1:
+      if (!using_adc1) {
+        adc_oneshot_unit_init_cfg_t init_config = {
+          .unit_id = ADC_UNIT_1,
+          .ulp_mode = ADC_ULP_MODE_DISABLE,
+        };
+        using_adc1 = (ESP_OK == adc_oneshot_new_unit(&init_config, adc_handle));
+      }
+      break;
+    case 2:
+      // Can't use ADC2 while wifi peripheral is using it.
+      if (using_wifi_peripheral) {  return -3;  }
+      else {
+        adc_oneshot_unit_init_cfg_t init_config = {
+          .unit_id = ADC_UNIT_2,
+          .ulp_mode = ADC_ULP_MODE_DISABLE,
+        };
+        adc_handle = &adc2_handle;
+        if (!using_adc2) {
+          using_adc2 = (ESP_OK == adc_oneshot_new_unit(&init_config, adc_handle));
+        }
+      }
+      break;
+    default:
+      return -1;   // Invalid analog input pin.
+  }
+  if (ESP_OK == adc_oneshot_config_channel(*adc_handle, CHAN, &config)) {
+    gpio_pins[pin].mode  = GPIOMode::ANALOG_IN;
+    return 0;
+  }
+  return -2;
 }
 
 
@@ -552,7 +622,7 @@ int8_t pinMode(uint8_t pin, GPIOMode mode) {
   if (GPIO_IS_VALID_GPIO(pin)) {
     io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
     io_conf.pull_up_en   = GPIO_PULLUP_DISABLE;
-    io_conf.intr_type    = (gpio_int_type_t) GPIO_PIN_INTR_DISABLE;
+    io_conf.intr_type    = (gpio_int_type_t) GPIO_INTR_DISABLE;
     io_conf.pin_bit_mask = (uint64_t) ((uint64_t)1 << pin);
 
     // Handle the pull-up/down stuff first.
@@ -734,34 +804,18 @@ int8_t analogWrite(uint8_t pin, float percentage) {
 
 int readPinAnalog(uint8_t pin) {
   int val = 0;
-  switch (pin) {
-    case 32:
-    case 33:
-    case 34:
-    case 35:
-    case 36:
-    case 37:
-    case 38:
-    case 39:
+  const uint8_t ADC_IDX = _gpio_analog_get_adc_from_pin(pin);
+  const adc_channel_t CHAN = _gpio_analog_get_chan_from_pin(pin);
+  switch (ADC_IDX) {
+    case 1:
       if (using_adc1) {
-        adc1_channel_t chan = _gpio_analog_get_chan1_from_pin(pin);
-        val = adc1_get_raw(chan);
+        adc_oneshot_read(adc1_handle, CHAN, &val);
       }
       break;
 
-    case 0:
     case 2:
-    case 4:
-    case 12:
-    case 13:
-    case 14:
-    case 15:
-    case 25:
-    case 26:
-    case 27:
       if (using_adc2) {
-        adc2_channel_t chan = _gpio_analog_get_chan2_from_pin(pin);
-        adc2_get_raw(chan, ADC_WIDTH_BIT_12, &val);
+        adc_oneshot_read(adc1_handle, CHAN, &val);
       }
       break;
 

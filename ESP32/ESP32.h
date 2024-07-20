@@ -22,7 +22,7 @@ limitations under the License.
 #ifndef __PLATFORM_ESP32_H__
 #define __PLATFORM_ESP32_H__
 
-#include <ctime>
+#include <sys/time.h>
 
 #include "AbstractPlatform.h"
 #include "StringBuilder.h"
@@ -34,40 +34,13 @@ limitations under the License.
 
 /* These includes from ESF-IDF need to be under C linkage. */
 extern "C" {
-  // #include "esp_adc/adc_oneshot.h"
-  // #include "esp_adc/adc_cali.h"
-  // #include "esp_adc/adc_cali_scheme.h"
-
-  //#include "driver/periph_ctrl.h"
-  //#include "esp_netif.h"
-
-  #include "esp_attr.h"
-  #include "esp_err.h"
-  #include "esp_heap_caps.h"
-  #include "esp_intr_alloc.h"
-  #include "esp_log.h"
-  #include "esp_partition.h"
-  #include "esp_sleep.h"
-  #include "esp_system.h"
-  #include "esp_types.h"
-  //#include "esp_wifi.h"
-  #include "esp_mac.h"
+  #include "sdkconfig.h"
+  #include "xtensa_api.h"
   #include "esp_idf_version.h"
-
-  #include "esp32/rom/ets_sys.h"
-  #include "esp32/rom/lldesc.h"
-  #include "nvs_flash.h"
-  #include "nvs.h"
-
-  #include "soc/dport_reg.h"
-  #include "soc/efuse_reg.h"
-  #include "soc/gpio_reg.h"
-  #include "soc/gpio_sig_map.h"
-  #include "soc/io_mux_reg.h"
-  #include "soc/rtc_cntl_reg.h"
-
-  #include <xtensa_api.h>
+  #include "esp_event.h"
+  #include "freertos/task.h"
 }
+
 
 // This platform provides an on-die temperature sensor.
 extern uint8_t temprature_sens_read();
@@ -103,6 +76,7 @@ class ESP32StdIO : public BufferAccepter {
 /*
 * Data storage interface for the ESP32's on-board flash.
 */
+#if defined(CONFIG_C3P_STORAGE)
 class ESP32Storage : public Storage {
   public:
     ESP32Storage(const esp_partition_t*);
@@ -131,7 +105,7 @@ class ESP32Storage : public Storage {
 
     int8_t _close();             // Blocks until commit completes.
 };
-
+#endif   // CONFIG_C3P_STORAGE
 
 
 /*
