@@ -20,7 +20,8 @@ limitations under the License.
 */
 
 #include "../ESP32.h"
-#include <BusQueue/I2CAdapter.h>
+#include "BusQueue/I2CAdapter.h"
+
 #include "driver/i2c.h"
 
 

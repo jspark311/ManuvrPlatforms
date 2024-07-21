@@ -1,6 +1,6 @@
 #include "../ManuvrArduino.h"
 
-static HardwareSerial* _uart_get_by_adapter_num(const uint8_t A_NUM) {
+static HardwareSerialIMXRT* _uart_get_by_adapter_num(const uint8_t A_NUM) {
   switch (A_NUM) {
     case 1:   return &Serial1;
     case 2:   return &Serial2;
@@ -29,7 +29,7 @@ void PlatformUART::irq_handler() {
 */
 int8_t PlatformUART::_pf_poll() {
   int8_t return_value = 0;
-  HardwareSerial* s_port = _uart_get_by_adapter_num(ADAPTER_NUM);
+  HardwareSerialIMXRT* s_port = _uart_get_by_adapter_num(ADAPTER_NUM);
 
   if (txCapable() && (0 < _tx_buffer.count())) {
     // Refill the TX buffer...
@@ -88,7 +88,7 @@ int8_t PlatformUART::_pf_poll() {
 
 int8_t PlatformUART::_pf_init() {
   int8_t ret = -1;
-  HardwareSerial* s_port = _uart_get_by_adapter_num(ADAPTER_NUM);
+  HardwareSerialIMXRT* s_port = _uart_get_by_adapter_num(ADAPTER_NUM);
   switch (ADAPTER_NUM) {
     case 0:
       Serial.begin(_opts.bitrate);   // USB
@@ -120,7 +120,7 @@ int8_t PlatformUART::_pf_init() {
 int8_t PlatformUART::_pf_deinit() {
   int8_t ret = -2;
   _adapter_clear_flag(UART_FLAG_UART_READY | UART_FLAG_PENDING_RESET | UART_FLAG_PENDING_CONF);
-  HardwareSerial* s_port = _uart_get_by_adapter_num(ADAPTER_NUM);
+  HardwareSerialIMXRT* s_port = _uart_get_by_adapter_num(ADAPTER_NUM);
   if (txCapable()) {
     switch (ADAPTER_NUM) {
       case 0:

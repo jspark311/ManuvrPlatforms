@@ -9,6 +9,9 @@
 #include "../ManuvrArduino.h"
 #include <StringBuilder.h>
 
+// This allows us to use std:function.
+namespace std {void __throw_bad_function_call() { while(1); }; }
+
 /*******************************************************************************
 * Global platform singleton.                                                   *
 *******************************************************************************/

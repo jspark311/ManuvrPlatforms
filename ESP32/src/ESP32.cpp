@@ -518,8 +518,8 @@ int8_t _gpio_analog_in_pin_setup(uint8_t pin) {
   const adc_channel_t CHAN = _gpio_analog_get_chan_from_pin(pin);
   adc_oneshot_unit_handle_t* adc_handle = &adc1_handle;
   adc_oneshot_chan_cfg_t config = {
-      .atten = ADC_ATTEN_DB_12,
-      .bitwidth = ADC_BITWIDTH_DEFAULT,
+    .atten = ADC_ATTEN_DB_12,
+    .bitwidth = ADC_BITWIDTH_DEFAULT,
   };
 
   switch (ADC_IDX) {
