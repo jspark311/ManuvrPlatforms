@@ -60,7 +60,7 @@ static void uart_event_task(void *pvParameters) {
 /*
 * In-class ISR handler. Be careful about state mutation....
 */
-void UARTAdapter::irq_handler() {
+void PlatformUART::irq_handler() {
   uart_event_t event;
   // Waiting for UART event.
   if (xQueueReceive(uart_queues[ADAPTER_NUM], (void * )&event, (TickType_t)portMAX_DELAY)) {
@@ -153,7 +153,7 @@ void UARTAdapter::irq_handler() {
 *
 * @return 0 on no action, 1 on successful action, -1 on error.
 */
-int8_t UARTAdapter::_pf_poll() {
+int8_t PlatformUART::_pf_poll() {
   int8_t return_value = 0;
   if (txCapable() & (0 < _tx_buffer.count())) {
     // Refill the TX buffer...
@@ -178,7 +178,7 @@ int8_t UARTAdapter::_pf_poll() {
 }
 
 
-int8_t UARTAdapter::_pf_init() {
+int8_t PlatformUART::_pf_init() {
   if (ADAPTER_NUM < 3) {
     if (nullptr == uart_queues[ADAPTER_NUM]) {
       uart_word_length_t     databits;
@@ -270,7 +270,7 @@ int8_t UARTAdapter::_pf_init() {
 }
 
 
-int8_t UARTAdapter::_pf_deinit() {
+int8_t PlatformUART::_pf_deinit() {
   int8_t ret = -2;
   _adapter_clear_flag(UART_FLAG_UART_READY | UART_FLAG_PENDING_RESET | UART_FLAG_PENDING_CONF);
   uart_disable_tx_intr((uart_port_t) ADAPTER_NUM);
