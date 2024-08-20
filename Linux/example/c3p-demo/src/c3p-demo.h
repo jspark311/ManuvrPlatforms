@@ -209,26 +209,6 @@ class BlobStudyWindow : public C3Px11Window {
 };
 
 
-
-
-/* A GUI object to represent a Linux UART. */
-// TODO: Promote, rather than copy-pasting per-project.
-class GfxUIUART : public GfxUIElement {
-  public:
-    GfxUIUART(LinuxUART*, const GfxUILayout, const GfxUIStyle, uint32_t f = 0);
-    ~GfxUIUART() {};
-
-    /* Implementation of GfxUIElement. */
-    virtual int  _render(UIGfxWrapper* ui_gfx);
-    virtual bool _notify(const GfxUIEvent GFX_EVNT, PixUInt x, PixUInt y, PriorityQueue<GfxUIElement*>* change_log);
-
-
-  private:
-    LinuxUART*  _uart;
-};
-
-
-
 /*******************************************************************************
 * StaticHub is a singleton class in the program that facilitates message passing
 *   between windows (that is: between threads). It is created by main(), and

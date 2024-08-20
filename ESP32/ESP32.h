@@ -23,6 +23,7 @@ limitations under the License.
 #define __PLATFORM_ESP32_H__
 
 #include <sys/time.h>
+#include <time.h>
 
 #include "AbstractPlatform.h"
 #include "StringBuilder.h"
@@ -34,6 +35,7 @@ limitations under the License.
 
 /* These includes from ESF-IDF need to be under C linkage. */
 extern "C" {
+  #include "esp_system.h"
   #include "sdkconfig.h"
   #include "xtensa_api.h"
   #include "esp_idf_version.h"
@@ -72,7 +74,9 @@ class ESP32StdIO : public BufferAccepter {
 };
 
 
-
+/*
+* Platform-specific wrapper around UARTAdapter.
+*/
 class PlatformUART : public UARTAdapter {
   public:
     PlatformUART(
@@ -95,6 +99,9 @@ class PlatformUART : public UARTAdapter {
 
 /*
 * Data storage interface for the ESP32's on-board flash.
+* NOTE: This is terrible. And I feel terrible for writing it. It shouldn't be
+*   used by anyone for any reason. Only pain can result. It is being retained
+*   for its value as a possible restricted interface later on (if at all).
 */
 #if defined(CONFIG_C3P_STORAGE)
 class ESP32Storage : public Storage {

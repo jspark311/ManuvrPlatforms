@@ -148,7 +148,8 @@ int8_t SPIAdapter::_bus_init() {
 	dev_config.duty_cycle_pos   = 0;
 	dev_config.cs_ena_posttrans = 0;
 	dev_config.cs_ena_pretrans  = 0;
-	dev_config.clock_speed_hz   = 9000000;
+  dev_config.clock_source     = SPI_CLK_SRC_DEFAULT;
+	dev_config.clock_speed_hz   = 16000000;
 	dev_config.spics_io_num     = (gpio_num_t) -1;
 	dev_config.flags            = SPI_DEVICE_NO_DUMMY;
 	dev_config.queue_size       = 1;

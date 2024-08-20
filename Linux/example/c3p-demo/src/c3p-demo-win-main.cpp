@@ -682,7 +682,7 @@ int8_t MainGuiWindow::createWindow() {
     _main_nav_settings.add_child(&_slider_2);
     _main_nav_settings.add_child(&_slider_3);
     _main_nav_settings.add_child(&_slider_4);
-    //_main_nav_settings.add_child(&_program_info_txt);
+    _main_nav_settings.add_child(&_program_info_txt);
     //_main_nav_settings.add_child(&_value_test_0);
     //_main_nav_settings.add_child(&_value_test_1);
     //_main_nav_settings.add_child(&_value_test_2);
@@ -766,7 +766,7 @@ int8_t MainGuiWindow::createWindow() {
 
 
 int8_t MainGuiWindow::closeWindow() {
-  hub.continue_running = !gravepact;
+  hub.releaseAllWindows();
   return _deinit_window();
 }
 

@@ -29,7 +29,10 @@ Simple file handler for Linux.
 #include <fcntl.h>
 #include <sys/stat.h>
 
-#define FILE_BUFFER_SIZE 2048
+// NOTE: This is not the maximum file size that can be loaded. It is the chunk
+//   size that will be loaded per-call. The maximum file size is not
+//   constrained by anything but the heap availability.
+#define FILE_BUFFER_SIZE 4096
 
 
 C3PFile::C3PFile(char* p) {

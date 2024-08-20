@@ -470,7 +470,10 @@ int main(int argc, const char *argv[]) {
   }
   console_adapter.poll();
 
-  delete hub.main_window;   // Will block until the GUI thread is shut down.
+  if (hub.main_window) {
+    delete hub.main_window;   // Will block until the GUI thread is shut down.
+    hub.main_window = nullptr;
+  }
   platform.firmware_shutdown(0);     // Clean up the platform.
   return 0;  // Should never execute.
 }
