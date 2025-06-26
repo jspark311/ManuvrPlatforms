@@ -182,6 +182,7 @@ void ArduinoPlatform::printDebug(StringBuilder* output) {
   */
   int8_t analogWriteFrequency(uint8_t pin, uint32_t freq) {
     //analogWriteFrequency(freq);   // Shunt to Teensyduino library.
+    return ::analogWriteFrequency(pin, freq) == 0 ? 0 : -1;
     return 0;
   }
 

@@ -4,9 +4,10 @@
 *
 */
 
-#include <AbstractPlatform.h>
-#include <StringBuilder.h>
-#include <BusQueue/UARTAdapter.h>
+// C3P includes...
+#include "AbstractPlatform.h"
+#include "StringBuilder.h"
+#include "BusQueue/UARTAdapter.h"
 
 #ifndef __PLATFORM_ARDUINO_H__
 #define __PLATFORM_ARDUINO_H__
@@ -65,7 +66,7 @@ class PlatformUART : public UARTAdapter {
       const uint8_t cts_pin, const uint8_t rts_pin,
       const uint16_t tx_buf_len, const uint16_t rx_buf_len) :
       UARTAdapter(adapter, txd_pin, rxd_pin, cts_pin, rts_pin, tx_buf_len, rx_buf_len) {};
-    ~PlatformUART() {  _pf_deinit();  };     
+    ~PlatformUART() {  _pf_deinit();  };
 
     void irq_handler();
 
