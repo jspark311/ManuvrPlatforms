@@ -260,6 +260,27 @@ GfxUITextButton _button_ntsc(
   (0)
 );
 
+GfxUITextButton _button_crt(
+  GfxUILayout(
+    (_button_ntsc.elementPosX() + _button_ntsc.elementWidth()) + 5, _button_ntsc.elementPosY(),
+    60, 30,
+    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+    0, 0, 0, 0               // Border_px(t, b, l, r)
+  ),
+  GfxUIStyle(0, // bg
+    0xFFFFFF,   // border
+    0xFFFFFF,   // header
+    0x9932CC,   // active
+    0xA0A0A0,   // inactive
+    0xFFFFFF,   // selected
+    0x202020,   // unselected
+    1           // t_size
+  ),
+  "CRT",
+  (0)
+);
+
+
 GfxUITextButton _button_v_anchor_lines(
   GfxUILayout(
     _button_freerun.elementPosX(), (_button_freerun.elementPosY() + _button_freerun.elementHeight() + 5),
@@ -276,7 +297,7 @@ GfxUITextButton _button_v_anchor_lines(
     0x202020,   // unselected
     1           // t_size
   ),
-  "Globe",
+  "Anchors",
   (0) //(GFXUI_BUTTON_FLAG_MOMENTARY)
 );
 
@@ -297,7 +318,7 @@ GfxUITextButton _button_v_value(
     0x202020,   // unselected
     1           // t_size
   ),
-  "Globe",
+  "Value",
   (0) //(GFXUI_BUTTON_FLAG_MOMENTARY)
 );
 
@@ -344,9 +365,7 @@ MouseButtonDef mouse_buttons[] = {
 GfxNTSCEffect* ntsc_filter = nullptr;
 GlobeRender*   globe_render = nullptr;
 Vector3Render* vector_render = nullptr;
-
-Image* ugly_fb = nullptr;
-
+GfxCRTBloomEffect* crt_effect = nullptr;
 
 // TODO: Unfastidiousness elsewhere causes me to write this fxn to avoid repeating myself.
 void rerender_perlin_noise() {
@@ -429,6 +448,7 @@ int8_t MainGuiWindow::createWindow() {
   if (0 == ret) {
     map_button_inputs(mouse_buttons, sizeof(mouse_buttons) / sizeof(mouse_buttons[0]));
     _overlay.reallocate();
+
     root.add_child(&_program_info_txt);
     root.add_child(&_slider_scale);
     root.add_child(&_slider_octaves);
@@ -437,6 +457,8 @@ int8_t MainGuiWindow::createWindow() {
     root.add_child(&_slider_ntsc_noise);
     root.add_child(&_button_freerun);
     root.add_child(&_button_ntsc);
+    root.add_child(&_button_crt);
+
     root.add_child(&_button_v_anchor_lines);
     root.add_child(&_button_v_value);
     root.add_child(&slider_x);
@@ -490,7 +512,6 @@ int8_t MainGuiWindow::createWindow() {
     );
 
     ntsc_filter->noiseFactor(0.05f);
-    ugly_fb = &_fb;
 
     globe_render = new GlobeRender(&_fb);
     globe_render->setSourceFrame(
@@ -512,6 +533,16 @@ int8_t MainGuiWindow::createWindow() {
     vector_render->setOrientation(
       slider_x.value() * 180.0f,
       slider_y.value() * 360.0f
+    );
+
+
+    crt_effect = new GfxCRTBloomEffect(&_fb, &_overlay);
+    crt_effect->setSourceFrame(
+      PixAddr(
+        _button_v_anchor_lines.elementPosX(),
+        (_button_v_anchor_lines.elementPosY() + _button_v_anchor_lines.elementHeight() + 5)
+      ),
+      300, 300
     );
 
 
@@ -548,6 +579,11 @@ int8_t MainGuiWindow::render_overlay() {
   ui_magnifier.pointerLocation(_pointer_x, _pointer_y);
   ui_magnifier.render(&gfx_overlay);
 
+  if (_button_crt.pressed()) {
+    crt_effect->bloomFactor(slider_y.value());
+    crt_effect->edgeCurvature(slider_z.value());
+    crt_effect->apply();
+  }
   return 0;
 }
 
@@ -558,10 +594,10 @@ int8_t MainGuiWindow::render_overlay() {
 int8_t MainGuiWindow::render(bool force) {
   int8_t ret = 0;
   if (force) {
-    //const uint  CONSOLE_INPUT_X_POS = 0;
-    //const uint  CONSOLE_INPUT_Y_POS = (height() - CONSOLE_INPUT_HEIGHT) - 1;
-    // _txt_area_0.reposition(CONSOLE_INPUT_X_POS, CONSOLE_INPUT_Y_POS);
-    // _txt_area_0.resize(width(), CONSOLE_INPUT_HEIGHT);
+    const uint  CONSOLE_INPUT_X_POS = 0;
+    const uint  CONSOLE_INPUT_Y_POS = (height() - CONSOLE_INPUT_HEIGHT) - 1;
+    _program_info_txt.reposition(CONSOLE_INPUT_X_POS, CONSOLE_INPUT_Y_POS);
+    _program_info_txt.resize(width(), CONSOLE_INPUT_HEIGHT);
     StringBuilder pitxt;
     pitxt.concat("Perlin noise demo\nBuild date " __DATE__ " " __TIME__);
     struct utsname sname;
