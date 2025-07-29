@@ -12,16 +12,18 @@
 
 #define NOISE_X_LOCATION   0
 #define NOISE_Y_LOCATION  80
-#define NOISE_WIDTH      800
-#define NOISE_HEIGHT     600
+#define NOISE_WIDTH      900
+#define NOISE_HEIGHT     700
 
 
 extern bool continue_running;         // TODO: (rolled up newspaper) Bad...
 extern ParsingConsole console;
 
-bool gravepact      = true;   // Closing the GUI window should terminate the main thread?
+ImgPerlinNoise* noise_gen = nullptr;
 
-PerlinNoise* noise_gen = nullptr;
+bool reapply_noise = false;
+
+PixAddr field_drag_initial(0, 0);
 
 
 /*******************************************************************************
@@ -73,7 +75,7 @@ GfxUISlider _slider_scale(
     0xA0A0A0,   // inactive
     0xFFFFFF,   // selected
     0x202020,   // unselected
-    1           // t_size
+    2           // t_size
   ),
   (GFXUI_SLIDER_FLAG_RENDER_VALUE)
 );
@@ -92,7 +94,7 @@ GfxUISlider _slider_octaves(
     0xA0A0A0,   // inactive
     0xFFFFFF,   // selected
     0x202020,   // unselected
-    1           // t_size
+    2           // t_size
   ),
   (GFXUI_SLIDER_FLAG_RENDER_VALUE)
 );
@@ -112,15 +114,136 @@ GfxUISlider _slider_fade(
     0xA0A0A0,   // inactive
     0xFFFFFF,   // selected
     0x202020,   // unselected
-    1           // t_size
+    2           // t_size
+  ),
+  (GFXUI_SLIDER_FLAG_RENDER_VALUE)
+);
+
+GfxUISlider _slider_freq(
+  GfxUILayout(
+    _slider_fade.elementPosX(), (_slider_fade.elementPosY() + _slider_fade.elementHeight() + 5),
+    150, 30,
+    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+    0, 0, 0, 0               // Border_px(t, b, l, r)
+  ),
+  GfxUIStyle(0, // bg
+    0xFFFFFF,   // border
+    0xFFFFFF,   // header
+    0xFFA07A,   // active
+    0xA0A0A0,   // inactive
+    0xFFFFFF,   // selected
+    0x202020,   // unselected
+    2           // t_size
+  ),
+  (GFXUI_SLIDER_FLAG_RENDER_VALUE)
+);
+
+
+
+GfxUISlider slider_x(
+  GfxUILayout(
+    _slider_freq.elementPosX(), (_slider_freq.elementPosY() + _slider_freq.elementHeight() + 5),
+    150, 30,
+    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+    0, 0, 0, 0               // Border_px(t, b, l, r)
+  ),
+  GfxUIStyle(0, // bg
+    0xFFFFFF,   // border
+    0xFFFFFF,   // header
+    0xFFA07A,   // active
+    0xA0A0A0,   // inactive
+    0xFFFFFF,   // selected
+    0x202020,   // unselected
+    2           // t_size
+  ),
+  (GFXUI_SLIDER_FLAG_RENDER_VALUE)
+);
+
+
+GfxUISlider slider_y(
+  GfxUILayout(
+    slider_x.elementPosX(), (slider_x.elementPosY() + slider_x.elementHeight() + 5),
+    150, 30,
+    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+    0, 0, 0, 0               // Border_px(t, b, l, r)
+  ),
+  GfxUIStyle(0, // bg
+    0xFFFFFF,   // border
+    0xFFFFFF,   // header
+    0xFFA07A,   // active
+    0xA0A0A0,   // inactive
+    0xFFFFFF,   // selected
+    0x202020,   // unselected
+    2           // t_size
+  ),
+  (GFXUI_SLIDER_FLAG_RENDER_VALUE)
+);
+
+
+GfxUISlider slider_z(
+  GfxUILayout(
+    slider_y.elementPosX(), (slider_y.elementPosY() + slider_y.elementHeight() + 5),
+    150, 30,
+    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+    0, 0, 0, 0               // Border_px(t, b, l, r)
+  ),
+  GfxUIStyle(0, // bg
+    0xFFFFFF,   // border
+    0xFFFFFF,   // header
+    0xFFA07A,   // active
+    0xA0A0A0,   // inactive
+    0xFFFFFF,   // selected
+    0x202020,   // unselected
+    2           // t_size
+  ),
+  (GFXUI_SLIDER_FLAG_RENDER_VALUE)
+);
+
+
+
+GfxUISlider _slider_ntsc_noise(
+  GfxUILayout(
+    slider_z.elementPosX(), (slider_z.elementPosY() + slider_z.elementHeight() + 5),
+    150, 30,
+    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+    0, 0, 0, 0               // Border_px(t, b, l, r)
+  ),
+  GfxUIStyle(0, // bg
+    0xFFFFFF,   // border
+    0xFFFFFF,   // header
+    0xFFA07A,   // active
+    0xA0A0A0,   // inactive
+    0xFFFFFF,   // selected
+    0x202020,   // unselected
+    2           // t_size
   ),
   (GFXUI_SLIDER_FLAG_RENDER_VALUE)
 );
 
 GfxUITextButton _button_freerun(
   GfxUILayout(
-    _slider_fade.elementPosX(), (_slider_fade.elementPosY() + _slider_fade.elementHeight() + 5),
+    _slider_ntsc_noise.elementPosX(), (_slider_ntsc_noise.elementPosY() + _slider_ntsc_noise.elementHeight() + 5),
     150, 30,
+    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+    0, 0, 0, 0               // Border_px(t, b, l, r)
+  ),
+  GfxUIStyle(0, // bg
+    0xFFFFFF,   // border
+    0xFFFFFF,   // header
+    0x9932CC,   // active
+    0xA0A0A0,   // inactive
+    0xFFFFFF,   // selected
+    0x202020,   // unselected
+    2           // t_size
+  ),
+  "Free-running"
+);
+
+
+GfxUITextButton _button_ntsc(
+  GfxUILayout(
+    (_button_freerun.elementPosX() + _button_freerun.elementWidth()) + 5, _button_freerun.elementPosY(),
+    60, 30,
     0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
     0, 0, 0, 0               // Border_px(t, b, l, r)
   ),
@@ -133,8 +256,52 @@ GfxUITextButton _button_freerun(
     0x202020,   // unselected
     1           // t_size
   ),
-  "Free-running"
+  "NTSC",
+  (0)
 );
+
+GfxUITextButton _button_v_anchor_lines(
+  GfxUILayout(
+    _button_freerun.elementPosX(), (_button_freerun.elementPosY() + _button_freerun.elementHeight() + 5),
+    60, 30,
+    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+    0, 0, 0, 0               // Border_px(t, b, l, r)
+  ),
+  GfxUIStyle(0, // bg
+    0xFFFFFF,   // border
+    0xFFFFFF,   // header
+    0x9932CC,   // active
+    0xA0A0A0,   // inactive
+    0xFFFFFF,   // selected
+    0x202020,   // unselected
+    1           // t_size
+  ),
+  "Globe",
+  (0) //(GFXUI_BUTTON_FLAG_MOMENTARY)
+);
+
+
+GfxUITextButton _button_v_value(
+  GfxUILayout(
+    (_button_v_anchor_lines.elementPosX() + _button_v_anchor_lines.elementWidth()) + 5, _button_v_anchor_lines.elementPosY(),
+    60, 30,
+    0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+    0, 0, 0, 0               // Border_px(t, b, l, r)
+  ),
+  GfxUIStyle(0, // bg
+    0xFFFFFF,   // border
+    0xFFFFFF,   // header
+    0x9932CC,   // active
+    0xA0A0A0,   // inactive
+    0xFFFFFF,   // selected
+    0x202020,   // unselected
+    1           // t_size
+  ),
+  "Globe",
+  (0) //(GFXUI_BUTTON_FLAG_MOMENTARY)
+);
+
+
 
 MouseButtonDef mouse_buttons[] = {
   { .label = "Left",
@@ -174,32 +341,87 @@ MouseButtonDef mouse_buttons[] = {
   }
 };
 
+GfxNTSCEffect* ntsc_filter = nullptr;
+GlobeRender*   globe_render = nullptr;
+Vector3Render* vector_render = nullptr;
+
+Image* ugly_fb = nullptr;
+
+
+// TODO: Unfastidiousness elsewhere causes me to write this fxn to avoid repeating myself.
+void rerender_perlin_noise() {
+  if (_button_freerun.pressed()) {
+    if (nullptr != noise_gen) {
+      noise_gen->reshuffle();
+      noise_gen->apply();
+    }
+  }
+  if (_button_ntsc.pressed()) {
+    ntsc_filter->apply();
+  }
+}
+
+float rotation_counter = 0.0f;
+
+
 
 C3PScheduledLambda schedule_ts_update(
   "ts_update",
-  90000, -1, true,
+  50000, -1, true,
   []() {
-    if (_button_freerun.pressed()) {
-      if (nullptr != noise_gen) {
-        noise_gen->reshuffle();
-        noise_gen->apply();
-      }
-    }
+    rotation_counter += 0.1f;
+    globe_render->setOrientation(
+      slider_x.value() + sinf(rotation_counter),
+      slider_y.value()
+    );
+    globe_render->renderWithMarker(
+      37.624f,
+      -72.644f
+    );
+
+    vector_render->setVector(
+      _slider_scale.value(),
+      _slider_fade.value(),
+      _slider_freq.value()
+    );
+    vector_render->setOrientation(
+      slider_x.value(),
+      slider_z.value()
+    );
+    vector_render->drawAnchorLines(_button_v_anchor_lines.pressed());
+    vector_render->drawValue(_button_v_value.pressed());
+    vector_render->render();
+
+    rerender_perlin_noise();
     return 0;
   }
 );
 
 
-void ui_value_change_callback(GfxUIElement* element) {
-  c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "VALUE_CHANGE %p", element);
-  noise_gen->setParameters(
-    ((_slider_scale.value() * 149) + 1.0f),
-    ((_slider_octaves.value() * 15) + 1),
-    (_slider_fade.value())
-  );
-  noise_gen->apply();
-}
 
+void ui_value_change_callback(GfxUIElement* element) {
+
+  if (&_slider_ntsc_noise == element) {
+    ntsc_filter->noiseFactor(_slider_ntsc_noise.value());
+  }
+  // else if (&_button_v_anchor_lines == element) {
+  //   globe_render->renderWithMarker(
+  //     _slider_freq.value(),
+  //     _slider_fade.value(),
+  //     37.624f,
+  //     -72.644f
+  //   );
+  // }
+  else {
+    noise_gen->setParameters(
+      ((_slider_scale.value() * 149) + 1.0f),
+      ((_slider_octaves.value() * 15) + 1),
+      _slider_fade.value(),
+      ((_slider_freq.value() * 10) + 1.0f)
+    );
+    reapply_noise = true;
+  }
+}
 
 
 int8_t MainGuiWindow::createWindow() {
@@ -211,23 +433,93 @@ int8_t MainGuiWindow::createWindow() {
     root.add_child(&_slider_scale);
     root.add_child(&_slider_octaves);
     root.add_child(&_slider_fade);
+    root.add_child(&_slider_freq);
+    root.add_child(&_slider_ntsc_noise);
     root.add_child(&_button_freerun);
+    root.add_child(&_button_ntsc);
+    root.add_child(&_button_v_anchor_lines);
+    root.add_child(&_button_v_value);
+    root.add_child(&slider_x);
+    root.add_child(&slider_y);
+    root.add_child(&slider_z);
 
     _slider_scale.value(0.5);
-    _slider_octaves.value(0.5);
-    _slider_fade.value(0.5);
+    _slider_octaves.value(0.15);
+    _slider_fade.value(0.3);
+    _slider_freq.value(0.1);
 
-    // Adding the contant panes will cause the proper screen co-ords to be imparted
+    slider_x.value(0.3);
+    slider_y.value(0.15);
+    slider_z.value(0.8);
+
+
+    // Adding the content panes will cause the proper screen co-ords to be imparted
     //   to the group objects. We can then use them for element flow.
-
-    noise_gen = new PerlinNoise(&_fb,
+    noise_gen = new ImgPerlinNoise(&_fb,
       NOISE_X_LOCATION, NOISE_Y_LOCATION,
       NOISE_WIDTH, NOISE_HEIGHT,
       ((_slider_scale.value() * 149) + 1.0f),
       ((_slider_octaves.value() * 15) + 1),
       (_slider_fade.value())
     );
-    noise_gen->apply();
+
+    // Same target and source make this class act as a mutating filter on the
+    //   entire framebuffer.
+    // ImageSubframe in_frame(
+    //   &_fb,
+    //   PixAddr(NOISE_X_LOCATION, NOISE_Y_LOCATION),
+    //   NOISE_WIDTH, NOISE_HEIGHT
+    // );
+    // ImageSubframe out_frame(
+    //   &_fb,
+    //   PixAddr(NOISE_X_LOCATION, NOISE_Y_LOCATION),
+    //   NOISE_WIDTH, NOISE_HEIGHT
+    // );
+    //ntsc_filter = new GfxNTSCEffect(in_frame, out_frame);
+    ntsc_filter = new GfxNTSCEffect(&_fb, &_fb);
+    // ntsc_filter->setSourceFrame(
+    //   PixAddr(NOISE_X_LOCATION, NOISE_Y_LOCATION),
+    //   NOISE_WIDTH, NOISE_HEIGHT
+    // );
+    ntsc_filter->setSourceFrame(
+      PixAddr(
+        _button_v_anchor_lines.elementPosX(),
+        (_button_v_anchor_lines.elementPosY() + _button_v_anchor_lines.elementHeight() + 5)
+      ),
+      300, 300
+    );
+
+    ntsc_filter->noiseFactor(0.05f);
+    ugly_fb = &_fb;
+
+    globe_render = new GlobeRender(&_fb);
+    globe_render->setSourceFrame(
+      PixAddr(
+        _button_v_anchor_lines.elementPosX(),
+        (_button_v_anchor_lines.elementPosY() + _button_v_anchor_lines.elementHeight() + 5)
+      ),
+      300, 300
+    );
+
+    vector_render = new Vector3Render(&_fb);
+    vector_render->setSourceFrame(
+      PixAddr(
+        _button_v_anchor_lines.elementPosX(),
+        (_button_v_anchor_lines.elementPosY() + _button_v_anchor_lines.elementHeight() + 310)
+      ),
+      300, 300
+    );
+    vector_render->setOrientation(
+      slider_x.value() * 180.0f,
+      slider_y.value() * 360.0f
+    );
+
+
+    if (nullptr != noise_gen) {
+      if (0 == noise_gen->init(0)) {   // No specified seed value.
+        reapply_noise = true;
+      }
+    }
 
     _refresh_period.reset();
     setCallback(ui_value_change_callback);
@@ -239,9 +531,9 @@ int8_t MainGuiWindow::createWindow() {
 
 
 int8_t MainGuiWindow::closeWindow() {
-  continue_running = !gravepact;
+  continue_running = false;
   if (nullptr != noise_gen) {
-    PerlinNoise* tmp = noise_gen;
+    ImgPerlinNoise* tmp = noise_gen;
     noise_gen = nullptr;
     delete tmp;
   }
@@ -353,6 +645,26 @@ int8_t MainGuiWindow::poll() {
             // Any unclaimed input can be handled in this block.
             const GfxUIEvent event = (btn_id == 5) ? GfxUIEvent::MOVE_DOWN : GfxUIEvent::MOVE_UP;
             switch (btn_id) {
+              case 2:
+                // Mouse drag for offset.
+                if (ButtonPress == e.type) {
+                  int mouse_x = 0;
+                  int mouse_y = 0;
+                  field_drag_initial = PixAddr(mouse_x, mouse_y);
+                  queryPointer(&mouse_x, &mouse_y);
+                  //gfx_element.includesPoint(mouse_x, mouse_y)
+                  // Is the mouse click in-bounds? Perhaps the worst line of code I've ever written.
+                  if ((mouse_x >= NOISE_X_LOCATION) && (mouse_x < (NOISE_X_LOCATION + NOISE_WIDTH)) && (mouse_y >= NOISE_Y_LOCATION) && (mouse_y < (NOISE_Y_LOCATION + NOISE_HEIGHT))) {
+                    noise_gen->setOffset(mouse_x, mouse_y);
+                    reapply_noise = true;
+                  }
+                }
+                else {
+                  field_drag_initial = PixAddr(0, 0);
+                }
+                break;
+
+
               case 4:
               case 5:
                 // Unhandled scroll events adjust the magnifier scale.
@@ -360,6 +672,8 @@ int8_t MainGuiWindow::poll() {
                 //  ((btn_id == 5) ? GfxUIEvent::MOVE_DOWN : GfxUIEvent::MOVE_UP),
                 //  ui_magnifier.elementPosX(), ui_magnifier.elementPosY()
                 //);
+                break;
+
               default:
                 break;
             }
@@ -434,6 +748,10 @@ int8_t MainGuiWindow::poll() {
 
   if (_keep_polling) {
     // Offer to render the UI elements...
+    if (reapply_noise) {
+      reapply_noise = false;
+      rerender_perlin_noise();
+    }
     if (1 == _redraw_window()) {
       // If a redraw happened...
     }

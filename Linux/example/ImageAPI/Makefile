@@ -45,6 +45,7 @@ CXX_SRCS += ../CppPotpourri/src/Console/*.cpp
 CXX_SRCS += ../CppPotpourri/src/Image/*.cpp
 CXX_SRCS += ../CppPotpourri/src/Image/GfxUI/*.cpp
 CXX_SRCS += ../CppPotpourri/src/Image/ImageUtils/*.cpp
+CXX_SRCS += ../CppPotpourri/src/C3PRandom/*.cpp
 CXX_SRCS += ../../src/GUI/X11/*.cpp
 CXX_SRCS += ../../src/Linux.cpp
 CXX_SRCS += ../../src/LinuxStdIO.cpp

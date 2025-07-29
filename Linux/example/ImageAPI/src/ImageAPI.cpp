@@ -41,7 +41,7 @@ LinuxStdIO console_adapter;
 *******************************************************************************/
 
 int callback_help(StringBuilder* text_return, StringBuilder* args) {
-  text_return->concatf("RHoM %s\n", PROGRAM_VERSION);
+  text_return->concatf("%s %s\n", program_name, PROGRAM_VERSION);
   return console.console_handler_help(text_return, args);
 }
 

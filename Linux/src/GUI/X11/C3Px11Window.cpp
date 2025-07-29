@@ -39,10 +39,10 @@ C3Px11Window::C3Px11Window(uint32_t win_x, uint32_t win_y, uint32_t win_w, uint3
   _fb(win_w, win_h, ImgBufferFormat::R8_G8_B8_ALPHA),
   _overlay(win_w, win_h, ImgBufferFormat::R8_G8_B8_ALPHA),
   _vc_callback(nullptr),
+  _keep_polling(false),
   _paste_target(nullptr),
   _pointer_client(nullptr),
-  _mrtlhne(nullptr),
-  _keep_polling(false) {}
+  _mrtlhne(nullptr) {}
 
 
 /**
