@@ -18,7 +18,7 @@ jobs:
     - uses: actions/checkout@v5
       with:
         repository: 'jspark311/CppPotpourri'
-        path: 'Linux/example/ImageAPI/lib/CppPotpourri'
+        path: 'Linux/example/CppPotpourri'
     - name: make
       run: |
         cd Linux/example/ImageAPI
