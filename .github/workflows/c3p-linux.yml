@@ -20,7 +20,7 @@ jobs:
         repository: 'jspark311/CppPotpourri'
         path: 'Linux/example/ImageAPI/lib/CppPotpourri'
     - name: make
-      run: cd Linux/example/ImageAPI; make
+      run: cd Linux/example/ImageAPI && make
     - uses: actions/upload-artifact@v4
       with:
         name: results
