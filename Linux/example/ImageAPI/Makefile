@@ -21,11 +21,11 @@ MANUVR_CONF += -DCONFIG_C3P_TRACE_ENABLED
 # Environmental awareness...
 ###########################################################################
 SHELL              = /bin/bash
-export CXX         = $(shell which g++)
-export AR          = $(shell which ar)
-export SZ          = $(shell which size)
-export MAKE        = $(shell which make)
-export BUILD_ROOT  = $(shell pwd)
+export CXX         = g++  # $(shell which g++)
+export AR          = ar   # $(shell which ar)
+export SZ          = size # $(shell which size)
+export MAKE        = make # $(shell which make)
+export BUILD_ROOT  = ./   # $(shell pwd)
 
 
 ###########################################################################
