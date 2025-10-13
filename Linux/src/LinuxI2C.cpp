@@ -1,10 +1,8 @@
-#include "../Linux.h"
-#include <stdlib.h>
-#include <unistd.h>
-#include <AbstractPlatform.h>
 
 
 #if defined(CONFIG_C3P_I2C)
+#include <stdlib.h>
+#include <unistd.h>
 #include <linux/i2c-dev.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
@@ -14,6 +12,8 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <ctype.h>
+#include "AbstractPlatform.h"
+#include "../C3PLinux.h"
 
 /*******************************************************************************
 * Since linux identifies i2c ports by string ("/dev/i2c-x", usually), we need
@@ -39,7 +39,7 @@ typedef struct {
 * Static members and initializers should be located here.
 *******************************************************************************/
 
-unsigned long _i2c_polling_thread_id = 0;
+unsigned long _thread_id = 0;
 static LinkedList<LinuxI2CLookup*> i2c_instances;
 
 static LinuxI2CLookup* _i2c_table_get_by_adapter_ref(I2CAdapter* adapter) {
@@ -69,7 +69,7 @@ static void* i2c_polling_handler(void*) {
     keep_polling = (0 < i2c_instances.size());
   }
   c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "Exiting i2c polling thread...\n");
-  _i2c_polling_thread_id = 0;  // Allow the thread to be restarted later.
+  _thread_id = 0;  // Allow the thread to be restarted later.
   return NULL;
 }
 
@@ -85,7 +85,7 @@ static void* i2c_polling_handler(void*) {
 * NOTE: Because this constructor modifies static data, it can't be relied upon
 *   if an instance of it is ever allocated statically. So don't do that.
 */
-LinuxI2C::LinuxI2C(char* path, const I2CAdapterOptions* o) : I2CAdapter(o) {
+LinuxI2C::LinuxI2C(char* path, const I2CAdapterOptions* o) : I2CAdapter(o, 24, 48) {
   const int slen = strlen(path);
   LinuxI2CLookup* lookup = (LinuxI2CLookup*) malloc(sizeof(LinuxI2CLookup));
   if (lookup) {
@@ -111,7 +111,7 @@ LinuxI2C::LinuxI2C(char* path, const I2CAdapterOptions* o) : I2CAdapter(o) {
 */
 LinuxI2C::~LinuxI2C() {
   LinuxI2CLookup* lookup = _i2c_table_get_by_adapter_ref(this);
-  bus_deinit();
+  _bus_deinit();
   if (nullptr != lookup) {
     i2c_instances.remove(lookup);
     free(lookup->path);
@@ -137,7 +137,7 @@ int8_t  last_used_bus_addr = 0;  //TODO: This is a hack. Re-work it.
 *   will always return true;
 * On a linux system, this will only return true if the ioctl call succeeded.
 */
-bool switch_device(I2CAdapter* adapter, uint8_t nu_addr) {
+bool LinuxI2C::switch_device(uint8_t nu_addr) {
   bool return_value = false;
   unsigned short timeout = 10000;
   if (nu_addr != last_used_bus_addr) {
@@ -148,8 +148,8 @@ bool switch_device(I2CAdapter* adapter, uint8_t nu_addr) {
       return return_value;
     }
     else {
-      while (adapter->busError() && (timeout > 0)) { timeout--; }
-      if (adapter->busError()) {
+      while (busError() && (timeout > 0)) { timeout--; }
+      if (busError()) {
         c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "i2c bus was held for too long. Failing...\n");
         return return_value;
       }
@@ -160,7 +160,7 @@ bool switch_device(I2CAdapter* adapter, uint8_t nu_addr) {
       }
       else {
         c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Failed to acquire bus access and/or talk to slave at %d.\n", nu_addr);
-        adapter->busError(true);
+        _bus_error(true);
       }
     }
   }
@@ -190,7 +190,7 @@ int8_t I2CAdapter::_bus_init() {
       c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Failed to open the i2c bus represented by %s.\n", filename);
     }
     else {
-      createThread(&_thread_id, nullptr, i2c_worker_thread, (void*) this, nullptr);
+      platform.createThread(&_thread_id, nullptr, i2c_polling_handler, (void*) this, nullptr);
       ret = 0;
     }
   }
@@ -211,19 +211,7 @@ int8_t I2CAdapter::_bus_deinit() {
 
 
 void I2CAdapter::printHardwareState(StringBuilder* output) {
-  output->concatf("-- I2C%d (%sline)\n", adapterNumber(), (_adapter_flag(I2C_BUS_FLAG_BUS_ONLINE)?"on":"OFF"));
-}
-
-
-// TODO: Inline this.
-int8_t I2CAdapter::generateStart() {
-  return busOnline() ? 0 : -1;
-}
-
-
-// TODO: Inline this.
-int8_t I2CAdapter::generateStop() {
-  return busOnline() ? 0 : -1;
+  output->concatf("-- I2C%d (%sline)\n", adapterNumber(), (busOnline()?"on":"OFF"));
 }
 
 
@@ -235,32 +223,25 @@ int8_t I2CAdapter::generateStop() {
 *******************************************************************************/
 
 XferFault I2CBusOp::begin() {
-  if (nullptr == _threaded_op) {
-    if (device) {
-      switch (device->adapterNumber()) {
-        case 0:
-        case 1:
-          if ((nullptr == callback) || (0 == callback->io_op_callahead(this))) {
-            set_state(XferState::INITIATE);
-            _threaded_op = this;
-            //device->wake();  // TODO: Forgot what this was responsible for.
-            return XferFault::NONE;
-          }
-          else {
-            abort(XferFault::IO_RECALL);
-          }
-          break;
-        default:
-          abort(XferFault::BAD_PARAM);
-          break;
-      }
-    }
-    else {
-      abort(XferFault::DEV_NOT_FOUND);
+  if (device) {
+    switch (device->adapterNumber()) {
+      case 0:
+      case 1:
+        if ((nullptr == callback) || (0 == callback->io_op_callahead(this))) {
+          set_state(XferState::INITIATE);
+          return XferFault::NONE;
+        }
+        else {
+          abort(XferFault::IO_RECALL);
+        }
+        break;
+      default:
+        abort(XferFault::BAD_PARAM);
+        break;
     }
   }
   else {
-    abort(XferFault::BUS_BUSY);
+    abort(XferFault::DEV_NOT_FOUND);
   }
 
   return getFault();
@@ -273,13 +254,7 @@ XferFault I2CBusOp::begin() {
 */
 XferFault I2CBusOp::advance(uint32_t status_reg) {
   set_state(XferState::ADDR);
-  if (device->generateStart()) {
-    // Failure to generate START condition.
-    abort(XferFault::BUS_BUSY);
-    return getFault();
-  }
-
-  if (!switch_device(device, dev_addr)) {
+  if (!((LinuxI2C*)device)->switch_device(dev_addr)) {
     abort(XferFault::BUS_FAULT);
     return getFault();
   }

@@ -375,9 +375,6 @@ void rerender_perlin_noise() {
       noise_gen->apply();
     }
   }
-  if (_button_ntsc.pressed()) {
-    ntsc_filter->apply();
-  }
 }
 
 float rotation_counter = 0.0f;
@@ -389,14 +386,6 @@ C3PScheduledLambda schedule_ts_update(
   50000, -1, true,
   []() {
     rotation_counter += 0.1f;
-    globe_render->setOrientation(
-      slider_x.value() + sinf(rotation_counter),
-      slider_y.value()
-    );
-    globe_render->renderWithMarker(
-      37.624f,
-      -72.644f
-    );
 
     vector_render->setVector(
       _slider_scale.value(),
@@ -574,11 +563,23 @@ int8_t MainGuiWindow::closeWindow() {
 
 
 int8_t MainGuiWindow::render_overlay() {
+    globe_render->setOrientation(
+      slider_x.value() + sinf(rotation_counter),
+      slider_y.value()
+    );
+    globe_render->renderWithMarker(
+      37.624f,
+      -72.644f
+    );
+
   // If the pointer is within the window, we note its location and
   //   annotate the overlay.
   ui_magnifier.pointerLocation(_pointer_x, _pointer_y);
   ui_magnifier.render(&gfx_overlay);
 
+  if (_button_ntsc.pressed()) {
+    ntsc_filter->apply();
+  }
   if (_button_crt.pressed()) {
     crt_effect->bloomFactor(slider_y.value());
     crt_effect->edgeCurvature(slider_z.value());

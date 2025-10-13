@@ -23,7 +23,7 @@ This driver fills out the platform-abstracted UARTAdapter class in
 */
 
 
-#include <Linux.h>
+#include "../C3PLinux.h"
 
 // Linux requires these libraries for serial port.
 #include <cstdio>

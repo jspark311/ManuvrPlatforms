@@ -194,7 +194,7 @@ XferFault I2CBusOp::advance(uint32_t status_reg) {
                 }
                 break;
               case BusOpcode::TX:
-                if (adptr->get_bytes_transferred() == (_buf_len+1)) {
+                if (adptr->get_bytes_transferred() == (_buf_len+(need_to_send_subaddr() ? 1 : 0))) {
                   markComplete();
                 }
                 else {
