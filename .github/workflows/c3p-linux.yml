@@ -1,0 +1,28 @@
+name: C3PLinux
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+
+    # This is only ever expected to run on one piece of hardware: The CI runner
+    #   in the author's home rack.
+    runs-on: self-hosted
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: make
+      run: cd Linux/example/ImageAPI; make
+    - uses: actions/upload-artifact@v4
+      with:
+        name: results
+        path:  Linux/example/ImageAPI/ImageAPI
+        if-no-files-found: error
+        compression-level: 6
+        overwrite: false
+        include-hidden-files: false
