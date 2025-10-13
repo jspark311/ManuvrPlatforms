@@ -26,7 +26,6 @@ export AR          = $(shell which ar)
 export SZ          = $(shell which size)
 export MAKE        = $(shell which make)
 export BUILD_ROOT  = $(shell pwd)
-export OUTPUT_PATH = $(BUILD_ROOT)/build/
 
 
 ###########################################################################
@@ -76,18 +75,14 @@ OBJS = $(C_SRCS:.c=.o) $(CXX_SRCS:.cpp=.o)
 
 default:	$(FIRMWARE_NAME)
 
-builddir:
-	mkdir -p $(OUTPUT_PATH)
-
 debug:  $(FIRMWARE_NAME).o
 	$(CXX) $(CXXFLAGS) -ggdb -g -pg -o $(FIRMWARE_NAME) *.o $(LIBS)
 
-$(FIRMWARE_NAME):	builddir $(FIRMWARE_NAME).o $(LIBS_TO_BUILD)
+$(FIRMWARE_NAME):	$(FIRMWARE_NAME).o $(LIBS_TO_BUILD)
 	$(CXX) $(CXXFLAGS) -o $(FIRMWARE_NAME) *.o $(LIBS)
 
-$(FIRMWARE_NAME).o: builddir
+$(FIRMWARE_NAME).o:
 	$(CXX) $(CXXFLAGS) $(CFLAGS) -c $(CXX_SRCS) -fno-exceptions
 
 clean:
-	rm -rf $(OUTPUT_PATH)
 	rm -f $(FIRMWARE_NAME) *.o *~
