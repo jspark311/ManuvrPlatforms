@@ -33,17 +33,13 @@ extern "C" {
   //#include "esp_netif.h"
 
   #include "esp_attr.h"
-  #include "esp_err.h"
   #include "esp_heap_caps.h"
   #include "esp_intr_alloc.h"
-  #include "esp_log.h"
   #include "esp_partition.h"
   #include "esp_sleep.h"
-  #include "esp_system.h"
   #include "esp_types.h"
   #include "driver/gpio.h"
   #include "driver/ledc.h"
-  //#include "esp_wifi.h"
   #include "esp_netif.h"
   #include "esp_mac.h"
 
@@ -72,7 +68,6 @@ extern "C" {
 #if !defined(CONFIG_GPIO_CTRL_FUNC_IN_IRAM)
   #error The GPIO contract for CppPotpourri requires that GPIO be available under cache-disabled circumstances (ISR_FUNC). Set CONFIG_GPIO_CTRL_FUNC_IN_IRAM.
 #endif
-
 
 
 /* This is how we conceptualize a GPIO pin. */
@@ -891,21 +886,38 @@ int8_t ESP32Platform::init() {
   _alter_flags(true, ABSTRACT_PF_FLAG_RTC_READY);
   gpioSetup();
 
+
+  esp_err_t ret = nvs_flash_init();
+  switch (ret) {
+    case ESP_ERR_NVS_NO_FREE_PAGES:
+    case ESP_ERR_NVS_NEW_VERSION_FOUND:
+      ESP_LOGI("ESP32Platform", "Calling nvs_flash_erase()...\n");
+      ESP_ERROR_CHECK(nvs_flash_erase());
+      ret = nvs_flash_init();
+      break;
+    default:
+      break;
+  }
+  if (ESP_OK != ret) {
+    ESP_LOGE("ESP32Platform", "nvs_flash_init() failed (%d).\n", (int) ret);
+  }
+
+
   #if defined(CONFIG_C3P_STORAGE)
-    // If we were compiled with support for the storage layer, try to find an
-    //   NVS partition and instance the driver, if possible.
-    const esp_partition_t* NVS_PART_PTR = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_NVS, NULL);
-    if (nullptr != NVS_PART_PTR) {
-      if (NVS_PART_PTR == esp_partition_verify(NVS_PART_PTR)) {
-        storage = new ESP32Storage(NVS_PART_PTR);
-        if (StorageErr::NONE == storage->init()) {
-          _alter_flags(true, ABSTRACT_PF_FLAG_HAS_STORAGE);
-        }
-        else {
-          ESP_LOGE("ESP32Platform", "Storage init failed.\n");
-        }
-      }
-    }
+    //// If we were compiled with support for the storage layer, try to find an
+    ////   NVS partition and instance the driver, if possible.
+    //const esp_partition_t* NVS_PART_PTR = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_NVS, NULL);
+    //if (nullptr != NVS_PART_PTR) {
+    //  if (NVS_PART_PTR == esp_partition_verify(NVS_PART_PTR)) {
+    //    storage = new ESP32Storage(NVS_PART_PTR);
+    //    if (StorageErr::NONE == storage->init()) {
+    //      _alter_flags(true, ABSTRACT_PF_FLAG_HAS_STORAGE);
+    //    }
+    //    else {
+    //      ESP_LOGE("ESP32Platform", "Storage init failed.\n");
+    //    }
+    //  }
+    //}
   #endif
 
   //if (root_config) {

@@ -1,5 +1,5 @@
 /*
-* File:   RHoM.h
+* File:   ImageAPI.h
 * Author: J. Ian Lindsay
 *
 */
@@ -30,8 +30,8 @@
 #include "C3POnX11.h"
 #include <Linux.h>
 
-#ifndef __RHOM_HEADER_H__
-#define __RHOM_HEADER_H__
+#ifndef __IMGAPI_DEMO_HEADER_H__
+#define __IMGAPI_DEMO_HEADER_H__
 
 
 #define PROGRAM_VERSION    "0.0.4"    // Program version.
@@ -74,4 +74,4 @@ class MainGuiWindow : public C3Px11Window {
     GfxUIElement*   _paste_target;
 };
 
-#endif  // __RHOM_HEADER_H__
+#endif  // __IMGAPI_DEMO_HEADER_H__

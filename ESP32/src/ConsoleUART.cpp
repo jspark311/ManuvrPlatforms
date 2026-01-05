@@ -59,7 +59,7 @@ int8_t ESP32StdIO::poll() {
   }
   fflush(stdout);
 
-  if (nullptr != fgets(input_text, 256-1, stdin)) {
+  if (nullptr != fgets(input_text, 255, stdin)) {
     read_len = strlen(input_text);
     // NOTE: This should suffice to be binary-safe.
     //read_len = fread(input_text, 1, getMTU(), stdin);
