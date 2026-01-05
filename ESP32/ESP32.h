@@ -354,7 +354,6 @@ class ESP32Radio : public StateMachine<ESP32RadioState>, public C3PPollable {
 
 
 
-
 /*******************************************************************************
 * Messaging wrappers
 * TODO: Once it is useful on another platform, some of these classes might be
@@ -364,6 +363,7 @@ class ESP32Radio : public StateMachine<ESP32RadioState>, public C3PPollable {
 #define MQTT_FLAG_ESP_MQTT_INIT        0x00000001  //
 #define MQTT_FLAG_EVENT_LOOP_CREATED   0x00000002  //
 #define MQTT_FLAG_EVENT_REGISTERED     0x00000004  //
+#define MQTT_FLAG_AUTOCONNECT          0x00000008  // Client greedy-connect policy.
 
 // Bits indicating basic init steps.
 #define MQTT_CLI_FLAG_ALL_INIT_MASK (MQTT_FLAG_ESP_MQTT_INIT | MQTT_FLAG_EVENT_LOOP_CREATED | MQTT_FLAG_EVENT_REGISTERED)
@@ -381,15 +381,14 @@ enum class MQTTCliState : uint8_t {
 };
 
 
-
 // TODO: Explicit shared subscription support?
 class MQTTBrokerDef {
   public:
-
     MQTTBrokerDef(const char* LABEL = nullptr);
     ~MQTTBrokerDef() {};  // We allocate nothing, so: featureless destructor.
 
-    int8_t serialize(StringBuilder*);
+    bool isValid();
+    int  serialize(StringBuilder* out, const TCode FORMAT);
     void printDebug(StringBuilder*);
 
     /*
@@ -403,6 +402,9 @@ class MQTTBrokerDef {
     void user(const char*);
     void passwd(const char*);
 
+    void autoconnect(bool v) {  _autoconnect = v;  };
+    bool autoconnect() {        return _autoconnect;  };
+
     const char* label() {   return _label;                                         };
     const char* uri() {     return _cli_conf.broker.address.uri;                   };
     const char* user() {    return _cli_conf.credentials.username;                 };
@@ -410,13 +412,16 @@ class MQTTBrokerDef {
 
     esp_mqtt_client_config_t* config() {  return &_cli_conf;  };
 
-
   private:
-    char _label[16];
     // Side note: Version drift in this struct was the _worst_ thing about
     //   getting MQTT running following a migration from IDF v4 to v5.
     //   never-doing-that-again.png
     esp_mqtt_client_config_t _cli_conf;
+    char _label[16];
+    char _uri[48];
+    char _usr[16];
+    char _pass[32];
+    bool _autoconnect = true;
 };
 
 
@@ -436,28 +441,48 @@ class MQTTClient : public StateMachine<MQTTCliState>, public C3PPollable {
     int console_handler_mqtt_client(StringBuilder*, StringBuilder*);
 
     /* Semantic breakouts for flags and states */
-    inline bool initialized() {        return (MQTT_CLI_FLAG_ALL_INIT_MASK == (MQTT_CLI_FLAG_ALL_INIT_MASK & _flags.raw));  };
-    inline bool connected() {          return (MQTTCliState::CONNECTED == currentState());  };
+    inline bool initialized() {         return (MQTT_CLI_FLAG_ALL_INIT_MASK == (MQTT_CLI_FLAG_ALL_INIT_MASK & _flags.raw));  };
+    inline bool connected() {           return (MQTTCliState::CONNECTED == currentState());  };
+    inline void autoconnect(bool v) {   _flags.set(MQTT_FLAG_AUTOCONNECT, v); };
+    inline bool autoconnect() {         return _flags.value(MQTT_FLAG_AUTOCONNECT); };
 
     /* Dependency injection */
-    void setRadio(ESP32Radio* r) {  _radio = r;  };
+    void setRadio(ESP32Radio* r) { _radio = r; };
 
 
   protected:
     FlagContainer32  _flags;                   // Aggregate boolean class state.
     uint8_t _log_verbosity = LOG_LEV_DEBUG;
     MQTTBrokerDef   _current_broker;
-    ESP32Radio* _radio = nullptr;
-    esp_mqtt_client_handle_t  _client_handle;
+    ESP32Radio*     _radio = nullptr;
+    esp_mqtt_client_handle_t  _client_handle = nullptr;
 
     /* State machine functions */
-    int8_t   _fsm_poll();                      // Polling for state exit.
-    int8_t   _fsm_set_position(MQTTCliState);  // Attempt a state entry.
+    int8_t   _fsm_poll();                    // Polling for state exit.
+    int8_t   _fsm_set_position(MQTTCliState);// Attempt a state entry.
     void     _set_fault(const char*);
 
     void _print_broker_record(StringBuilder*, MQTTBrokerDef*);
-};
 
+    /* Mailboxes written from ESP-IDF event loop, consumed in poll() */
+    void _mb_set_mqtt_connected(const bool v);
+    void _mb_set_mqtt_disconnected(const bool v);
+
+    volatile bool _mb_mqtt_connected    = false;
+    volatile bool _mb_mqtt_disconnected = false;
+
+    bool _mqtt_connected_latched        = false;
+    bool _mqtt_disconnected_latched     = false;
+
+    /* Backoff control (applied in DISCONNECTED entry, on failed attempt) */
+    uint32_t _reconnect_backoff_ms      = 5000;
+    uint32_t _reconnect_backoff_ms_max  = 60000;
+    bool     _connect_attempt_active    = false;
+
+    void _broker_changed_reinit_plan();
+
+    friend void mqtt_event_handler(void* handler_args, esp_event_base_t base, int32_t event_id, void* event_data);
+};
 
 
 // Any source file that needs platform member functions should be able to access
