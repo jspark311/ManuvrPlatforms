@@ -234,10 +234,94 @@ static void IRAM_ATTR dev_urandom_reader(void* unused_param) {
 *
 * These are overrides and additions to the platform class.
 *******************************************************************************/
+static void _print_heap_caps(StringBuilder* out, const char* label, const uint32_t caps) {
+  const size_t free_b   = heap_caps_get_free_size(caps);
+  const size_t min_b    = heap_caps_get_minimum_free_size(caps);
+  const size_t largest  = heap_caps_get_largest_free_block(caps);
+  out->concatf("%-12s: free=%u  min=%u  largest=%u  frag=%u\n",
+    label,
+    (unsigned) free_b,
+    (unsigned) min_b,
+    (unsigned) largest,
+    (unsigned) (free_b - largest)
+  );
+}
+
+static void _print_freetros_stats(StringBuilder* out) {
+  out->concat("\n--- FreeRTOS / Heap stats ---\n");
+
+  // Coarse “system heap” numbers (handy for quick checks).
+  out->concatf("esp_get_free_heap_size()        %u\n", (unsigned) esp_get_free_heap_size());
+  out->concatf("esp_get_minimum_free_heap_size %u\n", (unsigned) esp_get_minimum_free_heap_size());
+
+  // Capability heaps (fragmentation visibility via largest-free-block).
+  _print_heap_caps(out, "8BIT",      MALLOC_CAP_8BIT);
+  _print_heap_caps(out, "INTERNAL",  MALLOC_CAP_INTERNAL);
+  _print_heap_caps(out, "DMA",       MALLOC_CAP_DMA);
+  #if defined(MALLOC_CAP_SPIRAM)
+    _print_heap_caps(out, "SPIRAM",   MALLOC_CAP_SPIRAM);
+  #endif
+
+  out->concat("\n--- Task / Stack stats ---\n");
+
+  // The task introspection APIs require configUSE_TRACE_FACILITY.
+  #if (configUSE_TRACE_FACILITY == 1)
+    const UBaseType_t task_count = uxTaskGetNumberOfTasks();
+    out->concatf("tasks: %u\n", (unsigned) task_count);
+
+    if (task_count > 0) {
+      // Debug-path heap allocation is acceptable here.
+      TaskStatus_t* ts = (TaskStatus_t*) heap_caps_malloc(sizeof(TaskStatus_t) * task_count, MALLOC_CAP_8BIT);
+      if (nullptr == ts) {
+        out->concat("TaskStatus_t alloc failed.\n");
+        return;
+      }
+
+      uint32_t total_runtime = 0;
+      const UBaseType_t filled = uxTaskGetSystemState(ts, task_count, &total_runtime);
+
+      out->concat("name             pr  st  stack_free(words)  runtime\n");
+      out->concat("----------------------------------------------------\n");
+
+      for (UBaseType_t i = 0; i < filled; i++) {
+        const char* name = ts[i].pcTaskName ? ts[i].pcTaskName : "?";
+        const unsigned prio = (unsigned) ts[i].uxCurrentPriority;
+        const unsigned st   = (unsigned) ts[i].eCurrentState;
+        const unsigned hwm  = (unsigned) ts[i].usStackHighWaterMark;   // words, not bytes (FreeRTOS convention)
+
+        if (0 != total_runtime) {
+          // ulRunTimeCounter is only meaningful if runtime stats are configured/enabled.
+          // Still safe to print as raw value even if total_runtime is 0 (handled above).
+          const uint32_t rt = (uint32_t) ts[i].ulRunTimeCounter;
+          const uint32_t pct_x10 = (uint32_t) ((1000ULL * rt) / total_runtime); // percent * 10
+
+          out->concatf("%-16s %2u  %2u  %16u  %9u  %3u.%u%%\n",
+            name, prio, st, hwm, (unsigned) rt,
+            (unsigned) (pct_x10 / 10), (unsigned) (pct_x10 % 10)
+          );
+        }
+        else {
+          out->concatf("%-16s %2u  %2u  %16u  %9u\n",
+            name, prio, st, hwm, (unsigned) ts[i].ulRunTimeCounter
+          );
+        }
+      }
+
+      heap_caps_free(ts);
+    }
+
+  #else
+    out->concat("Task stats unavailable (configUSE_TRACE_FACILITY != 1).\n");
+    out->concat("Enable in sdkconfig to get task names/state/stack HWM.\n");
+  #endif
+}
+
+
+
 void ESP32Platform::printDebug(StringBuilder* output) {
   output->concatf("==< ESP32 [IDF version %s] >==================================\n", _board_name);
-  output->concatf("\tHeap Free/Minimum:  %u/%u\n", esp_get_free_heap_size(), esp_get_minimum_free_heap_size());
   _print_abstract_debug(output);
+  _print_freetros_stats(output);
   #if defined(CONFIG_C3P_STORAGE)
     if (nullptr != storage) {
       storage->printDebug(output);

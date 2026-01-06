@@ -78,12 +78,16 @@ void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id
       break;
 
     case WIFI_EVENT_STA_DISCONNECTED:
-      // Signal only. FSM decides when/if to reconnect.
-      radio->_mb_set_sta_connected(false);
-      // Treat as authoritative routability loss immediately.
+    { // Signal only. FSM decides when/if to reconnect.
+      wifi_event_sta_disconnected_t* ev = (wifi_event_sta_disconnected_t*) event_data;
+      radio->_mb_set_sta_connected(false);  // Treat as authoritative routability loss immediately.
       radio->_mb_set_ip4_valid(false);
       radio->_mb_set_ip4_addr(0);
-      break;
+      if (nullptr != ev) {
+        radio->_mb_set_disconnect_reason(ev->reason);
+      }
+    }
+    break;
 
     case WIFI_EVENT_SCAN_DONE:
       radio->_mb_set_scan_done(true);
@@ -127,7 +131,9 @@ void ip_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, 
 * Constructor
 */
 ESP32Radio::ESP32Radio() :
-  StateMachine<ESP32RadioState>("ESP32Radio-FSM", &_FSM_STATES, ESP32RadioState::UNINIT, ESP32RADIO_FSM_WAYPOINT_DEPTH)
+  StateMachine<ESP32RadioState>("ESP32Radio-FSM", &_FSM_STATES, ESP32RadioState::UNINIT, ESP32RADIO_FSM_WAYPOINT_DEPTH),
+  _reconnect_timer(0),
+  _flags(0)
 {
   // Event-loop -> poll() mailboxes.
   _mb_wifi_started   = false;
@@ -180,6 +186,10 @@ void ESP32Radio::_mb_set_ip4_valid(const bool v)    { _mb_ip4_valid     = v; }
 void ESP32Radio::_mb_set_scan_done(const bool v)    { _mb_scan_done     = v; }
 void ESP32Radio::_mb_set_ip4_addr(const uint32_t a) { _mb_ip4_addr      = a; }
 
+void ESP32Radio::_mb_set_disconnect_reason(const uint16_t r) {
+  _mb_disc_reason = r;
+  _mb_disc_reason_valid = true;
+}
 
 
 /*******************************************************************************
@@ -191,160 +201,18 @@ uint32_t ESP32Radio::ip4() { return _ip4_addr;       }
 
 
 
-void ESP32Radio::printDebug(StringBuilder* output) {
-  StringBuilder tmp;
-  StringBuilder prod_str("ESP32Radio");
-  prod_str.concatf(" [%sinitialized]", (initialized() ? "" : "un"));
-  StringBuilder::styleHeader2(&tmp, (const char*) prod_str.string());
-  printFSM(&tmp);
-
-  if (initialized()) {
-    tmp.concatf("\t STA link:  %c\n", (_sta_connected ? 'y' : 'n'));
-    tmp.concatf("\t Has IPv4:  %c\n", (_ip4_valid ? 'y' : 'n'));
-    if (_ip4_valid) {
-      tmp.concatf(
-        "\t IPv4:      %u.%u.%u.%u\n",
-        (_ip4_addr & 0xFF),
-        ((_ip4_addr >> 8) & 0xFF),
-        ((_ip4_addr >> 16) & 0xFF),
-        ((_ip4_addr >> 24) & 0xFF)
-      );
-    }
-
-    if (connected()) {
-      tmp.concat("Connected to AP:\n");
-      _print_ap_record(&tmp, &_current_ap);
-    }
-    if (0 < _scan_list_count) {
-      tmp.concatf("Most recent scan results (%u/%u):\n", ESP32Radio::_scan_list_count, ESP32Radio::_scan_total_count);
-      for (uint16_t i = 0; (i < ESP32Radio::_scan_list_count); i++) {
-        tmp.concatf("\t%2u:", i);
-        _print_ap_record(&tmp, &_scan_list_ap[i]);
-      }
-    }
-  }
-  else if (_pre_init_complete()) {
-    tmp.concatf("\t WIFI_INIT:            %c\n", (_flags.value(ESP32RADIO_FLAG_WIFI_INIT) ? 'y' : 'n'));
-    tmp.concatf("\t WIFI_STARTED:         %c\n", (_flags.value(ESP32RADIO_FLAG_WIFI_STARTED) ? 'y' : 'n'));
-    tmp.concatf("\t INIT_WIFI_AS_STATION: %c\n", (_flags.value(ESP32RADIO_FLAG_INIT_WIFI_AS_STATION) ? 'y' : 'n'));
-  }
-  else {
-    tmp.concatf("\t NETIF_INIT:         %c\n", (_flags.value(ESP32RADIO_FLAG_NETIF_INIT) ? 'y' : 'n'));
-    tmp.concatf("\t EVENT_LOOP_CREATED: %c\n", (_flags.value(ESP32RADIO_FLAG_EVENT_LOOP_CREATED) ? 'y' : 'n'));
-  }
-
-  tmp.string();
-  output->concatHandoff(&tmp);
-}
-
-
-
-int ESP32Radio::console_handler_esp_radio(StringBuilder* txt_ret, StringBuilder* args) {
-  int ret = 0;
-  char* cmd = args->position_trimmed(0);
-
-  if (0 == StringBuilder::strcasecmp(cmd, "associate")) {
-    if (3 == args->count()) {
-      char* ssid = args->position_trimmed(1);
-      char* psk = args->position_trimmed(2);
-      wifi_config_t wifi_config;
-      esp_wifi_get_config(WIFI_IF_STA, &wifi_config);
-      memcpy(wifi_config.sta.ssid, ssid, strlen(ssid));
-      memcpy(wifi_config.sta.password, psk, strlen(psk));
-      wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
-      ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
-    }
-    else {
-      txt_ret->concatf("Usage: %s <ssid> <psk>.\n", cmd);
-    }
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "con")) {
-    if (!connected()) {
-      ret = _fsm_append_route(2, ESP32RadioState::CONNECTING, ESP32RadioState::CONNECTED);
-    }
-    else {
-      txt_ret->concat("ESP32Radio is already connected.\n");
-    }
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "discon")) {
-    if (connected()) {
-      ret = _fsm_append_route(2, ESP32RadioState::DISCONNECTING, ESP32RadioState::DISCONNECTED);
-    }
-    else {
-      txt_ret->concat("ESP32Radio is already disconnected.\n");
-    }
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "deauth")) {
-    uint16_t aid = (uint16_t) args->position_as_int(1);
-    txt_ret->concatf("esp_wifi_deauth_sta(%u) returns %d.\n", aid, esp_wifi_deauth_sta(aid));
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "scan")) {
-    if (initialized()) {
-      txt_ret->concatf("wifi_scan() returns %d.\n", wifi_scan());
-    }
-    else {
-      txt_ret->concat("ESP32Radio is not initialized.\n");
-    }
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "pack")) {
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "parse")) {
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "fsm")) {
-    args->drop_position(0);
-    ret = fsm_console_handler(txt_ret, args);  // Shunt into the FSM console handler.
-  }
-  else {
-    printDebug(txt_ret);
-  }
-
-  return ret;
-}
-
-
 
 
 /*******************************************************************************
 * Wifi utilities
 *******************************************************************************/
 
-void ESP32Radio::_print_ap_record(StringBuilder* output, wifi_ap_record_t* ap_info) {
-  output->concatf("\t[%s]\tRSSI: %d\tCHAN: %d\n", ap_info->ssid, ap_info->rssi, ap_info->primary);
-  output->concat("\t\tAuthmode: ");
-  switch (ap_info->authmode) {
-    case WIFI_AUTH_OPEN:             output->concat("OPEN");             break;
-    case WIFI_AUTH_WEP:              output->concat("WEP");              break;
-    case WIFI_AUTH_WPA_PSK:          output->concat("WPA_PSK");          break;
-    case WIFI_AUTH_WPA2_PSK:         output->concat("WPA2_PSK");         break;
-    case WIFI_AUTH_WPA_WPA2_PSK:     output->concat("WPA_WPA2_PSK");     break;
-    case WIFI_AUTH_WPA2_ENTERPRISE:  output->concat("WPA2_ENTERPRISE");  break;
-    case WIFI_AUTH_WPA3_PSK:         output->concat("WPA3_PSK");         break;
-    //case WIFI_AUTH_WPA2_WPA3_PSK:    output->concat("WPA2_WPA3_PSK");    break;
-    default:    output->concat("WIFI_AUTH_UNKNOWN");    break;
+void ESP32Radio::autoconnect(bool v) {
+  if (v ^ _flags.value(ESP32RADIO_FLAG_AUTOCONNECT)) {
+    _reconnect_backoff_ms = 5000;
+    _reconnect_timer.reset(0);   // Allow immediate connect next time.
+    _flags.set(ESP32RADIO_FLAG_AUTOCONNECT, v);
   }
-  if (ap_info->authmode != WIFI_AUTH_WEP) {
-    output->concat("\t\tPairwise: ");
-    switch (ap_info->pairwise_cipher) {
-      case WIFI_CIPHER_TYPE_NONE:       output->concat("NONE");      break;
-      case WIFI_CIPHER_TYPE_WEP40:      output->concat("WEP40");     break;
-      case WIFI_CIPHER_TYPE_WEP104:     output->concat("WEP104");    break;
-      case WIFI_CIPHER_TYPE_TKIP:       output->concat("TKIP");      break;
-      case WIFI_CIPHER_TYPE_CCMP:       output->concat("CCMP");      break;
-      case WIFI_CIPHER_TYPE_TKIP_CCMP:  output->concat("TKIP_CCMP"); break;
-      default:                          output->concat("UNKNOWN");   break;
-    }
-    output->concat("\tGroup: ");
-    switch (ap_info->group_cipher) {
-      case WIFI_CIPHER_TYPE_NONE:       output->concat("NONE");      break;
-      case WIFI_CIPHER_TYPE_WEP40:      output->concat("WEP40");     break;
-      case WIFI_CIPHER_TYPE_WEP104:     output->concat("WEP104");    break;
-      case WIFI_CIPHER_TYPE_TKIP:       output->concat("TKIP");      break;
-      case WIFI_CIPHER_TYPE_CCMP:       output->concat("CCMP");      break;
-      case WIFI_CIPHER_TYPE_TKIP_CCMP:  output->concat("TKIP_CCMP"); break;
-      default:                          output->concat("UNKNOWN");   break;
-    }
-  }
-  output->concat("\n");
 }
 
 
@@ -374,6 +242,17 @@ FAST_FUNC PollResult ESP32Radio::poll() {
   // Edge detection: once set, it stays latched until the FSM consumes it.
   if (_mb_scan_done) {
     _scan_done_latched = true;
+  }
+
+  if (_mb_disc_reason_valid) {
+    _last_disc_reason = _mb_disc_reason;
+    _mb_disc_reason_valid = false;
+
+    // Strict policy: if the AP explicitly says auth failed, stop reconnecting.
+    if (WIFI_REASON_AUTH_FAIL == _last_disc_reason) {
+      _flags.set(ESP32RADIO_FLAG_AUTH_REFUSED, true);
+      _flags.set(ESP32RADIO_FLAG_AUTOCONNECT, false);
+    }
   }
 
   return ((0 == _fsm_poll()) ? PollResult::NO_ACTION : PollResult::ACTION);
@@ -431,7 +310,10 @@ FAST_FUNC int8_t ESP32Radio::_fsm_poll() {
     // Exit conditions:
     case ESP32RadioState::CONNECTING:
       // We consider CONNECTED to mean "associated". IP may arrive later.
-      fsm_advance = _sta_connected;
+      if (_fsm_is_stable() && _sta_connected) {
+        _fsm_append_state(ESP32RadioState::CONNECTED);
+      }
+      fsm_advance = !_fsm_is_stable();
       break;
 
     // Exit conditions:
@@ -446,7 +328,6 @@ FAST_FUNC int8_t ESP32Radio::_fsm_poll() {
         }
       }
       fsm_advance = !_fsm_is_stable();
-
       break;
 
     // Exit conditions:
@@ -459,6 +340,17 @@ FAST_FUNC int8_t ESP32Radio::_fsm_poll() {
       if (_fsm_is_stable()) {
         if (_sta_connected) {
           _fsm_append_state(ESP32RadioState::CONNECTED);
+        }
+        else {
+          if (_flags.value(ESP32RADIO_FLAG_AUTOCONNECT) &&
+              !_flags.value(ESP32RADIO_FLAG_AUTH_REFUSED) &&
+              _wifi_started &&
+              _reconnect_timer.expired() &&
+              !_flags.value(ESP32RADIO_FLAG_CONNECT_ACTIVE)) {
+
+            // Schedule next connect attempt window only if we successfully queue CONNECTING.
+            _flags.set(ESP32RADIO_FLAG_CONNECT_ACTIVE, (0 == _fsm_append_state(ESP32RadioState::CONNECTING)));
+          }
         }
       }
       fsm_advance = !_fsm_is_stable();
@@ -593,14 +485,23 @@ FAST_FUNC int8_t ESP32Radio::_fsm_set_position(ESP32RadioState new_state) {
     // Entry conditions: FSM owns association attempt.
     case ESP32RadioState::CONNECTING:
       state_entry_success = (ESP_OK == esp_wifi_connect());
+      if (!state_entry_success) {
+        // Failed to even start an attempt. Apply outer-loop backoff now.
+        _flags.set(ESP32RADIO_FLAG_CONNECT_ACTIVE, false);
+        _reconnect_backoff_ms = strict_min((_reconnect_backoff_ms << 1), _reconnect_backoff_ms_max);
+        _reconnect_timer.reset(_reconnect_backoff_ms);
+      }
       break;
 
     // Entry conditions:
     case ESP32RadioState::CONNECTED:
-      // Reset any retry logic you might add later.
       esp_wifi_sta_get_ap_info(&_current_ap);
+      _flags.clear((ESP32RADIO_FLAG_CONNECT_ACTIVE | ESP32RADIO_FLAG_AUTH_REFUSED));
+      _reconnect_backoff_ms = 5000;
+      _reconnect_timer.reset(0);   // Allow immediate reconnect if we drop again and want it.
       state_entry_success = true;
       break;
+
 
     // Entry conditions: FSM owns disassociation.
     case ESP32RadioState::DISCONNECTING:
@@ -610,9 +511,16 @@ FAST_FUNC int8_t ESP32Radio::_fsm_set_position(ESP32RadioState new_state) {
     // Entry conditions:
     case ESP32RadioState::DISCONNECTED:
       memset(&_current_ap, 0, sizeof(_current_ap));  // Wipe out current AP.
-      // Losing link implies losing IP.
-      _mb_ip4_valid = false;
+      _mb_ip4_valid = false;  // Losing link implies losing IP.
       _mb_ip4_addr  = 0;
+      _flags.clear(ESP32RADIO_FLAG_CONNECT_ACTIVE);
+      // Only schedule reconnect attempts if we are allowed to.
+      if (_flags.value(ESP32RADIO_FLAG_AUTOCONNECT) && !_flags.value(ESP32RADIO_FLAG_AUTH_REFUSED)) {
+        _reconnect_timer.reset(_reconnect_backoff_ms);
+      }
+      else {
+        _reconnect_timer.reset(0);  // Disabled.
+      }
       state_entry_success = true;
       break;
 
@@ -670,4 +578,166 @@ void ESP32Radio::_collect_scan_results() {
 void ESP32Radio::_set_fault(const char* msg) {
   if (_log_verbosity >= LOG_LEV_WARN) c3p_log(LOG_LEV_WARN, "ESP32Radio::_set_fault", "ESP32Radio fault: %s", msg);
   _fsm_mark_current_state(ESP32RadioState::FAULT);
+}
+
+
+/*******************************************************************************
+* Colsume support
+*******************************************************************************/
+
+void ESP32Radio::_print_ap_record(StringBuilder* output, wifi_ap_record_t* ap_info) {
+  output->concatf("\t[%s]\tRSSI: %d\tCHAN: %d\n", ap_info->ssid, ap_info->rssi, ap_info->primary);
+  output->concat("\t\tAuthmode: ");
+  switch (ap_info->authmode) {
+    case WIFI_AUTH_OPEN:             output->concat("OPEN");             break;
+    case WIFI_AUTH_WEP:              output->concat("WEP");              break;
+    case WIFI_AUTH_WPA_PSK:          output->concat("WPA_PSK");          break;
+    case WIFI_AUTH_WPA2_PSK:         output->concat("WPA2_PSK");         break;
+    case WIFI_AUTH_WPA_WPA2_PSK:     output->concat("WPA_WPA2_PSK");     break;
+    case WIFI_AUTH_WPA2_ENTERPRISE:  output->concat("WPA2_ENTERPRISE");  break;
+    case WIFI_AUTH_WPA3_PSK:         output->concat("WPA3_PSK");         break;
+    //case WIFI_AUTH_WPA2_WPA3_PSK:    output->concat("WPA2_WPA3_PSK");    break;
+    default:    output->concat("WIFI_AUTH_UNKNOWN");    break;
+  }
+  if (ap_info->authmode != WIFI_AUTH_WEP) {
+    output->concat("\t\tPairwise: ");
+    switch (ap_info->pairwise_cipher) {
+      case WIFI_CIPHER_TYPE_NONE:       output->concat("NONE");      break;
+      case WIFI_CIPHER_TYPE_WEP40:      output->concat("WEP40");     break;
+      case WIFI_CIPHER_TYPE_WEP104:     output->concat("WEP104");    break;
+      case WIFI_CIPHER_TYPE_TKIP:       output->concat("TKIP");      break;
+      case WIFI_CIPHER_TYPE_CCMP:       output->concat("CCMP");      break;
+      case WIFI_CIPHER_TYPE_TKIP_CCMP:  output->concat("TKIP_CCMP"); break;
+      default:                          output->concat("UNKNOWN");   break;
+    }
+    output->concat("\tGroup: ");
+    switch (ap_info->group_cipher) {
+      case WIFI_CIPHER_TYPE_NONE:       output->concat("NONE");      break;
+      case WIFI_CIPHER_TYPE_WEP40:      output->concat("WEP40");     break;
+      case WIFI_CIPHER_TYPE_WEP104:     output->concat("WEP104");    break;
+      case WIFI_CIPHER_TYPE_TKIP:       output->concat("TKIP");      break;
+      case WIFI_CIPHER_TYPE_CCMP:       output->concat("CCMP");      break;
+      case WIFI_CIPHER_TYPE_TKIP_CCMP:  output->concat("TKIP_CCMP"); break;
+      default:                          output->concat("UNKNOWN");   break;
+    }
+  }
+  output->concat("\n");
+}
+
+
+void ESP32Radio::printDebug(StringBuilder* output) {
+  StringBuilder tmp;
+  StringBuilder prod_str("ESP32Radio");
+  prod_str.concatf(" [%sinitialized]", (initialized() ? "" : "un"));
+  StringBuilder::styleHeader2(&tmp, (const char*) prod_str.string());
+  printFSM(&tmp);
+
+  if (initialized()) {
+    tmp.concatf("\t STA link:    %c\n", (_sta_connected ? 'y' : 'n'));
+    tmp.concatf("\t Has IPv4:    %c\n", (_ip4_valid ? 'y' : 'n'));
+    tmp.concatf("\t autoconnect: %c\n", (_flags.value(ESP32RADIO_FLAG_INIT_WIFI_AS_STATION) ? 'y' : 'n'));
+    if (_ip4_valid) {
+      tmp.concatf("\t IPv4:      %u.%u.%u.%u\n",
+        (_ip4_addr & 0xFF), ((_ip4_addr >> 8) & 0xFF), ((_ip4_addr >> 16) & 0xFF), ((_ip4_addr >> 24) & 0xFF)
+      );
+    }
+
+    if (connected()) {
+      tmp.concat("Connected to AP:\n");
+      _print_ap_record(&tmp, &_current_ap);
+    }
+    if (0 < _scan_list_count) {
+      tmp.concatf("Most recent scan results (%u/%u):\n", ESP32Radio::_scan_list_count, ESP32Radio::_scan_total_count);
+      for (uint16_t i = 0; (i < ESP32Radio::_scan_list_count); i++) {
+        tmp.concatf("\t%2u:", i);
+        _print_ap_record(&tmp, &_scan_list_ap[i]);
+      }
+    }
+  }
+  else if (_pre_init_complete()) {
+    tmp.concatf("\t WIFI_INIT:            %c\n", (_flags.value(ESP32RADIO_FLAG_WIFI_INIT) ? 'y' : 'n'));
+    tmp.concatf("\t WIFI_STARTED:         %c\n", (_flags.value(ESP32RADIO_FLAG_WIFI_STARTED) ? 'y' : 'n'));
+    tmp.concatf("\t INIT_WIFI_AS_STATION: %c\n", (_flags.value(ESP32RADIO_FLAG_INIT_WIFI_AS_STATION) ? 'y' : 'n'));
+  }
+  else {
+    tmp.concatf("\t NETIF_INIT:         %c\n", (_flags.value(ESP32RADIO_FLAG_NETIF_INIT) ? 'y' : 'n'));
+    tmp.concatf("\t EVENT_LOOP_CREATED: %c\n", (_flags.value(ESP32RADIO_FLAG_EVENT_LOOP_CREATED) ? 'y' : 'n'));
+  }
+
+  tmp.string();
+  output->concatHandoff(&tmp);
+}
+
+
+
+int ESP32Radio::console_handler_esp_radio(StringBuilder* txt_ret, StringBuilder* args) {
+  int ret = 0;
+  char* cmd = args->position_trimmed(0);
+
+  if (0 == StringBuilder::strcasecmp(cmd, "associate")) {
+    if (3 == args->count()) {
+      char* ssid = args->position_trimmed(1);
+      char* psk = args->position_trimmed(2);
+      wifi_config_t wifi_config;
+      esp_wifi_get_config(WIFI_IF_STA, &wifi_config);
+      memcpy(wifi_config.sta.ssid, ssid, strlen(ssid));
+      memcpy(wifi_config.sta.password, psk, strlen(psk));
+      wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+      wifi_config.sta.failure_retry_cnt = WIFI_CONNECTION_INNER_ATTEMPTS;
+      ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+      _flags.clear(ESP32RADIO_FLAG_AUTH_REFUSED);
+    }
+    else {
+      txt_ret->concatf("Usage: %s <ssid> <psk>.\n", cmd);
+    }
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "con")) {
+    if (!connected()) {
+      ret = _fsm_append_route(2, ESP32RadioState::CONNECTING, ESP32RadioState::CONNECTED);
+      autoconnect(true);  // Enable the automation.
+    }
+    else {
+      txt_ret->concat("ESP32Radio is already connected.\n");
+    }
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "discon")) {
+    if (connected()) {
+      ret = _fsm_append_route(2, ESP32RadioState::DISCONNECTING, ESP32RadioState::DISCONNECTED);
+      autoconnect(false);  // Thwart the automation.
+    }
+    else {
+      txt_ret->concat("ESP32Radio is already disconnected.\n");
+    }
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "deauth")) {
+    uint16_t aid = (uint16_t) args->position_as_int(1);
+    txt_ret->concatf("esp_wifi_deauth_sta(%u) returns %d.\n", aid, esp_wifi_deauth_sta(aid));
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "scan")) {
+    if (initialized()) {
+      txt_ret->concatf("wifi_scan() returns %d.\n", wifi_scan());
+    }
+    else {
+      txt_ret->concat("ESP32Radio is not initialized.\n");
+    }
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "autoconnect")) {
+    switch (args->count()) {
+      case 2:    autoconnect(args->position_as_bool(1));
+      default:   txt_ret->concatf("autoconnect: %c\n", autoconnect() ? 'y':'n');
+        break;
+    }
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "pack")) {
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "parse")) {
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "fsm")) {
+    args->drop_position(0);
+    ret = fsm_console_handler(txt_ret, args);  // Shunt into the FSM console handler.
+  }
+  else {
+    printDebug(txt_ret);
+  }
+  return ret;
 }

@@ -39,6 +39,9 @@ limitations under the License.
   #define ESP32RADIO_SCAN_RESULTS        16
 #endif
 
+#if !defined(WIFI_CONNECTION_INNER_ATTEMPTS)
+  #define WIFI_CONNECTION_INNER_ATTEMPTS 3
+#endif
 
 
 /* These includes from ESF-IDF need to be under C linkage. */
@@ -203,22 +206,6 @@ class ESP32Platform : public AbstractPlatform {
 *   moved to C3P.
 *******************************************************************************/
 
-/*
-* In station mode, we keep a list of AP's which we know about.
-*/
-class WiFiAP {
-  public:
-    char* name;
-
-    WiFiAP();
-    ~WiFiAP();
-
-
-  private:
-};
-
-
-
 /** Class flags */
 #define ESP32RADIO_FLAG_NETIF_INIT           0x00000001  //
 #define ESP32RADIO_FLAG_EVENT_LOOP_CREATED   0x00000002  //
@@ -227,7 +214,9 @@ class WiFiAP {
 #define ESP32RADIO_FLAG_INIT_WIFI_AS_STATION 0x00000020  // --+ These bits are mutex,
 #define ESP32RADIO_FLAG_INIT_WIFI_AS_AP      0x00000040  // --+ and exactly ONE must
 #define ESP32RADIO_FLAG_INIT_WIFI_AS_MESH    0x00000080  // --+ be set to be initialized.
-
+#define ESP32RADIO_FLAG_AUTOCONNECT          0x00000100  // Greedy STA reconnect policy.
+#define ESP32RADIO_FLAG_AUTH_REFUSED         0x00000200  // Sticky stop condition (bad PSK/SSID).
+#define ESP32RADIO_FLAG_CONNECT_ACTIVE       0x00000400  // We have an in-flight connect attempt.
 
 // Bits indicating basic init steps.
 #define ESP32RADIO_FLAG_PREINIT_MASK ( \
@@ -239,7 +228,9 @@ class WiFiAP {
   ESP32RADIO_FLAG_WIFI_STARTED)
 
 // Bits to preserve through radio reset.
-#define ESP32RADIO_FLAG_RESET_MASK  (ESP32RADIO_FLAG_PREINIT_MASK)
+#define ESP32RADIO_FLAG_RESET_MASK  ( \
+  ESP32RADIO_FLAG_CONNECT_ACTIVE | ESP32RADIO_FLAG_AUTH_REFUSED | \
+  ESP32RADIO_FLAG_PREINIT_MASK)
 
 
 /** Radio state machine positions */
@@ -282,6 +273,10 @@ class ESP32Radio : public StateMachine<ESP32RadioState>, public C3PPollable {
     /* Semantic breakouts for flags and states */
     inline bool initialized() {        return (ESP32RADIO_FLAG_ALL_INIT_MASK == (ESP32RADIO_FLAG_ALL_INIT_MASK & _flags.raw));  };
     inline bool connected() {          return (ESP32RadioState::CONNECTED == currentState());  };
+    inline bool authRefused() {        return _flags.value(ESP32RADIO_FLAG_AUTH_REFUSED); };
+    inline bool autoconnect() {        return _flags.value(ESP32RADIO_FLAG_AUTOCONNECT); };
+    void autoconnect(bool v);
+
 
     /* Network status API for sibling FSMs (MQTT, etc). */
     bool linkUp();      // True if STA is associated.
@@ -293,7 +288,8 @@ class ESP32Radio : public StateMachine<ESP32RadioState>, public C3PPollable {
 
 
   protected:
-    FlagContainer32  _flags;                   // Aggregate boolean class state.
+    MillisTimeout    _reconnect_timer;   // Schedules next outer-loop attempt.
+    FlagContainer32  _flags;             // Aggregate boolean class state.
     uint8_t _log_verbosity = LOG_LEV_DEBUG;
     esp_netif_t* _sta_netif = nullptr;
     wifi_ap_record_t _current_ap;
@@ -302,11 +298,31 @@ class ESP32Radio : public StateMachine<ESP32RadioState>, public C3PPollable {
     esp_event_handler_instance_t _handler_any_id;
     esp_event_handler_instance_t _handler_ip_any_id;
 
+    /* Mailboxes written by event handlers, consumed in poll(). */
+    volatile bool     _mb_wifi_started   = false;
+    volatile bool     _mb_sta_connected  = false;
+    volatile bool     _mb_ip4_valid      = false;
+    volatile bool     _mb_scan_done      = false;
+    volatile bool     _mb_disc_reason_valid = false;
+    volatile uint32_t _mb_ip4_addr       = 0;
+    volatile uint16_t _mb_disc_reason = 0;
+
+    /* Latched state owned by poll/FSM context. */
+    bool     _wifi_started      = false;
+    bool     _sta_connected     = false;
+    bool     _ip4_valid         = false;
+    bool     _scan_done_latched = false;
+    uint32_t _ip4_addr          = 0;
+    uint16_t _last_disc_reason = 0;
+
+    /* Backoff control (applied in DISCONNECTED, on failed attempt) */
+    uint32_t _reconnect_backoff_ms = 5000;
+    uint32_t _reconnect_backoff_ms_max = 60000;
+
     // TODO? RingBuffer<WiFiAP> _ap_list;
 
     /* Semantic breakouts for flags and states */
     inline bool _pre_init_complete() {  return (ESP32RADIO_FLAG_PREINIT_MASK == (ESP32RADIO_FLAG_PREINIT_MASK & _flags.raw));  };
-
 
     /* State machine functions */
     int8_t   _fsm_poll();                         // Polling for state exit.
@@ -326,21 +342,7 @@ class ESP32Radio : public StateMachine<ESP32RadioState>, public C3PPollable {
     void _mb_set_ip4_valid(const bool v);
     void _mb_set_scan_done(const bool v);
     void _mb_set_ip4_addr(const uint32_t a);
-
-    /* Mailboxes written by event handlers, consumed in poll(). */
-    volatile bool     _mb_wifi_started   = false;
-    volatile bool     _mb_sta_connected  = false;
-    volatile bool     _mb_ip4_valid      = false;
-    volatile bool     _mb_scan_done      = false;
-    volatile uint32_t _mb_ip4_addr       = 0;
-
-    /* Latched state owned by poll/FSM context. */
-    bool     _wifi_started      = false;
-    bool     _sta_connected     = false;
-    bool     _ip4_valid         = false;
-    uint32_t _ip4_addr          = 0;
-
-    bool     _scan_done_latched = false;
+    void _mb_set_disconnect_reason(const uint16_t r);
 
     /* Scan results storage */
     static wifi_ap_record_t _scan_list_ap[ESP32RADIO_SCAN_RESULTS];
