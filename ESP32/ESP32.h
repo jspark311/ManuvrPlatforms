@@ -420,6 +420,9 @@ class MQTTBrokerDef {
 
     esp_mqtt_client_config_t* config() {  return &_cli_conf;  };
 
+    static MQTTBrokerDef* deserialize(StringBuilder*);
+
+
   private:
     // Side note: Version drift in this struct was the _worst_ thing about
     //   getting MQTT running following a migration from IDF v4 to v5.

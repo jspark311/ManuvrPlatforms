@@ -118,11 +118,45 @@ void mqtt_event_handler(void* handler_args, esp_event_base_t base, int32_t event
       if (nullptr != self) {
         self->_mb_set_mqtt_connected(false);
         self->_mb_set_mqtt_disconnected(true);
-      }
-      if (event->error_handle->error_type == MQTT_ERROR_TYPE_TCP_TRANSPORT) {
-        ESP_LOGW(TAG, "Last errno string (%s)", strerror(event->error_handle->esp_transport_sock_errno));
+        if (nullptr != event->error_handle) {
+          switch (event->error_handle->error_type) {
+            case MQTT_ERROR_TYPE_NONE:  break;  // Explicitly ignored.
+
+            case MQTT_ERROR_TYPE_CONNECTION_REFUSED:
+              switch (event->error_handle->connect_return_code) {
+                // These failures should permanently disable greedy reconnect.
+                case MQTT_CONNECTION_REFUSE_BAD_USERNAME:
+                case MQTT_CONNECTION_REFUSE_NOT_AUTHORIZED:
+                case MQTT_CONNECTION_REFUSE_PROTOCOL:
+                  self->_current_broker.autoconnect(false);
+                  break;
+
+                case MQTT_CONNECTION_REFUSE_ID_REJECTED:
+                case MQTT_CONNECTION_REFUSE_SERVER_UNAVAILABLE:
+                  // Currently ignored, but explicitly acknowledged.
+                default:   // Future or unknown connection-refused reasons.
+                  ESP_LOGW(TAG, "Unhandled MQTT CONNECTION_REFUSED: (connect_return_code = %u)", (event->error_handle->connect_return_code));
+                  break;
+              }
+              break;
+
+            case MQTT_ERROR_TYPE_TCP_TRANSPORT:
+              ESP_LOGW(TAG, "Unhandled MQTT_ERROR_TYPE_TCP_TRANSPORT: (%s)", strerror(event->error_handle->esp_transport_sock_errno));
+              break;
+
+            case MQTT_ERROR_TYPE_SUBSCRIBE_FAILED:
+              ESP_LOGW(TAG, "MQTT_ERROR_TYPE_SUBSCRIBE_FAILED");
+              break;
+
+            // Future ESP-IDF error types land here.
+            default:
+              ESP_LOGW(TAG, "Unhandled error_type: (%u)", event->error_handle->error_type);
+              break;
+          }
+        }
       }
       break;
+
 
     case MQTT_EVENT_BEFORE_CONNECT:   // Unhandled. No special actions required.
       break;
@@ -321,6 +355,189 @@ int MQTTBrokerDef::serialize(StringBuilder* out, const TCode FORMAT) {
   }
   return ret;
 }
+
+
+
+MQTTBrokerDef* MQTTBrokerDef::deserialize(StringBuilder* in) {
+  MQTTBrokerDef* ret = nullptr;
+  #if defined(__BUILD_HAS_CBOR)
+  if ((nullptr == in) || (in->length() <= 0)) {
+    return ret;
+  }
+
+  class MQTTBrokerDefListener : public cbor::listener {
+   public:
+    MQTTBrokerDefListener() {}
+    ~MQTTBrokerDefListener() {}
+
+    MQTTBrokerDef* result() { return _obj; }
+    bool failed() const { return _failed; }
+
+    // Integer callbacks (unused)
+    void on_integer(int8_t) override {}
+    void on_integer(int16_t) override {}
+    void on_integer(int32_t) override {}
+    void on_integer(int64_t) override {}
+    void on_integer(uint8_t) override {}
+    void on_integer(uint16_t) override {}
+    void on_integer(uint32_t) override {}
+    void on_integer(uint64_t) override {}
+    void on_float32(float) override {}
+    void on_double(double) override {}
+    void on_bytes(uint8_t*, int) override {}
+
+    void on_tag(unsigned int) override {
+      // Tag is optional for our purposes. We accept and ignore.
+    }
+
+    void on_array(int size) override {
+      if (_failed) return;
+      if (_in_inner_map && !_expecting_key && (0 == strcmp(_last_key, "topics"))) {
+        if (nullptr == _obj) {
+          _obj = new MQTTBrokerDef();
+        }
+        _obj->clearTopics();
+        _in_topics = true;
+        _topics_remaining = size;
+        _expecting_key = true;   // Value consumed by the array container.
+      }
+    }
+
+    void on_map(int) override {
+      if (_failed) return;
+      if (!_in_outer_map) {
+        _in_outer_map = true;
+        _expecting_key = true;
+        return;
+      }
+      if (_in_outer_map && !_in_inner_map) {
+        // Outer map value for key "MQTTBrokerDef" is the inner map.
+        if (!_expecting_key && (0 == strcmp(_last_key, "MQTTBrokerDef"))) {
+          _in_inner_map = true;
+          _expecting_key = true;
+          if (nullptr == _obj) {
+            _obj = new MQTTBrokerDef();
+          }
+          return;
+        }
+      }
+      // Deeper nesting not expected; ignore.
+    }
+
+    void on_string(char* str) override {
+      if (_failed || (nullptr == str)) return;
+
+      if (_in_topics) {
+        if (nullptr != _obj) {
+          _obj->addTopic(str);
+        }
+        if (_topics_remaining > 0) {
+          _topics_remaining--;
+        }
+        if (_topics_remaining <= 0) {
+          _in_topics = false;
+        }
+        return;
+      }
+
+      if (_in_outer_map && !_in_inner_map) {
+        // Expecting the single outer key "MQTTBrokerDef".
+        if (_expecting_key) {
+          _copy_key(str);
+          _expecting_key = false;  // Next should be the inner map.
+        }
+        return;
+      }
+
+      if (_in_inner_map) {
+        if (_expecting_key) {
+          _copy_key(str);
+          _expecting_key = false;
+          return;
+        }
+
+        if (nullptr == _obj) {
+          _obj = new MQTTBrokerDef();
+        }
+
+        if (0 == strcmp(_last_key, "label")) {
+          _obj->label(str);
+        }
+        else if (0 == strcmp(_last_key, "uri")) {
+          _obj->uri(str);
+        }
+        else if (0 == strcmp(_last_key, "user")) {
+          _obj->user(str);
+        }
+        else if (0 == strcmp(_last_key, "passwd")) {
+          _obj->passwd(str);
+        }
+        // "topics" is handled by on_array().
+
+        _expecting_key = true;
+      }
+    }
+
+    void on_bool(bool v) override {
+      if (_failed) return;
+      if (_in_inner_map && !_expecting_key && (0 == strcmp(_last_key, "autoconnect"))) {
+        if (nullptr == _obj) {
+          _obj = new MQTTBrokerDef();
+        }
+        _obj->autoconnect(v);
+        _expecting_key = true;
+      }
+    }
+
+    void on_null() override {}
+    void on_undefined() override {}
+    void on_special(unsigned int) override {}
+
+    void on_error(const char*) override { _failed = true; }
+    void on_extra_integer(uint64_t, int) override {}
+    void on_extra_tag(uint64_t) override {}
+    void on_extra_special(uint64_t) override {}
+
+   private:
+    MQTTBrokerDef* _obj = nullptr;
+    bool _failed = false;
+    bool _in_outer_map = false;
+    bool _in_inner_map = false;
+    bool _expecting_key = true;
+
+    bool _in_topics = false;
+    int _topics_remaining = 0;
+
+    char _last_key[16] = {0};
+    void _copy_key(const char* k) {
+      memset(_last_key, 0, sizeof(_last_key));
+      if (nullptr != k) {
+        const uint32_t cpy = strict_min((uint32_t) strlen(k), (uint32_t) (sizeof(_last_key) - 1));
+        memcpy(_last_key, k, cpy);
+      }
+    }
+  };
+
+  // Consume input as we decode (as requested).
+  cbor::input_stringbuilder input(in, true, false);
+  MQTTBrokerDefListener listener;
+  cbor::decoder decoder(input, listener);
+  decoder.run();
+
+  if (listener.failed() || decoder.failed()) {
+    MQTTBrokerDef* o = listener.result();
+    if (nullptr != o) {
+      delete o;
+    }
+    return nullptr;
+  }
+  return listener.result();
+  #else
+  return nullptr;
+  #endif  // __BUILD_HAS_CBOR
+}
+
+
 
 
 void MQTTBrokerDef::printDebug(StringBuilder* output) {
