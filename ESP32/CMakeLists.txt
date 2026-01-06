@@ -2,7 +2,7 @@
 # ESP-IDF component
 #
 message(STATUS "==============================================")
-message(STATUS "ManuvrPlatform-ESP32")
+message(STATUS "ESP32 C3P Shim")
 message(STATUS "==============================================")
 
 file(GLOB_RECURSE srcs

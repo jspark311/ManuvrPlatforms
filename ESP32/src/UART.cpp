@@ -74,7 +74,6 @@ void PlatformUART::irq_handler() {
         {
           size_t dlen = 0;
           if (ESP_OK == uart_get_buffered_data_len((uart_port_t) ADAPTER_NUM, &dlen)) {
-            //c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, "\t RX data (%d bytes)", dlen);
             if (dlen > 0) {
               last_byte_rx_time = millis();
               uint8_t dtmp[dlen + 4];

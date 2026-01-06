@@ -33,16 +33,14 @@ STDIN/STDOUT/STDERR into a BufferAccepter.
 * Constructors/destructors, class initialization functions and so-forth...
 *******************************************************************************/
 /**
-* Constructor.
+* Featureless Constructor.
 */
-ESP32StdIO::ESP32StdIO() {
-}
+ESP32StdIO::ESP32StdIO() {}
 
 /**
-* Destructor
+* Featureless Destructor
 */
-ESP32StdIO::~ESP32StdIO() {
-}
+ESP32StdIO::~ESP32StdIO() {}
 
 
 /**

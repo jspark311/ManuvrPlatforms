@@ -281,6 +281,9 @@ int getSerialNumber(uint8_t *buf) {
 * On linux, we support pthreads. On microcontrollers, we support FreeRTOS.
 * This is the wrapper to create a new thread.
 *
+* NOTE: In ESP-IDF, pthreads is itself implemented as a shim around FreeRTOS.
+*   so just assume FreeRTOS directly.
+*
 * @return The thread's return value.
 */
 int ESP32Platform::createThread(unsigned long* _thread_id, void* _something, ThreadFxnPtr _fxn, void* _args, PlatformThreadOpts* _thread_opts) {
@@ -337,6 +340,10 @@ void sleep_us(uint32_t udelay) {
 
 
 /*
+* TODO: This breaks a core assumption made by AbstractPlatform. These
+*   time sources may be distinct, and thus (1ms == 1000us) can't be justified.
+*.  Might lead to subtle bugs.
+*
 * Taken from:
 * https://github.com/espressif/arduino-esp32
 */
@@ -441,6 +448,7 @@ static void gpio_task_handler(void* arg) {
 *   in the class that deals with them.
 * Pending peripheral-level init of pins, we should just enable everything and let
 *   individual classes work out their own requirements.
+* Spawns a thread for interrupt service.
 */
 void gpioSetup() {
   // Null-out all the pin definitions in preparation for assignment.

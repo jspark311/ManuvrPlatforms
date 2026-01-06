@@ -462,8 +462,6 @@ class MQTTClient : public StateMachine<MQTTCliState>, public C3PPollable {
     int8_t   _fsm_set_position(MQTTCliState);// Attempt a state entry.
     void     _set_fault(const char*);
 
-    void _print_broker_record(StringBuilder*, MQTTBrokerDef*);
-
     /* Mailboxes written from ESP-IDF event loop, consumed in poll() */
     void _mb_set_mqtt_connected(const bool v);
     void _mb_set_mqtt_disconnected(const bool v);
