@@ -17,6 +17,13 @@ Refactor notes:
   #include "cbor-cpp/cbor.h"
 #endif
 
+#if !defined(CONFIG_MQTT_PROTOCOL_5)
+  #error "This driver requires CONFIG_MQTT_PROTOCOL_5. Enable it in menuconfig (Component config → MQTT → MQTT Protocol v5)."
+#endif
+
+// TODO: Test for MQTT_TRANSPORT_SSL MQTT_TRANSPORT_WS and sec variants, and
+//   build support accordingly. This is mostly to save weight in the binary,
+//   but will also prevent surprises at runtime attributable to missing support.
 
 /*******************************************************************************
 *      _______.___________.    ___   .___________. __    ______     _______.
@@ -113,7 +120,7 @@ void mqtt_event_handler(void* handler_args, esp_event_base_t base, int32_t event
         self->_mb_set_mqtt_disconnected(true);
       }
       if (event->error_handle->error_type == MQTT_ERROR_TYPE_TCP_TRANSPORT) {
-        ESP_LOGI(TAG, "Last errno string (%s)", strerror(event->error_handle->esp_transport_sock_errno));
+        ESP_LOGW(TAG, "Last errno string (%s)", strerror(event->error_handle->esp_transport_sock_errno));
       }
       break;
 
@@ -175,10 +182,11 @@ bool MQTTBrokerDef::isValid() {
   // "Sensible URI": require mqtt:// or mqtts:// prefix.
   if (0 == strncmp(URI, "mqtt://", 7))  return true;
   if (0 == strncmp(URI, "mqtts://", 8)) return true;
+  if (0 == strncmp(URI, "ws://", 5))  return true;
+  if (0 == strncmp(URI, "wss://", 6)) return true;
 
   return false;
 }
-
 
 void MQTTBrokerDef::label(const char* LABEL) {
   const uint32_t FIELD_SIZE = sizeof(_label);
@@ -215,6 +223,52 @@ void MQTTBrokerDef::passwd(const char* PASSWD) {
   }
 }
 
+uint32_t MQTTBrokerDef::topicCount() {  return _subs.count();  }
+int MQTTBrokerDef::clearTopics() {      _subs.clear();   return 0;   }
+
+
+char* MQTTBrokerDef::topic(const int IDX) {
+  if (_subs.count() > IDX) {
+    return _subs.position_trimmed(IDX);
+  }
+  return nullptr;
+}
+
+
+/**
+* Sanitizes and adds a topic string to the broker.
+* - rejects nullptr, empty, or pure whitespace after trim
+* - de-dupes against existing topics
+* Returns >=0 on success: the index of the topic in the list.
+*/
+int MQTTBrokerDef::addTopic(const char* TOPIC_IN) {
+  int ret = -1;
+  if (nullptr != TOPIC_IN) {
+    ret--;
+    StringBuilder tmp(TOPIC_IN);
+    tmp.trim();  // kill leading/trailing whitespace
+    if (0 < tmp.length()) {
+      ret--;
+      const int EXISTING_COUNT = _subs.count();
+      for (int i = 0; i < EXISTING_COUNT; i++) {
+        char* t = _subs.position_trimmed(i);
+        if (nullptr != t) {
+          // MQTT topics are case-sensitive, so strcmp is correct.
+          if (0 == strcmp(t, (const char*) tmp.string())) {
+            return i;  // Already present: treat as success with no mutation.
+          }
+        }
+      }
+      // If we didn't bail, we didn't have the topic in the list. Add it.
+      _subs.concat((const char*) tmp.string());
+      ret = EXISTING_COUNT;
+    }
+  }
+  return ret;
+}
+
+
+
 
 int MQTTBrokerDef::serialize(StringBuilder* out, const TCode FORMAT) {
   int ret = -1;
@@ -235,19 +289,28 @@ int MQTTBrokerDef::serialize(StringBuilder* out, const TCode FORMAT) {
         cbor::output_stringbuilder output(out);
         cbor::encoder encoder(output);
 
-        // Follow your sketch: vendor tag OR'd with format code.
+        const uint8_t KEY_COUNT = (topicCount() > 0) ? 6:5;   // Five baselines values to be encoded.
+
+        // Encode this into IANA space as a vendor code.
         encoder.write_tag(C3P_CBOR_VENDOR_CODE | TcodeToInt(FORMAT));
 
-        // {"MQTTBrokerDef": {"label":..,"uri":..,"user":..,"passwd":..,"autoconnect":..}}
+        // {"MQTTBrokerDef": {"label":..,"uri":..,"user":..,"passwd":..,"autoconnect":..,"topics":[..]}}
         encoder.write_map(1);
-        encoder.write_string("MQTTBrokerDef");
-          encoder.write_map(5);
-            encoder.write_string("label");       encoder.write_string(label());
-            encoder.write_string("uri");         encoder.write_string(uri());
-            encoder.write_string("user");        encoder.write_string(user());
-            encoder.write_string("passwd");      encoder.write_string(passwd());
-            encoder.write_string("autoconnect"); encoder.write_bool(autoconnect());
-
+        encoder.write_string("MQTTBrokerDef"); encoder.write_map(KEY_COUNT);
+          encoder.write_string("label");       encoder.write_string(label());
+          encoder.write_string("uri");         encoder.write_string(uri());
+          encoder.write_string("user");        encoder.write_string(user());
+          encoder.write_string("passwd");      encoder.write_string(passwd());
+          encoder.write_string("autoconnect"); encoder.write_bool(autoconnect());
+          if (topicCount() > 0) {
+            encoder.write_string("topics");
+            const int TCOUNT = _subs.count();
+            encoder.write_array(TCOUNT);
+            for (uint32_t t_id = 0; t_id < TCOUNT; t_id++) {
+              char* t = _subs.position_trimmed(t_id);
+              encoder.write_string((nullptr == t) ? "" : t);
+            }
+          }
         ret = 0;
       }
       break;
@@ -275,6 +338,23 @@ void MQTTBrokerDef::printDebug(StringBuilder* output) {
 
 
 
+void MQTTBrokerDef::printTopicList(StringBuilder* output) {
+  const int TCOUNT = _subs.count();
+  if (TCOUNT > 0) {
+    StringBuilder tmp("\tTopics:\n");
+    for (int i = 0; i < TCOUNT; i++) {
+      char* t = _subs.position_trimmed(i);
+      if ((nullptr != t) && (0 < strlen(t))) {
+        tmp.concatf("\t\t[%d] %s\n", i, t);
+      }
+    }
+    tmp.string();
+    output->concatHandoff(&tmp);
+  }
+}
+
+
+
 /*******************************************************************************
 * MQTTClient
 *******************************************************************************/
@@ -291,14 +371,19 @@ MQTTClient::MQTTClient() :
 
   // Policy defaults.
   _flags.set(MQTT_FLAG_AUTOCONNECT, true);
+  _flags.set(MQTT_FLAG_SUBS_COMPLETE, false);
 
   // Backoff defaults.
   _reconnect_backoff_ms     = 5000;
   _reconnect_backoff_ms_max = 60000;
 
-  _connect_attempt_active   = false;
-  _mqtt_connected_latched   = false;
-  _mqtt_disconnected_latched = false;
+  _connect_attempt_active     = false;
+  _mqtt_connected_latched     = false;
+  _mqtt_disconnected_latched  = false;
+
+  _sub_cursor         = 0;
+  _sub_pending_msg_id = -1;
+  _mb_suback_msg_id   = -1;
 }
 
 
@@ -364,6 +449,8 @@ void MQTTClient::printDebug(StringBuilder* output) {
   tmp.concatf("\t Client autoconnect: %c\n", (autoconnect() ? 'y' : 'n'));
   tmp.concatf("\t Broker autoconnect: %c\n", (_current_broker.autoconnect() ? 'y' : 'n'));
   tmp.concatf("\t Broker valid:       %c\n", (_current_broker.isValid() ? 'y' : 'n'));
+  tmp.concatf("\t Subs complete:      %c\n", (_flags.value(MQTT_FLAG_SUBS_COMPLETE) ? 'y' : 'n'));
+  tmp.concatf("\t Subs cursor:        %d\n", _sub_cursor);
   tmp.concatf("\t Backoff:            %u ms (max %u)\n", _reconnect_backoff_ms, _reconnect_backoff_ms_max);
 
   if (initialized()) {
@@ -395,11 +482,52 @@ void MQTTClient::printDebug(StringBuilder* output) {
 }
 
 
+
 int MQTTClient::console_handler_mqtt_client(StringBuilder* txt_ret, StringBuilder* args) {
   int ret = 0;
   char* cmd = args->position_trimmed(0);
 
-  if (0 == StringBuilder::strcasecmp(cmd, "broker")) {
+  if (0 == StringBuilder::strcasecmp(cmd, "topic")) {
+    bool print_usage = false;
+    if (1 < args->count()) {
+      char* subcmd = args->position_trimmed(1);
+      if (0 == StringBuilder::strcasecmp(subcmd, "add")) {
+        if (2 <= args->count()) {
+          args->drop_position(0);  // Drop the string "topic".
+          args->drop_position(0);  // Drop the string "add".
+          while (0 < args->count()) {  // While we have any left over...
+            char* t = args->position_trimmed(0);
+            int idx = _current_broker.addTopic(t);
+            if (idx >= 0) {
+              txt_ret->concatf("Topic [%s] added at index %d.\n", t, idx);
+            }
+            else {
+              txt_ret->concatf("Topic [%s] rejected.\n", t);
+            }
+            args->drop_position(0);  // Drop the just-handled topic argument.
+          }
+        }
+        else {
+          txt_ret->concat("Usage: topic add <topic> [topic] [topic] ...\n");
+        }
+      }
+      else if (0 == StringBuilder::strcasecmp(subcmd, "list")) {
+        _current_broker.printTopicList(txt_ret);
+      }
+      else if (0 == StringBuilder::strcasecmp(subcmd, "clear")) {
+        _current_broker.clearTopics();
+        txt_ret->concat("Topics cleared.\n");
+      }
+      else {
+        print_usage = true;
+      }
+    }
+    else {
+      print_usage = true;
+    }
+    if (print_usage) {  txt_ret->concat("Usage: topic [add|list|clear] ...\n"); }
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "broker")) {
     if (5 == args->count()) {
       //m broker home mqtt://192.168.0.3 dgmj-mqtt dgmj-mqtt
       char* lab  = args->position_trimmed(1);
@@ -505,6 +633,16 @@ FAST_FUNC PollResult MQTTClient::poll() {
     _mqtt_connected_latched = false;
     _mqtt_disconnected_latched = true;
     _mb_mqtt_disconnected = false;
+  }
+
+  // SUBACK mailbox handling.
+  if (_mb_suback_msg_id >= 0) {
+    // Only accept if it matches current pending.
+    if (_sub_pending_msg_id == _mb_suback_msg_id) {
+      _sub_pending_msg_id = -1;
+      _sub_cursor++;
+    }
+    _mb_suback_msg_id = -1;
   }
 
   return ((0 == _fsm_poll()) ? PollResult::NO_ACTION : PollResult::ACTION);
@@ -632,7 +770,7 @@ FAST_FUNC int8_t MQTTClient::_fsm_set_position(MQTTCliState new_state) {
       }
 
       if (!_flags.value(MQTT_FLAG_ESP_MQTT_INIT) & _current_broker.isValid()) {
-	      // (Re)create client and register event handler.
+        // (Re)create client and register event handler.
         _client_handle = esp_mqtt_client_init(_current_broker.config());
         _flags.set(MQTT_FLAG_ESP_MQTT_INIT, (nullptr != _client_handle));
       }

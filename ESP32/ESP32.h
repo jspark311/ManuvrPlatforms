@@ -364,6 +364,7 @@ class ESP32Radio : public StateMachine<ESP32RadioState>, public C3PPollable {
 #define MQTT_FLAG_EVENT_LOOP_CREATED   0x00000002  //
 #define MQTT_FLAG_EVENT_REGISTERED     0x00000004  //
 #define MQTT_FLAG_AUTOCONNECT          0x00000008  // Client greedy-connect policy.
+#define MQTT_FLAG_SUBS_COMPLETE        0x00000010  // Topic subscription pass complete.
 
 // Bits indicating basic init steps.
 #define MQTT_CLI_FLAG_ALL_INIT_MASK (MQTT_FLAG_ESP_MQTT_INIT | MQTT_FLAG_EVENT_LOOP_CREATED | MQTT_FLAG_EVENT_REGISTERED)
@@ -390,6 +391,7 @@ class MQTTBrokerDef {
     bool isValid();
     int  serialize(StringBuilder* out, const TCode FORMAT);
     void printDebug(StringBuilder*);
+    void printTopicList(StringBuilder*);
 
     /*
     * Accessors to wrap ESP-IDF's gnarly conf struct.
@@ -404,6 +406,12 @@ class MQTTBrokerDef {
 
     void autoconnect(bool v) {  _autoconnect = v;  };
     bool autoconnect() {        return _autoconnect;  };
+
+    // Topic management (newline-delimited in _subs).
+    int      addTopic(const char* topic);   // Returns fragment index >=0 on success.
+    int      clearTopics();                // Returns 0.
+    uint32_t topicCount();
+    char*    topic(const int idx);         // Returns position_trimmed(idx) if idx valid.
 
     const char* label() {   return _label;                                         };
     const char* uri() {     return _cli_conf.broker.address.uri;                   };
@@ -422,6 +430,11 @@ class MQTTBrokerDef {
     char _usr[16];
     char _pass[32];
     bool _autoconnect = true;
+
+    // Subscription topic list (newline-delimited tokens).
+    // TODO: This storage format is a stub to allow API to finish. Need a struct
+    //   with callbacks, or something.
+    StringBuilder _subs;
 };
 
 
@@ -478,6 +491,13 @@ class MQTTClient : public StateMachine<MQTTCliState>, public C3PPollable {
     bool     _connect_attempt_active    = false;
 
     void _broker_changed_reinit_plan();
+
+    // Subscription tracking.
+    int32_t  _sub_cursor                = 0;    // Index into broker topic list.
+    int32_t  _sub_pending_msg_id        = -1;   // msg_id awaiting SUBACK.
+
+    // Mailbox for SUBACK progression.
+    volatile int32_t _mb_suback_msg_id  = -1;
 
     friend void mqtt_event_handler(void* handler_args, esp_event_base_t base, int32_t event_id, void* event_data);
 };
