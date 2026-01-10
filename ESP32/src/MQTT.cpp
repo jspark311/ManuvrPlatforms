@@ -74,15 +74,15 @@ void mqtt_event_handler(void* handler_args, esp_event_base_t base, int32_t event
         self->_mb_set_mqtt_connected(true);
         self->_mb_set_mqtt_disconnected(false);
       }
-      // Demo traffic as before.
-      msg_id = esp_mqtt_client_publish(client, "/topic/qos1", "data_3", 0, 1, 0);
-      ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
-      msg_id = esp_mqtt_client_subscribe(client, "/topic/qos0", 0);
-      ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
-      msg_id = esp_mqtt_client_subscribe(client, "/topic/qos1", 1);
-      ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
-      msg_id = esp_mqtt_client_unsubscribe(client, "/topic/qos1");
-      ESP_LOGI(TAG, "sent unsubscribe successful, msg_id=%d", msg_id);
+      // // Demo traffic as before.
+      // msg_id = esp_mqtt_client_publish(client, "/topic/qos1", "data_3", 0, 1, 0);
+      // ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
+      // msg_id = esp_mqtt_client_subscribe(client, "/topic/qos0", 0);
+      // ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
+      // msg_id = esp_mqtt_client_subscribe(client, "/topic/qos1", 1);
+      // ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
+      // msg_id = esp_mqtt_client_unsubscribe(client, "/topic/qos1");
+      // ESP_LOGI(TAG, "sent unsubscribe successful, msg_id=%d", msg_id);
       break;
 
     case MQTT_EVENT_DISCONNECTED:
@@ -157,8 +157,13 @@ void mqtt_event_handler(void* handler_args, esp_event_base_t base, int32_t event
       }
       break;
 
-
-    case MQTT_EVENT_BEFORE_CONNECT:   // Unhandled. No special actions required.
+    case MQTT_EVENT_BEFORE_CONNECT:
+      if (nullptr != self) {
+        esp_mqtt5_connection_property_config_t conn_prop = {0};
+        conn_prop.maximum_packet_size = MQTT_MAX_PACKET_SIZE;
+        // Note: API takes esp_mqtt5_client_handle_t, but the handle type is compatible in ESP-MQTT.
+        esp_mqtt5_client_set_connect_property((esp_mqtt5_client_handle_t) client, &conn_prop);
+      }
       break;
 
     default:
@@ -204,6 +209,10 @@ MQTTBrokerDef::MQTTBrokerDef(const char* LABEL) {
     .network = {
       .disable_auto_reconnect = true,
     },
+    .buffer = {
+      .size = MQTT_MAX_PACKET_SIZE,
+      .out_size = MQTT_MAX_PACKET_SIZE,
+    },
   };
 }
 
@@ -221,6 +230,7 @@ bool MQTTBrokerDef::isValid() {
 
   return false;
 }
+
 
 void MQTTBrokerDef::label(const char* LABEL) {
   const uint32_t FIELD_SIZE = sizeof(_label);
@@ -428,15 +438,9 @@ MQTTBrokerDef* MQTTBrokerDef::deserialize(StringBuilder* in) {
       if (_failed || (nullptr == str)) return;
 
       if (_in_topics) {
-        if (nullptr != _obj) {
-          _obj->addTopic(str);
-        }
-        if (_topics_remaining > 0) {
-          _topics_remaining--;
-        }
-        if (_topics_remaining <= 0) {
-          _in_topics = false;
-        }
+        if (nullptr != _obj) {         _obj->addTopic(str);  }
+        if (_topics_remaining > 0) {   _topics_remaining--;  }
+        if (_topics_remaining <= 0) {  _in_topics = false;   }
         return;
       }
 
@@ -460,18 +464,10 @@ MQTTBrokerDef* MQTTBrokerDef::deserialize(StringBuilder* in) {
           _obj = new MQTTBrokerDef();
         }
 
-        if (0 == strcmp(_last_key, "label")) {
-          _obj->label(str);
-        }
-        else if (0 == strcmp(_last_key, "uri")) {
-          _obj->uri(str);
-        }
-        else if (0 == strcmp(_last_key, "user")) {
-          _obj->user(str);
-        }
-        else if (0 == strcmp(_last_key, "passwd")) {
-          _obj->passwd(str);
-        }
+        if (0 == strcmp(_last_key, "label")) {        _obj->label(str);    }
+        else if (0 == strcmp(_last_key, "uri")) {     _obj->uri(str);      }
+        else if (0 == strcmp(_last_key, "user")) {    _obj->user(str);     }
+        else if (0 == strcmp(_last_key, "passwd")) {  _obj->passwd(str);   }
         // "topics" is handled by on_array().
 
         _expecting_key = true;

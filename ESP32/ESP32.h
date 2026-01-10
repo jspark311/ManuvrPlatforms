@@ -30,6 +30,7 @@ limitations under the License.
 #include "FiniteStateMachine.h"
 #include "FlagContainer.h"
 #include "BusQueue/UARTAdapter.h"
+#include "M2MLink/MQTTWrapper.h"
 
 #if defined(CONFIG_C3P_STORAGE)
   #include "Storage/Storage.h"
@@ -361,6 +362,10 @@ class ESP32Radio : public StateMachine<ESP32RadioState>, public C3PPollable {
 * TODO: Once it is useful on another platform, some of these classes might be
 *   moved to C3P.
 *******************************************************************************/
+#if !defined(MQTT_MAX_PACKET_SIZE)
+  #define MQTT_MAX_PACKET_SIZE 2048
+#endif
+
 
 #define MQTT_FLAG_ESP_MQTT_INIT        0x00000001  //
 #define MQTT_FLAG_EVENT_LOOP_CREATED   0x00000002  //
@@ -455,6 +460,7 @@ class MQTTClient : public StateMachine<MQTTCliState>, public C3PPollable {
     int8_t init();
     PollResult poll();
 
+    int publish(MQTTMessage*);
     void printDebug(StringBuilder*);
     int console_handler_mqtt_client(StringBuilder*, StringBuilder*);
 
@@ -468,10 +474,20 @@ class MQTTClient : public StateMachine<MQTTCliState>, public C3PPollable {
     void setRadio(ESP32Radio* r) { _radio = r; };
 
 
+
   protected:
+    /*
+    * Handles an incoming message. If (return value != nullptr), publish reply
+    *   to that topic using the mutated msg parameter.
+    */
+    virtual const char* _handle_mqtt_message(MQTTMessage* msg) { return nullptr; }
+
+
+  private:
     FlagContainer32  _flags;                   // Aggregate boolean class state.
     uint8_t _log_verbosity = LOG_LEV_DEBUG;
     MQTTBrokerDef   _current_broker;
+    StringBuilder   _rx_asm;   // RX reassembly buffer
     ESP32Radio*     _radio = nullptr;
     esp_mqtt_client_handle_t  _client_handle = nullptr;
 

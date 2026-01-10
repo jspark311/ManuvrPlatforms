@@ -1020,9 +1020,7 @@ int8_t ESP32Platform::init() {
   //  }
   //}
 
-  #if defined(MANUVR_SUPPORT_TCPSOCKET) || defined(MANUVR_SUPPORT_UDPSOCKET)
-    tcpip_adapter_init();
-  #endif
+  ESP32Radio::getInstance();
 
   // #if defined (__BUILD_HAS_FREERTOS)
   // #else
