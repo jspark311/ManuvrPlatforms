@@ -5,10 +5,9 @@ Date:   2025.12.27
 
 This file contains a reusable wrapper for the ESP32's MQTT features.
 
-Refactor notes:
-  - MQTT does NOT register for IP stack events.
-  - Network readiness is queried from ESP32Radio via injected pointer.
-  - MQTT connection truth is mailbox-driven from ESP-MQTT event handler.
+MQTT does NOT register for IP stack events.
+Network readiness is queried from ESP32Radio via injected pointer.
+MQTT connection truth is mailbox-driven from ESP-MQTT event handler.
 */
 
 #include "../ESP32.h"
@@ -35,8 +34,6 @@ Refactor notes:
 *
 * Static members and initializers should be located here.
 *******************************************************************************/
-MQTTClient* MQTT_CLIENT_INSTANCE = nullptr;
-
 
 const EnumDef<MQTTCliState> _STATE_LIST[] = {
   { MQTTCliState::UNINIT,        "UNINIT"},
@@ -63,7 +60,7 @@ void mqtt_event_handler(void* handler_args, esp_event_base_t base, int32_t event
 
   esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t) event_data;
   esp_mqtt_client_handle_t client = event->client;
-  MQTTClient* self = (MQTTClient*) handler_args;
+  MQTTClientESP32* self = (MQTTClientESP32*) handler_args;
 
   int msg_id;
 
@@ -74,15 +71,6 @@ void mqtt_event_handler(void* handler_args, esp_event_base_t base, int32_t event
         self->_mb_set_mqtt_connected(true);
         self->_mb_set_mqtt_disconnected(false);
       }
-      // // Demo traffic as before.
-      // msg_id = esp_mqtt_client_publish(client, "/topic/qos1", "data_3", 0, 1, 0);
-      // ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
-      // msg_id = esp_mqtt_client_subscribe(client, "/topic/qos0", 0);
-      // ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
-      // msg_id = esp_mqtt_client_subscribe(client, "/topic/qos1", 1);
-      // ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
-      // msg_id = esp_mqtt_client_unsubscribe(client, "/topic/qos1");
-      // ESP_LOGI(TAG, "sent unsubscribe successful, msg_id=%d", msg_id);
       break;
 
     case MQTT_EVENT_DISCONNECTED:
@@ -95,8 +83,6 @@ void mqtt_event_handler(void* handler_args, esp_event_base_t base, int32_t event
 
     case MQTT_EVENT_SUBSCRIBED:
       ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
-      msg_id = esp_mqtt_client_publish(client, "/topic/qos0", "data", 0, 0, 0);
-      ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
       break;
 
     case MQTT_EVENT_UNSUBSCRIBED:
@@ -175,16 +161,11 @@ void mqtt_event_handler(void* handler_args, esp_event_base_t base, int32_t event
 
 
 /*******************************************************************************
-* MQTTBrokerDef
+* MQTTBrokerDefESP32
 *******************************************************************************/
 
-MQTTBrokerDef::MQTTBrokerDef(const char* LABEL) {
-  label(LABEL);
-  memset(_uri,   0, sizeof(_uri));
-  memset(_usr,   0, sizeof(_usr));
-  memset(_pass,  0, sizeof(_pass));
-  _autoconnect = true;
-  _cli_conf = {
+MQTTBrokerDefESP32::MQTTBrokerDefESP32(const char* LABEL) : MQTTBrokerDef(LABEL) {
+  cli_conf = {
     .broker = {
       .address = {
         .uri = _uri,
@@ -217,368 +198,17 @@ MQTTBrokerDef::MQTTBrokerDef(const char* LABEL) {
 }
 
 
-bool MQTTBrokerDef::isValid() {
-  const char* LABEL = label();   // These can never be nullptr. Only zero length.
-  const char* URI   = uri();     // These can never be nullptr. Only zero length.
-  if ((0 == strlen(LABEL)) || (0 == strlen(URI))) {  return false;  }
-
-  // "Sensible URI": require mqtt:// or mqtts:// prefix.
-  if (0 == strncmp(URI, "mqtt://", 7))  return true;
-  if (0 == strncmp(URI, "mqtts://", 8)) return true;
-  if (0 == strncmp(URI, "ws://", 5))  return true;
-  if (0 == strncmp(URI, "wss://", 6)) return true;
-
-  return false;
-}
-
-
-void MQTTBrokerDef::label(const char* LABEL) {
-  const uint32_t FIELD_SIZE = sizeof(_label);
-  memset(_label, 0, FIELD_SIZE);
-  if (nullptr != LABEL) {
-    memcpy(_label, LABEL, strict_min((uint32_t) strlen(LABEL), FIELD_SIZE-1));
-  }
-}
-
-
-void MQTTBrokerDef::uri(const char* URI) {
-  const uint32_t FIELD_SIZE = sizeof(_uri);
-  memset(_uri, 0, FIELD_SIZE);
-  if (nullptr != URI) {
-    memcpy(_uri, URI, strict_min((uint32_t) strlen(URI), FIELD_SIZE-1));
-  }
-}
-
-
-void MQTTBrokerDef::user(const char* USER) {
-  const uint32_t FIELD_SIZE = sizeof(_usr);
-  memset(_usr, 0, FIELD_SIZE);
-  if (nullptr != USER) {
-    memcpy(_usr, USER, strict_min((uint32_t) strlen(USER), FIELD_SIZE-1));
-  }
-}
-
-
-void MQTTBrokerDef::passwd(const char* PASSWD) {
-  const uint32_t FIELD_SIZE = sizeof(_pass);
-  memset(_pass, 0, FIELD_SIZE);
-  if (nullptr != PASSWD) {
-    memcpy(_pass, PASSWD, strict_min((uint32_t) strlen(PASSWD), FIELD_SIZE-1));
-  }
-}
-
-uint32_t MQTTBrokerDef::topicCount() {  return _subs.count();  }
-int MQTTBrokerDef::clearTopics() {      _subs.clear();   return 0;   }
-
-
-char* MQTTBrokerDef::topic(const int IDX) {
-  if (_subs.count() > IDX) {
-    return _subs.position_trimmed(IDX);
-  }
-  return nullptr;
-}
-
-
-/**
-* Sanitizes and adds a topic string to the broker.
-* - rejects nullptr, empty, or pure whitespace after trim
-* - de-dupes against existing topics
-* Returns >=0 on success: the index of the topic in the list.
-*/
-int MQTTBrokerDef::addTopic(const char* TOPIC_IN) {
-  int ret = -1;
-  if (nullptr != TOPIC_IN) {
-    ret--;
-    StringBuilder tmp(TOPIC_IN);
-    tmp.trim();  // kill leading/trailing whitespace
-    if (0 < tmp.length()) {
-      ret--;
-      const int EXISTING_COUNT = _subs.count();
-      for (int i = 0; i < EXISTING_COUNT; i++) {
-        char* t = _subs.position_trimmed(i);
-        if (nullptr != t) {
-          // MQTT topics are case-sensitive, so strcmp is correct.
-          if (0 == strcmp(t, (const char*) tmp.string())) {
-            return i;  // Already present: treat as success with no mutation.
-          }
-        }
-      }
-      // If we didn't bail, we didn't have the topic in the list. Add it.
-      _subs.concat((const char*) tmp.string());
-      ret = EXISTING_COUNT;
-    }
-  }
-  return ret;
-}
-
-
-
-
-int MQTTBrokerDef::serialize(StringBuilder* out, const TCode FORMAT) {
-  int ret = -1;
-  if (!isValid()) {  return ret;  }
-
-  switch (FORMAT) {
-    case TCode::STR:
-      printDebug(out);
-      ret = 0;
-      break;
-
-    case TCode::BINARY:  // Unimplemented. Do not implement.
-      break;
-
-    #if defined(__BUILD_HAS_CBOR)
-    case TCode::CBOR:
-      {
-        cbor::output_stringbuilder output(out);
-        cbor::encoder encoder(output);
-
-        const uint8_t KEY_COUNT = (topicCount() > 0) ? 6:5;   // Five baselines values to be encoded.
-
-        // Encode this into IANA space as a vendor code.
-        encoder.write_tag(C3P_CBOR_VENDOR_CODE | TcodeToInt(FORMAT));
-
-        // {"MQTTBrokerDef": {"label":..,"uri":..,"user":..,"passwd":..,"autoconnect":..,"topics":[..]}}
-        encoder.write_map(1);
-        encoder.write_string("MQTTBrokerDef"); encoder.write_map(KEY_COUNT);
-          encoder.write_string("label");       encoder.write_string(label());
-          encoder.write_string("uri");         encoder.write_string(uri());
-          encoder.write_string("user");        encoder.write_string(user());
-          encoder.write_string("passwd");      encoder.write_string(passwd());
-          encoder.write_string("autoconnect"); encoder.write_bool(autoconnect());
-          if (topicCount() > 0) {
-            encoder.write_string("topics");
-            const int TCOUNT = _subs.count();
-            encoder.write_array(TCOUNT);
-            for (uint32_t t_id = 0; t_id < TCOUNT; t_id++) {
-              char* t = _subs.position_trimmed(t_id);
-              encoder.write_string((nullptr == t) ? "" : t);
-            }
-          }
-        ret = 0;
-      }
-      break;
-    #endif  // __BUILD_HAS_CBOR
-
-    default:
-      break;
-  }
-  return ret;
-}
-
-
-
-MQTTBrokerDef* MQTTBrokerDef::deserialize(StringBuilder* in) {
-  MQTTBrokerDef* ret = nullptr;
-  #if defined(__BUILD_HAS_CBOR)
-  if ((nullptr == in) || (in->length() <= 0)) {
-    return ret;
-  }
-
-  class MQTTBrokerDefListener : public cbor::listener {
-   public:
-    MQTTBrokerDefListener() {}
-    ~MQTTBrokerDefListener() {}
-
-    MQTTBrokerDef* result() { return _obj; }
-    bool failed() const { return _failed; }
-
-    // Integer callbacks (unused)
-    void on_integer(int8_t) override {}
-    void on_integer(int16_t) override {}
-    void on_integer(int32_t) override {}
-    void on_integer(int64_t) override {}
-    void on_integer(uint8_t) override {}
-    void on_integer(uint16_t) override {}
-    void on_integer(uint32_t) override {}
-    void on_integer(uint64_t) override {}
-    void on_float32(float) override {}
-    void on_double(double) override {}
-    void on_bytes(uint8_t*, int) override {}
-
-    void on_tag(unsigned int) override {
-      // Tag is optional for our purposes. We accept and ignore.
-    }
-
-    void on_array(int size) override {
-      if (_failed) return;
-      if (_in_inner_map && !_expecting_key && (0 == strcmp(_last_key, "topics"))) {
-        if (nullptr == _obj) {
-          _obj = new MQTTBrokerDef();
-        }
-        _obj->clearTopics();
-        _in_topics = true;
-        _topics_remaining = size;
-        _expecting_key = true;   // Value consumed by the array container.
-      }
-    }
-
-    void on_map(int) override {
-      if (_failed) return;
-      if (!_in_outer_map) {
-        _in_outer_map = true;
-        _expecting_key = true;
-        return;
-      }
-      if (_in_outer_map && !_in_inner_map) {
-        // Outer map value for key "MQTTBrokerDef" is the inner map.
-        if (!_expecting_key && (0 == strcmp(_last_key, "MQTTBrokerDef"))) {
-          _in_inner_map = true;
-          _expecting_key = true;
-          if (nullptr == _obj) {
-            _obj = new MQTTBrokerDef();
-          }
-          return;
-        }
-      }
-      // Deeper nesting not expected; ignore.
-    }
-
-    void on_string(char* str) override {
-      if (_failed || (nullptr == str)) return;
-
-      if (_in_topics) {
-        if (nullptr != _obj) {         _obj->addTopic(str);  }
-        if (_topics_remaining > 0) {   _topics_remaining--;  }
-        if (_topics_remaining <= 0) {  _in_topics = false;   }
-        return;
-      }
-
-      if (_in_outer_map && !_in_inner_map) {
-        // Expecting the single outer key "MQTTBrokerDef".
-        if (_expecting_key) {
-          _copy_key(str);
-          _expecting_key = false;  // Next should be the inner map.
-        }
-        return;
-      }
-
-      if (_in_inner_map) {
-        if (_expecting_key) {
-          _copy_key(str);
-          _expecting_key = false;
-          return;
-        }
-
-        if (nullptr == _obj) {
-          _obj = new MQTTBrokerDef();
-        }
-
-        if (0 == strcmp(_last_key, "label")) {        _obj->label(str);    }
-        else if (0 == strcmp(_last_key, "uri")) {     _obj->uri(str);      }
-        else if (0 == strcmp(_last_key, "user")) {    _obj->user(str);     }
-        else if (0 == strcmp(_last_key, "passwd")) {  _obj->passwd(str);   }
-        // "topics" is handled by on_array().
-
-        _expecting_key = true;
-      }
-    }
-
-    void on_bool(bool v) override {
-      if (_failed) return;
-      if (_in_inner_map && !_expecting_key && (0 == strcmp(_last_key, "autoconnect"))) {
-        if (nullptr == _obj) {
-          _obj = new MQTTBrokerDef();
-        }
-        _obj->autoconnect(v);
-        _expecting_key = true;
-      }
-    }
-
-    void on_null() override {}
-    void on_undefined() override {}
-    void on_special(unsigned int) override {}
-
-    void on_error(const char*) override { _failed = true; }
-    void on_extra_integer(uint64_t, int) override {}
-    void on_extra_tag(uint64_t) override {}
-    void on_extra_special(uint64_t) override {}
-
-   private:
-    MQTTBrokerDef* _obj = nullptr;
-    bool _failed = false;
-    bool _in_outer_map = false;
-    bool _in_inner_map = false;
-    bool _expecting_key = true;
-
-    bool _in_topics = false;
-    int _topics_remaining = 0;
-
-    char _last_key[16] = {0};
-    void _copy_key(const char* k) {
-      memset(_last_key, 0, sizeof(_last_key));
-      if (nullptr != k) {
-        const uint32_t cpy = strict_min((uint32_t) strlen(k), (uint32_t) (sizeof(_last_key) - 1));
-        memcpy(_last_key, k, cpy);
-      }
-    }
-  };
-
-  // Consume input as we decode (as requested).
-  cbor::input_stringbuilder input(in, true, false);
-  MQTTBrokerDefListener listener;
-  cbor::decoder decoder(input, listener);
-  decoder.run();
-
-  if (listener.failed() || decoder.failed()) {
-    MQTTBrokerDef* o = listener.result();
-    if (nullptr != o) {
-      delete o;
-    }
-    return nullptr;
-  }
-  return listener.result();
-  #else
-  return nullptr;
-  #endif  // __BUILD_HAS_CBOR
-}
-
-
-
-
-void MQTTBrokerDef::printDebug(StringBuilder* output) {
-  if (isValid()) {
-    const char* USER   = user();
-    const char* PASSWD = passwd();
-    const char* safe_u_str = ((0 == strlen(USER)) ? "[UNSET]" : USER);
-    const char* safe_p_str = ((0 == strlen(PASSWD)) ? "[UNSET]" : PASSWD);
-    output->concatf("\t[%s]\t%s:%s@%s\n", label(), safe_u_str, safe_p_str, uri());
-  }
-  else {
-    output->concat("Broker is invalid.\n");
-  }
-}
-
-
-
-void MQTTBrokerDef::printTopicList(StringBuilder* output) {
-  const int TCOUNT = _subs.count();
-  if (TCOUNT > 0) {
-    StringBuilder tmp("\tTopics:\n");
-    for (int i = 0; i < TCOUNT; i++) {
-      char* t = _subs.position_trimmed(i);
-      if ((nullptr != t) && (0 < strlen(t))) {
-        tmp.concatf("\t\t[%d] %s\n", i, t);
-      }
-    }
-    tmp.string();
-    output->concatHandoff(&tmp);
-  }
-}
-
-
 
 /*******************************************************************************
-* MQTTClient
+* MQTTClientESP32
 *******************************************************************************/
 
 /*
 * Constructor
 */
-MQTTClient::MQTTClient() :
-  StateMachine<MQTTCliState>("MQTTClient-FSM", &_FSM_STATES, MQTTCliState::UNINIT, 8)
+MQTTClientESP32::MQTTClientESP32() :
+  StateMachine<MQTTCliState>("MQTTClientESP32-FSM", &_FSM_STATES, MQTTCliState::UNINIT, 8)
 {
-  MQTT_CLIENT_INSTANCE = this;
   _radio = nullptr;
   _client_handle = nullptr;
 
@@ -603,10 +233,10 @@ MQTTClient::MQTTClient() :
 /*
 * Destructor
 */
-MQTTClient::~MQTTClient() {}
+MQTTClientESP32::~MQTTClientESP32() {}
 
 
-int8_t MQTTClient::init() {
+int8_t MQTTClientESP32::init() {
   int8_t ret = 0;
   // Do not imply "connect now". We idle in DISCONNECTED and let policy drive.
   _fsm_set_route(2, MQTTCliState::INIT, MQTTCliState::DISCONNECTED);
@@ -614,18 +244,23 @@ int8_t MQTTClient::init() {
 }
 
 
+bool MQTTClientESP32::setBroker(MQTTBrokerDef* n_broker) {
+  return _current_broker.set(n_broker);
+}
+
+
 /*******************************************************************************
 * Mailbox helpers (event-loop context)
 *******************************************************************************/
-void MQTTClient::_mb_set_mqtt_connected(const bool v) { _mb_mqtt_connected = v; }
-void MQTTClient::_mb_set_mqtt_disconnected(const bool v) { _mb_mqtt_disconnected = v; }
+void MQTTClientESP32::_mb_set_mqtt_connected(const bool v) { _mb_mqtt_connected = v; }
+void MQTTClientESP32::_mb_set_mqtt_disconnected(const bool v) { _mb_mqtt_disconnected = v; }
 
 
 /**
 * Called when any broker property changes.
 * Clears init flags and plans a regression to INIT (disconnecting first if needed).
 */
-void MQTTClient::_broker_changed_reinit_plan() {
+void MQTTClientESP32::_broker_changed_reinit_plan() {
   // Clear things that are specific to the current client handle.
   _flags.clear(MQTT_FLAG_ESP_MQTT_INIT | MQTT_FLAG_EVENT_REGISTERED);
 
@@ -648,194 +283,58 @@ void MQTTClient::_broker_changed_reinit_plan() {
 
 
 
-/*******************************************************************************
-* MQTT console support
-*******************************************************************************/
-
-void MQTTClient::printDebug(StringBuilder* output) {
-  StringBuilder tmp;
-  StringBuilder prod_str("MQTTClient");
-  prod_str.concatf(" [%sinitialized]", (initialized() ? "" : "un"));
-  StringBuilder::styleHeader2(&tmp, (const char*) prod_str.string());
-  printFSM(&tmp);
-
-  tmp.concatf("\t Client autoconnect: %c\n", (autoconnect() ? 'y' : 'n'));
-  tmp.concatf("\t Broker autoconnect: %c\n", (_current_broker.autoconnect() ? 'y' : 'n'));
-  tmp.concatf("\t Broker valid:       %c\n", (_current_broker.isValid() ? 'y' : 'n'));
-  tmp.concatf("\t Subs complete:      %c\n", (_flags.value(MQTT_FLAG_SUBS_COMPLETE) ? 'y' : 'n'));
-  tmp.concatf("\t Subs cursor:        %d\n", _sub_cursor);
-  tmp.concatf("\t Backoff:            %u ms (max %u)\n", _reconnect_backoff_ms, _reconnect_backoff_ms_max);
-
-  if (initialized()) {
-    if (connected()) {
-      tmp.concat("Connected to broker:\n");
-      _current_broker.printDebug(&tmp);
-    }
-    if (nullptr != _radio) {
-      tmp.concatf("\t Radio link:    %c\n", (_radio->linkUp() ? 'y' : 'n'));
-      tmp.concatf("\t Radio hasIP:   %c\n", (_radio->hasIP() ? 'y' : 'n'));
-      if (_radio->hasIP()) {
-        const uint32_t ip = _radio->ip4();
-        tmp.concatf("\t Radio IPv4:    %u.%u.%u.%u\n",
-          (ip & 0xFF), ((ip >> 8) & 0xFF), ((ip >> 16) & 0xFF), ((ip >> 24) & 0xFF));
-      }
-    }
-    else {
-      tmp.concat("\t Radio:         [UNBOUND]\n");
+/**
+*
+* @return 0 on success, or negative on failure
+*/
+int MQTTClientESP32::publish(MQTTMessage* msg) {
+  int ret = -1;
+  if (connected()) {
+    const uint8_t QOS = 0;
+    // Use the non-blocking outbox API.
+    // TODO: Even though we don't get a msg_id back.
+    //msg_id = esp_mqtt_client_enqueue(_client_handle, msg->topic, msg->data.string(), msg->data.length(), msg->qos, (msg->retain ? 1:0), true);
+    //if (msg_id) {}
+    if (ESP_OK == esp_mqtt_client_enqueue(_client_handle, msg->topic, (const char*) msg->data.string(), msg->data.length(), msg->qos, (msg->retain ? 1:0), true)) {
+      msg->msg_id = 0;
+      ret = 0;
     }
   }
-  else {
-    tmp.concatf("\t ESP_MQTT_INIT:      %c\n", (_flags.value(MQTT_FLAG_ESP_MQTT_INIT) ? 'y' : 'n'));
-    tmp.concatf("\t EVENT_REGISTERED:   %c\n", (_flags.value(MQTT_FLAG_EVENT_REGISTERED) ? 'y' : 'n'));
-    tmp.concatf("\t EVENT_LOOP_CREATED: %c\n", (_flags.value(MQTT_FLAG_EVENT_LOOP_CREATED) ? 'y' : 'n'));
-  }
-
-  tmp.string();
-  output->concatHandoff(&tmp);
-}
-
-
-
-int MQTTClient::console_handler_mqtt_client(StringBuilder* txt_ret, StringBuilder* args) {
-  int ret = 0;
-  char* cmd = args->position_trimmed(0);
-
-  if (0 == StringBuilder::strcasecmp(cmd, "topic")) {
-    bool print_usage = false;
-    if (1 < args->count()) {
-      char* subcmd = args->position_trimmed(1);
-      if (0 == StringBuilder::strcasecmp(subcmd, "add")) {
-        if (2 <= args->count()) {
-          args->drop_position(0);  // Drop the string "topic".
-          args->drop_position(0);  // Drop the string "add".
-          while (0 < args->count()) {  // While we have any left over...
-            char* t = args->position_trimmed(0);
-            int idx = _current_broker.addTopic(t);
-            if (idx >= 0) {
-              txt_ret->concatf("Topic [%s] added at index %d.\n", t, idx);
-            }
-            else {
-              txt_ret->concatf("Topic [%s] rejected.\n", t);
-            }
-            args->drop_position(0);  // Drop the just-handled topic argument.
-          }
-        }
-        else {
-          txt_ret->concat("Usage: topic add <topic> [topic] [topic] ...\n");
-        }
-      }
-      else if (0 == StringBuilder::strcasecmp(subcmd, "list")) {
-        _current_broker.printTopicList(txt_ret);
-      }
-      else if (0 == StringBuilder::strcasecmp(subcmd, "clear")) {
-        _current_broker.clearTopics();
-        txt_ret->concat("Topics cleared.\n");
-      }
-      else {
-        print_usage = true;
-      }
-    }
-    else {
-      print_usage = true;
-    }
-    if (print_usage) {  txt_ret->concat("Usage: topic [add|list|clear] ...\n"); }
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "broker")) {
-    if (5 == args->count()) {
-      //m broker home mqtt://192.168.0.3 dgmj-mqtt dgmj-mqtt
-      char* lab  = args->position_trimmed(1);
-      char* uri  = args->position_trimmed(2);
-      char* user = args->position_trimmed(3);
-      char* pass = args->position_trimmed(4);
-
-      _current_broker.label(lab);
-      _current_broker.uri(uri);
-      _current_broker.user(user);
-      _current_broker.passwd(pass);
-
-      _broker_changed_reinit_plan();
-      txt_ret->concat("Broker updated.\n");
-      _current_broker.printDebug(txt_ret);
-    }
-    else if (1 == args->count()) {
-      _current_broker.printDebug(txt_ret);
-    }
-    else {
-      txt_ret->concatf("Usage: %s [<label> <uri> <user> <pass>].\n", cmd);
-    }
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "auto")) {
-    if (2 == args->count()) {
-      autoconnect(0 != args->position_as_int(1));
-    }
-    txt_ret->concatf("MQTTClient autoconnect: %c\n", (autoconnect() ? 'y' : 'n'));
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "brokerauto")) {
-    if (2 == args->count()) {
-      _current_broker.autoconnect(0 != args->position_as_int(1));
-    }
-    txt_ret->concatf("Broker autoconnect: %c\n", (_current_broker.autoconnect() ? 'y' : 'n'));
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "backoff")) {
-    txt_ret->concatf("Backoff: %u ms (max %u)\n", _reconnect_backoff_ms, _reconnect_backoff_ms_max);
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "max_backoff")) {
-    if (2 == args->count()) {
-      uint32_t v = (uint32_t) args->position_as_int(1);
-      // Clamp to something sane: at least 1000ms and not 0.
-      _reconnect_backoff_ms_max = strict_max(v, (uint32_t) 1000);
-      if (_reconnect_backoff_ms > _reconnect_backoff_ms_max) {
-        _reconnect_backoff_ms = _reconnect_backoff_ms_max;
-      }
-    }
-    txt_ret->concatf("Max backoff: %u ms\n", _reconnect_backoff_ms_max);
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "con")) {
-    // User intent: re-enable greedy connect.
-    autoconnect(true);
-    if (!connected()) {
-      ret = _fsm_append_route(2, MQTTCliState::CONNECTING, MQTTCliState::CONNECTED);
-    }
-    else {
-      txt_ret->concat("MQTTClient is already connected.\n");
-    }
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "discon")) {
-    // User intent: override greedy connect (stay parked).
-    autoconnect(false);
-    if (connected()) {
-      ret = _fsm_append_route(2, MQTTCliState::DISCONNECTING, MQTTCliState::DISCONNECTED);
-    }
-    else {
-      // Ensure we are parked and stable.
-      ret = _fsm_prepend_state(MQTTCliState::DISCONNECTED);
-    }
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "pack")) {
-    StringBuilder cbor_str;
-    _current_broker.serialize(&cbor_str, TCode::CBOR);
-    cbor_str.printDebug(txt_ret);
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "parse")) {
-  }
-  else if (0 == StringBuilder::strcasecmp(cmd, "fsm")) {
-    args->drop_position(0);
-    ret = fsm_console_handler(txt_ret, args);  // Shunt into the FSM console handler.
-  }
-  else {
-    printDebug(txt_ret);
-  }
-
   return ret;
 }
 
+
+/**
+*
+* @return topic_idx on success, or negative on failure
+*/
+int MQTTClientESP32::subscribe(const char* TOPIC_STR, const uint8_t QOS) {
+  int msg_id = -1;
+  if (connected()) {
+    msg_id = esp_mqtt_client_subscribe_single(_client_handle, TOPIC_STR, QOS);
+  }
+  return msg_id;
+}
+
+
+/**
+*
+* @return topic_idx on success, or negative on failure
+*/
+int MQTTClientESP32::unsubscribe(const char* TOPIC_STR) {
+  int msg_id = -1;
+  if (connected()) {
+    msg_id = esp_mqtt_client_unsubscribe(_client_handle, TOPIC_STR);
+  }
+  return msg_id;
+}
 
 
 /**
 *
 * @return PollResult
 */
-FAST_FUNC PollResult MQTTClient::poll() {
+FAST_FUNC PollResult MQTTClientESP32::poll() {
   // Latch mailboxes (event-loop -> poll/FSM context).
   if (_mb_mqtt_connected) {
     _mqtt_connected_latched = true;
@@ -862,6 +361,7 @@ FAST_FUNC PollResult MQTTClient::poll() {
 }
 
 
+
 /**
 * Called in idle time by the firmware to prod the driver's state machine forward.
 *
@@ -869,7 +369,7 @@ FAST_FUNC PollResult MQTTClient::poll() {
 *          0 on no action
 *         -1 on error
 */
-FAST_FUNC int8_t MQTTClient::_fsm_poll() {
+FAST_FUNC int8_t MQTTClientESP32::_fsm_poll() {
   int8_t ret = 0;
   bool fsm_advance = false;
 
@@ -948,7 +448,7 @@ FAST_FUNC int8_t MQTTClient::_fsm_poll() {
 *
 * @return 0 on success, -1 otherwise.
 */
-FAST_FUNC int8_t MQTTClient::_fsm_set_position(MQTTCliState new_state) {
+FAST_FUNC int8_t MQTTClientESP32::_fsm_set_position(MQTTCliState new_state) {
   int8_t ret = -1;
   const MQTTCliState CURRENT_STATE = currentState();
   if (_fsm_is_waiting()) return ret;
@@ -1014,6 +514,12 @@ FAST_FUNC int8_t MQTTClient::_fsm_set_position(MQTTCliState new_state) {
       _connect_attempt_active = false;
       _reconnect_backoff_ms = 5000;
       _mqtt_disconnected_latched = false;
+      {
+        StringBuilder* subs = _current_broker.subs();
+        for (int i = 0; i < subs->count(); i++) {
+          subscribe(subs->position(i), 0);
+        }
+      }
       state_entry_success = true;
       break;
 
@@ -1059,8 +565,8 @@ FAST_FUNC int8_t MQTTClient::_fsm_set_position(MQTTCliState new_state) {
 
   if (state_entry_success) {
     if (_log_verbosity >= LOG_LEV_NOTICE) {
-      c3p_log(LOG_LEV_NOTICE, "MQTTClient::_fsm_set_position",
-        "MQTTClient State %s ---> %s",
+      c3p_log(LOG_LEV_NOTICE, "MQTTClientESP32::_fsm_set_position",
+        "MQTTClientESP32 State %s ---> %s",
         _FSM_STATES.enumStr(CURRENT_STATE), _FSM_STATES.enumStr(new_state)
       );
     }
@@ -1074,7 +580,151 @@ FAST_FUNC int8_t MQTTClient::_fsm_set_position(MQTTCliState new_state) {
 /**
 * Put the driver into a FAULT state.
 */
-void MQTTClient::_set_fault(const char* msg) {
-  if (_log_verbosity >= LOG_LEV_WARN) c3p_log(LOG_LEV_WARN, "MQTTClient::_set_fault", "MQTTClient fault: %s", msg);
+void MQTTClientESP32::_set_fault(const char* msg) {
+  if (_log_verbosity >= LOG_LEV_WARN) c3p_log(LOG_LEV_WARN, "MQTTClientESP32::_set_fault", "MQTTClientESP32 fault: %s", msg);
   _fsm_mark_current_state(MQTTCliState::FAULT);
+}
+
+
+/*******************************************************************************
+* MQTT console support
+*******************************************************************************/
+
+void MQTTClientESP32::printDebug(StringBuilder* output) {
+  StringBuilder tmp;
+  StringBuilder prod_str("MQTTClientESP32");
+  prod_str.concatf(" [%sinitialized]", (initialized() ? "" : "un"));
+  StringBuilder::styleHeader2(&tmp, (const char*) prod_str.string());
+  printFSM(&tmp);
+
+  tmp.concatf("\t Client autoconnect: %c\n", (autoconnect() ? 'y' : 'n'));
+  tmp.concatf("\t Broker autoconnect: %c\n", (_current_broker.autoconnect() ? 'y' : 'n'));
+  tmp.concatf("\t Broker valid:       %c\n", (_current_broker.isValid() ? 'y' : 'n'));
+  tmp.concatf("\t Subs complete:      %c\n", (_flags.value(MQTT_FLAG_SUBS_COMPLETE) ? 'y' : 'n'));
+  tmp.concatf("\t Subs cursor:        %d\n", _sub_cursor);
+  tmp.concatf("\t Backoff:            %u ms (max %u)\n", _reconnect_backoff_ms, _reconnect_backoff_ms_max);
+
+  if (initialized()) {
+    if (connected()) {
+      tmp.concat("Connected to broker:\n");
+      _current_broker.printDebug(&tmp);
+    }
+    if (nullptr != _radio) {
+      tmp.concatf("\t Radio link:    %c\n", (_radio->linkUp() ? 'y' : 'n'));
+      tmp.concatf("\t Radio hasIP:   %c\n", (_radio->hasIP() ? 'y' : 'n'));
+      if (_radio->hasIP()) {
+        const uint32_t ip = _radio->ip4();
+        tmp.concatf("\t Radio IPv4:    %u.%u.%u.%u\n",
+          (ip & 0xFF), ((ip >> 8) & 0xFF), ((ip >> 16) & 0xFF), ((ip >> 24) & 0xFF));
+      }
+    }
+    else {
+      tmp.concat("\t Radio:         [UNBOUND]\n");
+    }
+  }
+  else {
+    tmp.concatf("\t ESP_MQTT_INIT:      %c\n", (_flags.value(MQTT_FLAG_ESP_MQTT_INIT) ? 'y' : 'n'));
+    tmp.concatf("\t EVENT_REGISTERED:   %c\n", (_flags.value(MQTT_FLAG_EVENT_REGISTERED) ? 'y' : 'n'));
+    tmp.concatf("\t EVENT_LOOP_CREATED: %c\n", (_flags.value(MQTT_FLAG_EVENT_LOOP_CREATED) ? 'y' : 'n'));
+  }
+
+  tmp.string();
+  output->concatHandoff(&tmp);
+}
+
+
+
+int MQTTClientESP32::console_handler_mqtt_client(StringBuilder* txt_ret, StringBuilder* args) {
+  int ret = 0;
+  char* cmd = args->position_trimmed(0);
+
+  if (0 == StringBuilder::strcasecmp(cmd, "sub")) {
+    bool print_usage = false;
+    if (1 < args->count()) {
+      char* topic = args->position_trimmed(1);
+      uint8_t qos = ((uint8_t) args->position_as_int(2)) & 3;
+      txt_ret->concatf("subscribe(%s, %s) returned %d.\n", topic, qos, subscribe(topic, qos));
+    }
+    else {
+      print_usage = true;
+    }
+    if (print_usage) {  txt_ret->concatf("Usage: %s <topic [qos]> ...\n", cmd); }
+  }
+  if (0 == StringBuilder::strcasecmp(cmd, "unsub")) {
+    bool print_usage = false;
+    if (1 < args->count()) {
+      char* topic = args->position_trimmed(1);
+      txt_ret->concatf("unsubscribe(%s) returned %d.\n", topic, unsubscribe(topic));
+    }
+    else {
+      print_usage = true;
+    }
+    if (print_usage) {  txt_ret->concatf("Usage: %s <topic> ...\n", cmd); }
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "broker")) {
+    //m broker home mqtt://192.168.0.3 dgmj-mqtt dgmj-mqtt
+    args->drop_position(0);
+    ret = _current_broker.console_handler(txt_ret, args);  // Shunt into the BrokerDef console handler.
+    if (4 == args->count()) {
+      // If a full broker was defined, reconnect.
+      _broker_changed_reinit_plan();
+      txt_ret->concat("Attempting to connect to new broker...\n");
+    }
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "auto")) {
+    if (2 == args->count()) {
+      autoconnect(0 != args->position_as_int(1));
+    }
+    txt_ret->concatf("MQTTClientESP32 autoconnect: %c\n", (autoconnect() ? 'y' : 'n'));
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "brokerauto")) {
+    if (2 == args->count()) {
+      _current_broker.autoconnect(0 != args->position_as_int(1));
+    }
+    txt_ret->concatf("Broker autoconnect: %c\n", (_current_broker.autoconnect() ? 'y' : 'n'));
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "backoff")) {
+    txt_ret->concatf("Backoff: %u ms (max %u)\n", _reconnect_backoff_ms, _reconnect_backoff_ms_max);
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "max_backoff")) {
+    if (2 == args->count()) {
+      uint32_t v = (uint32_t) args->position_as_int(1);
+      // Clamp to something sane: at least 1000ms and not 0.
+      _reconnect_backoff_ms_max = strict_max(v, (uint32_t) 1000);
+      if (_reconnect_backoff_ms > _reconnect_backoff_ms_max) {
+        _reconnect_backoff_ms = _reconnect_backoff_ms_max;
+      }
+    }
+    txt_ret->concatf("Max backoff: %u ms\n", _reconnect_backoff_ms_max);
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "con")) {
+    // User intent: re-enable greedy connect.
+    autoconnect(true);
+    if (!connected()) {
+      ret = _fsm_append_route(2, MQTTCliState::CONNECTING, MQTTCliState::CONNECTED);
+    }
+    else {
+      txt_ret->concat("MQTTClientESP32 is already connected.\n");
+    }
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "discon")) {
+    // User intent: override greedy connect (stay parked).
+    autoconnect(false);
+    if (connected()) {
+      ret = _fsm_append_route(2, MQTTCliState::DISCONNECTING, MQTTCliState::DISCONNECTED);
+    }
+    else {
+      // Ensure we are parked and stable.
+      ret = _fsm_prepend_state(MQTTCliState::DISCONNECTED);
+    }
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "fsm")) {
+    args->drop_position(0);
+    ret = fsm_console_handler(txt_ret, args);  // Shunt into the FSM console handler.
+  }
+  else {
+    printDebug(txt_ret);
+  }
+
+  return ret;
 }

@@ -389,62 +389,18 @@ enum class MQTTCliState : uint8_t {
 };
 
 
-// TODO: Explicit shared subscription support?
-class MQTTBrokerDef {
+// Trivially extend the baseline wrapper for storage.
+class MQTTBrokerDefESP32 : public MQTTBrokerDef {
   public:
-    MQTTBrokerDef(const char* LABEL = nullptr);
-    ~MQTTBrokerDef() {};  // We allocate nothing, so: featureless destructor.
+    MQTTBrokerDefESP32(const char* LABEL = nullptr);
+    ~MQTTBrokerDefESP32() {};  // We allocate nothing, so: featureless destructor.
 
-    bool isValid();
-    int  serialize(StringBuilder* out, const TCode FORMAT);
-    void printDebug(StringBuilder*);
-    void printTopicList(StringBuilder*);
+    inline esp_mqtt_client_config_t* config() {  return &cli_conf;  };
 
-    /*
-    * Accessors to wrap ESP-IDF's gnarly conf struct.
-    * Side note: Version drift in this struct was the _worst_ thing about
-    *   getting MQTT running following a migration from IDF v4 to v5.
-    *   never-doing-that-again.png
-    */
-    void label(const char*);
-    void uri(const char*);
-    void user(const char*);
-    void passwd(const char*);
-
-    void autoconnect(bool v) {  _autoconnect = v;  };
-    bool autoconnect() {        return _autoconnect;  };
-
-    // Topic management (newline-delimited in _subs).
-    int      addTopic(const char* topic);   // Returns fragment index >=0 on success.
-    int      clearTopics();                // Returns 0.
-    uint32_t topicCount();
-    char*    topic(const int idx);         // Returns position_trimmed(idx) if idx valid.
-
-    const char* label() {   return _label;                                         };
-    const char* uri() {     return _cli_conf.broker.address.uri;                   };
-    const char* user() {    return _cli_conf.credentials.username;                 };
-    const char* passwd() {  return _cli_conf.credentials.authentication.password;  };
-
-    esp_mqtt_client_config_t* config() {  return &_cli_conf;  };
-
-    static MQTTBrokerDef* deserialize(StringBuilder*);
-
-
-  private:
     // Side note: Version drift in this struct was the _worst_ thing about
     //   getting MQTT running following a migration from IDF v4 to v5.
     //   never-doing-that-again.png
-    esp_mqtt_client_config_t _cli_conf;
-    char _label[16];
-    char _uri[48];
-    char _usr[16];
-    char _pass[32];
-    bool _autoconnect = true;
-
-    // Subscription topic list (newline-delimited tokens).
-    // TODO: This storage format is a stub to allow API to finish. Need a struct
-    //   with callbacks, or something.
-    StringBuilder _subs;
+    esp_mqtt_client_config_t cli_conf;
 };
 
 
@@ -452,41 +408,36 @@ class MQTTBrokerDef {
 * A class to handle the MQTT client.
 * Network status is queried from ESP32Radio (MQTT does not register IP events).
 */
-class MQTTClient : public StateMachine<MQTTCliState>, public C3PPollable {
+class MQTTClientESP32 : public StateMachine<MQTTCliState>, public C3PMQTTClient {
   public:
-    MQTTClient();
-    ~MQTTClient();
+    MQTTClientESP32();
+    ~MQTTClientESP32();
 
     int8_t init();
     PollResult poll();
 
-    int publish(MQTTMessage*);
+    bool setBroker(MQTTBrokerDef*);
+
     void printDebug(StringBuilder*);
     int console_handler_mqtt_client(StringBuilder*, StringBuilder*);
 
     /* Semantic breakouts for flags and states */
-    inline bool initialized() {         return (MQTT_CLI_FLAG_ALL_INIT_MASK == (MQTT_CLI_FLAG_ALL_INIT_MASK & _flags.raw));  };
-    inline bool connected() {           return (MQTTCliState::CONNECTED == currentState());  };
-    inline void autoconnect(bool v) {   _flags.set(MQTT_FLAG_AUTOCONNECT, v); };
-    inline bool autoconnect() {         return _flags.value(MQTT_FLAG_AUTOCONNECT); };
+    bool initialized() {         return (MQTT_CLI_FLAG_ALL_INIT_MASK == (MQTT_CLI_FLAG_ALL_INIT_MASK & _flags.raw));  };
+    bool connected() {           return (MQTTCliState::CONNECTED == currentState());  };
+    void autoconnect(bool v) {   _flags.set(MQTT_FLAG_AUTOCONNECT, v); };
+    bool autoconnect() {         return _flags.value(MQTT_FLAG_AUTOCONNECT); };
+    int  publish(MQTTMessage*);
+    int  subscribe(const char*, const uint8_t QOS);
+    int  unsubscribe(const char*);
 
     /* Dependency injection */
     void setRadio(ESP32Radio* r) { _radio = r; };
 
 
-
-  protected:
-    /*
-    * Handles an incoming message. If (return value != nullptr), publish reply
-    *   to that topic using the mutated msg parameter.
-    */
-    virtual const char* _handle_mqtt_message(MQTTMessage* msg) { return nullptr; }
-
-
   private:
     FlagContainer32  _flags;                   // Aggregate boolean class state.
     uint8_t _log_verbosity = LOG_LEV_DEBUG;
-    MQTTBrokerDef   _current_broker;
+    MQTTBrokerDefESP32  _current_broker;
     StringBuilder   _rx_asm;   // RX reassembly buffer
     ESP32Radio*     _radio = nullptr;
     esp_mqtt_client_handle_t  _client_handle = nullptr;
