@@ -40,6 +40,7 @@ const EnumDef<MQTTCliState> _STATE_LIST[] = {
   { MQTTCliState::INIT,          "INIT"},
   { MQTTCliState::CONNECTING,    "CONNECTING"},
   { MQTTCliState::CONNECTED,     "CONNECTED"},
+  { MQTTCliState::SUBSCRIBING,   "SUBSCRIBING"},
   { MQTTCliState::DISCONNECTING, "DISCONNECTING"},
   { MQTTCliState::DISCONNECTED,  "DISCONNECTED"},
   { MQTTCliState::FAULT,         "FAULT"},
@@ -62,8 +63,6 @@ void mqtt_event_handler(void* handler_args, esp_event_base_t base, int32_t event
   esp_mqtt_client_handle_t client = event->client;
   MQTTClientESP32* self = (MQTTClientESP32*) handler_args;
 
-  int msg_id;
-
   switch ((esp_mqtt_event_id_t) event_id) {
     case MQTT_EVENT_CONNECTED:
       ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
@@ -83,6 +82,7 @@ void mqtt_event_handler(void* handler_args, esp_event_base_t base, int32_t event
 
     case MQTT_EVENT_SUBSCRIBED:
       ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
+      self->_deliver_suback(event->msg_id);
       break;
 
     case MQTT_EVENT_UNSUBSCRIBED:
@@ -94,10 +94,23 @@ void mqtt_event_handler(void* handler_args, esp_event_base_t base, int32_t event
       break;
 
     case MQTT_EVENT_DATA:
-      ESP_LOGI(TAG, "MQTT_EVENT_DATA");
-      printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
-      printf("DATA=%.*s\r\n", event->data_len, event->data);
+      {
+        MQTTMessage* n_msg = new MQTTMessage();
+        if (nullptr != n_msg) {
+          n_msg->topic = event->topic;
+          n_msg->msg_id = event->msg_id;
+          n_msg->qos = event->qos;
+          n_msg->retain = event->retain;
+          n_msg->dup = event->dup;
+          n_msg->data.concat((uint8_t*) event->data, event->data_len);
+          // Stall the MQTT thread if the comms wrapper hasn't caught up.
+          while (0 != self->_deliver_msg(n_msg)) {
+            platform.yieldThread();
+          }
+        }
+      }
       break;
+
 
     case MQTT_EVENT_ERROR:
       ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
@@ -224,7 +237,6 @@ MQTTClientESP32::MQTTClientESP32() :
   _mqtt_connected_latched     = false;
   _mqtt_disconnected_latched  = false;
 
-  _sub_cursor         = 0;
   _sub_pending_msg_id = -1;
   _mb_suback_msg_id   = -1;
 }
@@ -304,16 +316,65 @@ int MQTTClientESP32::publish(MQTTMessage* msg) {
 }
 
 
+
+
+
+
+int MQTTClientESP32::_add_sub(MQTTSub* n_sub) {
+  int ret = 0;
+  if (nullptr != _client_subs) {
+    MQTTSub* current = _client_subs;
+    ret++;
+    while (nullptr != _client_subs->next) {
+      current = _client_subs->next;
+      ret++;
+    }
+    _client_subs->next = n_sub;
+  }
+  else {
+    _client_subs = n_sub;
+  }
+  return ret;
+}
+
+
+
+int MQTTClientESP32::_drop_sub(MQTTSub* n_sub) {
+  int ret = -1;
+  return ret;
+}
+
+
+
+
+
 /**
 *
-* @return topic_idx on success, or negative on failure
+* @return At least 0 on success, or negative on failure
 */
-int MQTTClientESP32::subscribe(const char* TOPIC_STR, const uint8_t QOS) {
-  int msg_id = -1;
-  if (connected()) {
-    msg_id = esp_mqtt_client_subscribe_single(_client_handle, TOPIC_STR, QOS);
+int MQTTClientESP32::subscribe(const char* TOPIC_STR, const uint8_t QOS, MQTTTopicCallback CB) {
+  int ret = -1;
+  MQTTSub* current = ((nullptr == _client_subs) ? nullptr : _client_subs->havingTopic(TOPIC_STR));
+  if (nullptr == current) {   // Topic is not currently added.
+    current = new MQTTSub(TOPIC_STR, QOS, CB);  // Add it.
+    if (nullptr != current) {
+      ret = _add_sub(current);
+    }
   }
-  return msg_id;
+  else {
+    // If we aready had that topic defined, just allow calls to set the
+    //   trim and report success.
+    current->rx_callback = CB;
+    current->qos   = QOS;
+    current->sub_state = MQTTSubState::NEG;
+    ret = 0;
+  }
+
+  // What we do now depends on our state.
+  if ((MQTTCliState::CONNECTED == currentState()) && _fsm_is_stable()) {
+    ret = _fsm_prepend_state(MQTTCliState::SUBSCRIBING);
+  }
+  return ret;
 }
 
 
@@ -352,13 +413,48 @@ FAST_FUNC PollResult MQTTClientESP32::poll() {
     // Only accept if it matches current pending.
     if (_sub_pending_msg_id == _mb_suback_msg_id) {
       _sub_pending_msg_id = -1;
-      _sub_cursor++;
     }
     _mb_suback_msg_id = -1;
   }
 
   return ((0 == _fsm_poll()) ? PollResult::NO_ACTION : PollResult::ACTION);
 }
+
+
+// We always return success.
+int MQTTClientESP32::_deliver_suback(const int32_t ACK_ID) {
+  int ret = 0;
+  if (nullptr != _client_subs) {
+    MQTTSub* current = _client_subs->havingAckID(ACK_ID);
+    if (nullptr != current) {
+      current->sub_state = MQTTSubState::POS;
+    }
+  }
+  return ret;
+}
+
+
+int MQTTClientESP32::_deliver_msg(MQTTMessage* msg) {
+  int ret = -1;
+  if (nullptr == _mb_waiting_msg) {
+    _mb_waiting_msg = msg;
+    ret = 0;
+  }
+  return ret;
+}
+
+
+FAST_FUNC bool MQTTClientESP32::connected() {
+  switch (currentState()) {
+    case MQTTCliState::CONNECTED:
+    case MQTTCliState::SUBSCRIBING:
+      return true;
+
+    default:
+      break;
+  }
+  return false;
+};
 
 
 
@@ -408,9 +504,52 @@ FAST_FUNC int8_t MQTTClientESP32::_fsm_poll() {
         else if (!_mqtt_connected_latched || _mqtt_disconnected_latched) {
           fsm_advance = (0 == _fsm_append_state(MQTTCliState::DISCONNECTED));
         }
+        StringBuilder* subs = _current_broker.subs();
+        int local_ret = 0;
+        for (int i = 0; i < subs->count(); i++) {
+          local_ret -= subscribe(subs->position(i), 0);
+        }
       }
+
       fsm_advance = !_fsm_is_stable();
+      if ((!fsm_advance) && (nullptr != _mb_waiting_msg)) {
+        _handle_mqtt_message((MQTTMessage*) _mb_waiting_msg);
+        delete _mb_waiting_msg;
+        _mb_waiting_msg = nullptr;
+      }
       break;
+
+
+    // Exit conditions: There are no MQTTSub subs that are not in MQTTSubState::POS.
+    case MQTTCliState::SUBSCRIBING:
+      {
+        fsm_advance = true;
+        MQTTSub* current = _client_subs;
+        while (fsm_advance && (nullptr != current)) {
+          // NOTE: No breaks;
+          switch (current->sub_state) {
+            case MQTTSubState::NEG:
+              // Send a subscription request.
+              {
+                int msg_id = esp_mqtt_client_subscribe_single(_client_handle, current->topic, current->qos);
+                if (0 <= msg_id) {
+                  current->pending_msg_id = msg_id;
+                  current->sub_state = MQTTSubState::INFLIGHT_UP;
+                }
+              }
+            case MQTTSubState::INFLIGHT_UP:
+            case MQTTSubState::INFLIGHT_DOWN:
+              fsm_advance = false;
+            case MQTTSubState::POS:
+              break;
+            // NOTE: No default case to ensure we covered them all explicitly.
+          }
+          current = current->next;
+        }
+        _flags.set(MQTT_FLAG_SUBS_COMPLETE, fsm_advance);
+      }
+      break;
+
 
     case MQTTCliState::DISCONNECTING:
       fsm_advance = !_fsm_is_stable();
@@ -509,17 +648,17 @@ FAST_FUNC int8_t MQTTClientESP32::_fsm_set_position(MQTTCliState new_state) {
       }
       break;
 
+
     case MQTTCliState::CONNECTED:
       // Success resets backoff.
       _connect_attempt_active = false;
       _reconnect_backoff_ms = 5000;
       _mqtt_disconnected_latched = false;
-      {
-        StringBuilder* subs = _current_broker.subs();
-        for (int i = 0; i < subs->count(); i++) {
-          subscribe(subs->position(i), 0);
-        }
-      }
+      state_entry_success = true;
+      break;
+
+    case MQTTCliState::SUBSCRIBING:
+      _flags.set(MQTT_FLAG_SUBS_COMPLETE, false);
       state_entry_success = true;
       break;
 
@@ -532,7 +671,14 @@ FAST_FUNC int8_t MQTTClientESP32::_fsm_set_position(MQTTCliState new_state) {
       else {
         state_entry_success = true;
       }
+      _flags.set(MQTT_FLAG_SUBS_COMPLETE, false);
+
+      if (nullptr != _mb_waiting_msg) {
+        delete _mb_waiting_msg;
+        _mb_waiting_msg = nullptr;
+      }
       break;
+
 
     case MQTTCliState::DISCONNECTED:
       state_entry_success = true;
@@ -601,8 +747,11 @@ void MQTTClientESP32::printDebug(StringBuilder* output) {
   tmp.concatf("\t Broker autoconnect: %c\n", (_current_broker.autoconnect() ? 'y' : 'n'));
   tmp.concatf("\t Broker valid:       %c\n", (_current_broker.isValid() ? 'y' : 'n'));
   tmp.concatf("\t Subs complete:      %c\n", (_flags.value(MQTT_FLAG_SUBS_COMPLETE) ? 'y' : 'n'));
-  tmp.concatf("\t Subs cursor:        %d\n", _sub_cursor);
   tmp.concatf("\t Backoff:            %u ms (max %u)\n", _reconnect_backoff_ms, _reconnect_backoff_ms_max);
+
+  if (nullptr != _client_subs) {
+    _client_subs->printDebug(&tmp);
+  }
 
   if (initialized()) {
     if (connected()) {
@@ -646,7 +795,12 @@ int MQTTClientESP32::console_handler_mqtt_client(StringBuilder* txt_ret, StringB
       txt_ret->concatf("subscribe(%s, %s) returned %d.\n", topic, qos, subscribe(topic, qos));
     }
     else {
-      print_usage = true;
+      if (connected()) {
+        ret = _fsm_prepend_state(MQTTCliState::SUBSCRIBING);
+      }
+      else {
+        txt_ret->concat("MQTTClientESP32 is not connected.\n");
+      }
     }
     if (print_usage) {  txt_ret->concatf("Usage: %s <topic [qos]> ...\n", cmd); }
   }
@@ -676,6 +830,9 @@ int MQTTClientESP32::console_handler_mqtt_client(StringBuilder* txt_ret, StringB
       autoconnect(0 != args->position_as_int(1));
     }
     txt_ret->concatf("MQTTClientESP32 autoconnect: %c\n", (autoconnect() ? 'y' : 'n'));
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "poll")) {
+    txt_ret->concatf("MQTTClientESP32 poll() returns %d\n", (int8_t) poll());
   }
   else if (0 == StringBuilder::strcasecmp(cmd, "brokerauto")) {
     if (2 == args->count()) {

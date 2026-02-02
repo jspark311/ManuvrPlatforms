@@ -8,6 +8,7 @@ extern "C" {
 #include "esp_log.h"
 #include "driver/uart.h"
 #include "driver/gpio.h"
+//#include "soc/uart_pins.h"
 #include "freertos/queue.h"
 
 #define UART_FIFO_CAPACITY   256

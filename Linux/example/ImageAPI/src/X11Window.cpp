@@ -396,9 +396,9 @@ C3PScheduledLambda schedule_ts_update(
       slider_x.value(),
       slider_z.value()
     );
-    vector_render->drawAnchorLines(_button_v_anchor_lines.pressed());
-    vector_render->drawValue(_button_v_value.pressed());
-    vector_render->render();
+    //vector_render->drawAnchorLines(_button_v_anchor_lines.pressed());
+    //vector_render->drawValue(_button_v_value.pressed());
+    //vector_render->render();
 
     rerender_perlin_noise();
     return 0;
@@ -705,10 +705,10 @@ int8_t MainGuiWindow::poll() {
               case 4:
               case 5:
                 // Unhandled scroll events adjust the magnifier scale.
-                //ui_magnifier.notify(
-                //  ((btn_id == 5) ? GfxUIEvent::MOVE_DOWN : GfxUIEvent::MOVE_UP),
-                //  ui_magnifier.elementPosX(), ui_magnifier.elementPosY()
-                //);
+                ui_magnifier._notify(
+                  ((btn_id == 5) ? GfxUIEvent::MOVE_DOWN : GfxUIEvent::MOVE_UP),
+                  ui_magnifier.elementPosX(), ui_magnifier.elementPosY(), nullptr
+                );
                 break;
 
               default:

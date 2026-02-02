@@ -382,6 +382,7 @@ enum class MQTTCliState : uint8_t {
   INIT,           // Memory and resource allocation.
   CONNECTING,     // Establishing a counterparty connection.
   CONNECTED,      // Idle state with connection.
+  SUBSCRIBING,    // A post-connection state that helps us avoid flooding the outbox.
   DISCONNECTING,  // Graceful disconnection from counterparties.
   DISCONNECTED,   // Idle state without connection.
   FAULT,          // State machine encountered something it couldn't cope with.
@@ -423,11 +424,11 @@ class MQTTClientESP32 : public StateMachine<MQTTCliState>, public C3PMQTTClient 
 
     /* Semantic breakouts for flags and states */
     bool initialized() {         return (MQTT_CLI_FLAG_ALL_INIT_MASK == (MQTT_CLI_FLAG_ALL_INIT_MASK & _flags.raw));  };
-    bool connected() {           return (MQTTCliState::CONNECTED == currentState());  };
+    bool connected();
     void autoconnect(bool v) {   _flags.set(MQTT_FLAG_AUTOCONNECT, v); };
     bool autoconnect() {         return _flags.value(MQTT_FLAG_AUTOCONNECT); };
     int  publish(MQTTMessage*);
-    int  subscribe(const char*, const uint8_t QOS);
+    int  subscribe(const char*, const uint8_t QOS, MQTTTopicCallback CB = nullptr);
     int  unsubscribe(const char*);
 
     /* Dependency injection */
@@ -435,41 +436,45 @@ class MQTTClientESP32 : public StateMachine<MQTTCliState>, public C3PMQTTClient 
 
 
   private:
-    FlagContainer32  _flags;                   // Aggregate boolean class state.
-    uint8_t _log_verbosity = LOG_LEV_DEBUG;
-    MQTTBrokerDefESP32  _current_broker;
-    StringBuilder   _rx_asm;   // RX reassembly buffer
-    ESP32Radio*     _radio = nullptr;
-    esp_mqtt_client_handle_t  _client_handle = nullptr;
+    FlagContainer32          _flags;         // Aggregate boolean class state.
+    MQTTBrokerDefESP32       _current_broker;
+    StringBuilder            _rx_asm;   // RX reassembly buffer
+    ESP32Radio*              _radio = nullptr;
+    esp_mqtt_client_handle_t _client_handle = nullptr;
+    MQTTSub*                 _client_subs = nullptr;
+    uint8_t                  _log_verbosity = LOG_LEV_DEBUG;
+
+    // Mailboxes as concurrency boundaries:
+    volatile bool _mb_mqtt_connected    = false;       // Broker connection
+    volatile bool _mb_mqtt_disconnected = false;       // Broker disconnection
+    volatile int32_t _mb_suback_msg_id  = -1;          // SUBACK progression
+    volatile MQTTMessage* _mb_waiting_msg = nullptr;   // Waiting message
+
+    bool _mqtt_connected_latched        = false;
+    bool _mqtt_disconnected_latched     = false;
+    int32_t  _sub_pending_msg_id        = -1;   // msg_id awaiting SUBACK.
+
+    uint32_t _reconnect_backoff_ms      = 5000;  // Backoff control (Retry period)
+    uint32_t _reconnect_backoff_ms_max  = 60000; // Backoff control (Maximum period)
+    bool     _connect_attempt_active    = false;
+
 
     /* State machine functions */
     int8_t   _fsm_poll();                    // Polling for state exit.
     int8_t   _fsm_set_position(MQTTCliState);// Attempt a state entry.
     void     _set_fault(const char*);
+    void     _broker_changed_reinit_plan();
 
     /* Mailboxes written from ESP-IDF event loop, consumed in poll() */
     void _mb_set_mqtt_connected(const bool v);
     void _mb_set_mqtt_disconnected(const bool v);
-
-    volatile bool _mb_mqtt_connected    = false;
-    volatile bool _mb_mqtt_disconnected = false;
-
-    bool _mqtt_connected_latched        = false;
-    bool _mqtt_disconnected_latched     = false;
-
-    /* Backoff control (applied in DISCONNECTED entry, on failed attempt) */
-    uint32_t _reconnect_backoff_ms      = 5000;
-    uint32_t _reconnect_backoff_ms_max  = 60000;
-    bool     _connect_attempt_active    = false;
-
-    void _broker_changed_reinit_plan();
+    int  _deliver_msg(MQTTMessage*);
+    int  _deliver_suback(const int32_t);
 
     // Subscription tracking.
-    int32_t  _sub_cursor                = 0;    // Index into broker topic list.
-    int32_t  _sub_pending_msg_id        = -1;   // msg_id awaiting SUBACK.
+    int      _add_sub(MQTTSub*);
+    int      _drop_sub(MQTTSub*);
 
-    // Mailbox for SUBACK progression.
-    volatile int32_t _mb_suback_msg_id  = -1;
 
     friend void mqtt_event_handler(void* handler_args, esp_event_base_t base, int32_t event_id, void* event_data);
 };

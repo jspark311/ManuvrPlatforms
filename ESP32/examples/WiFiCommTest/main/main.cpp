@@ -1,5 +1,6 @@
 #include <math.h>
 #include "WiFiCommUnit.h"
+#include "C3PNumericPlane.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -48,6 +49,62 @@ PlatformUART ext_uart(2, UART2_TX_PIN, UART2_RX_PIN, 255, 255, 256, 256);
 ESP32Radio* esp_radio = nullptr;
 MQTTClientESP32 esp_mqtt;
 
+// 1-in-5000 per polling loop odds should generated occasional traffic on
+//   ESP32 for most builds.
+uint32_t odds_of_sending_msg = 5000;
+
+
+#define DEMO_PLANE_WIDTH    8
+#define DEMO_PLANE_HEIGHT   4
+
+C3PNumericPlane<float> demo_numbers(DEMO_PLANE_WIDTH, DEMO_PLANE_HEIGHT);
+
+
+
+/*******************************************************************************
+* Support functions
+*******************************************************************************/
+
+// To simulate device-originated traffic.
+int send_number_sync_message() {
+  int ret = -1;
+  if (esp_mqtt.connected()) {
+    MQTTMessage msg;
+    msg.topic  = (char*) "general";
+    msg.msg_id = -1;
+    msg.qos    = 0;
+    msg.retain = 0;
+    msg.dup    = 0;
+    demo_numbers.serialize(&msg.data, TCode::CBOR);
+    ret = esp_mqtt.publish(&msg);
+  }
+  return ret;
+}
+
+
+/*
+* Runtime assurances:
+*   1. msg will be non-null (IE, a valid reference).
+*   2. topic will be a valid pointer to a string of non-zero length.
+*   3. msg mutation is permissible for the efficient construction of a reply.
+*   4. msg will destroyed upon exiting this function, but not before fulfilling (3).
+*/
+const char* mqtt_callback_fxn(MQTTMessage* msg) {
+  StringBuilder local_log;
+  msg->printDebug(&local_log);
+  c3p_log(LOG_LEV_INFO, "mqtt_callback_fxn", &local_log);
+  local_log.clear();  // Logger API allows it to take the allocation, but just to be safe...
+
+  // We could at this point decide to reply to a messsage. If the value in the
+  //   payload is a string of reasonable size, we publish our floating
+  //   point data to the the topic named by the string.
+  // if () {
+  // }
+
+  return nullptr;
+}
+
+
 
 /*******************************************************************************
 * Console callbacks
@@ -72,13 +129,63 @@ int callback_mqtt_tools(StringBuilder* txt_ret, StringBuilder* args) {
 }
 
 
+int callback_demo_tools(StringBuilder* txt_ret, StringBuilder* args) {
+  int ret = 0;
+  bool show_plane = true;
+  char* cmd = args->position_trimmed(0);
+  if (0 == StringBuilder::strcasecmp(cmd, "reroll")) {
+    if (demo_numbers.allocated()) {
+      for (uint32_t x = 0; x < demo_numbers.width(); x++) {
+        for (uint32_t y = 0; y < demo_numbers.height(); y++) {
+          const double U = ((double) (randomUInt32() & 0xFFFFFF)) / (double) 0x1000000;  // [0,1)
+          const float RANDOM_FLOAT = (float) (-1.0f + (float) (U * (double) (1.0f - -1.0f)));
+          demo_numbers.setValue(x, y, RANDOM_FLOAT);
+        }
+      }
+    }
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "zero")) {
+    demo_numbers.wipe();
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "set")) {
+    show_plane = false;
+    if (4 == args->count()) {
+      uint16_t x = (uint16_t) args->position_as_int(1);
+      uint16_t y = (uint16_t) args->position_as_int(2);
+      float    v = (float) args->position_as_double(3);
+      txt_ret->concatf("setValue(%u, %u, %.3f) returns %d.\n", x, y, v, demo_numbers.setValue(x, y, v));
+    }
+    else {
+      txt_ret->concatf("Usage: %s <x> <y> <value>\n", cmd);
+    }
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "odds")) {
+    show_plane = false;
+    if (2 == args->count()) {
+      odds_of_sending_msg = (uint32_t) args->position_as_int(1);
+    }
+    if (0 == odds_of_sending_msg) {
+      txt_ret->concatf("Random message send disabled.\n");
+    }
+    else {
+      txt_ret->concatf("Odds of message send is 1-in-%u per polling cycle.\n", odds_of_sending_msg);
+    }
+  }
+  else if (0 == StringBuilder::strcasecmp(cmd, "sync")) {
+    show_plane = false;
+    txt_ret->concatf("send_number_sync_message() returns %d.\n", send_number_sync_message());
+  }
+
+  if (show_plane) {
+    demo_numbers.printDebug(txt_ret);
+  }
+  return 0;
+}
+
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/*******************************************************************************
-* Support functions
-*******************************************************************************/
 
 
 /*******************************************************************************
@@ -98,7 +205,18 @@ void c3p_task(void* pvParameter) {
     if (0 < (int8_t) esp_radio->poll())   { should_sleep = false; }
     if (0 < (int8_t) esp_mqtt.poll())     { should_sleep = false; }
 
-    platform.yieldThread();
+    // If the feature is enabled, roll a d5000 and send some random
+    //   traffic on a critical.
+    const uint32_t ODDS = odds_of_sending_msg;
+    if (ODDS) {
+      if ((ODDS - 1) == (randomUInt32() % ODDS)) {
+        send_number_sync_message();
+      }
+    }
+
+    if (should_sleep) {
+      platform.yieldThread();
+    }
   }
 }
 
@@ -136,20 +254,36 @@ void app_main() {
   console.localEcho(true);
   console.printHelpOnFail(true);
 
+
   platform.configureConsole(&console);
   console.defineCommand("console",  '\0', "Console conf.", "[echo|prompt|force|rxterm|txterm]", 0, callback_console_tools);
   console.defineCommand("help",     '?',  "Prints help to console.", "[<specific command>]", 0, callback_help);
   console.defineCommand("wifi",     'w',  "WiFi tools", "[con|discon|scan]", 0, callback_wifi_tools);
   console.defineCommand("mqtt",     'm',  "MQTT tools", "[con|discon|list]", 0, callback_mqtt_tools);
+  console.defineCommand("demo",     'D',  "Demonstration tools", "[odds|reroll|zero|set]", 0, callback_demo_tools);
 
   StringBuilder ptc("CommUnit " TEST_PROG_VERSION "\t Build date " __DATE__ " " __TIME__ "\n");
 
-  // Bind MQTT to Radio *before* init.
-  esp_mqtt.setRadio(esp_radio);
+  esp_mqtt.setRadio(esp_radio);    // Bind MQTT to Radio *before* init.
+  esp_mqtt.setCallback(mqtt_callback_fxn);  // Set a callback.
+
+
+  if (!demo_numbers.allocated()) {
+    c3p_log(LOG_LEV_ERROR, "app_main()", "demo_numbers failed to allocate... Feature will be unavailble.\n");
+  }
+
+  for (uint32_t x = 0; x < demo_numbers.width(); x++) {
+    for (uint32_t y = 0; y < demo_numbers.height(); y++) {
+      const double U = ((double) (randomUInt32() & 0xFFFFFF)) / (double) 0x1000000;  // [0,1)
+      const float RANDOM_FLOAT = (float) (-1.0f + (float) (U * (double) (1.0f - -1.0f)));
+      demo_numbers.setValue(x, y, RANDOM_FLOAT);
+    }
+  }
 
   esp_radio->init();
   esp_mqtt.init();
   console.init();
+
 
   // For conventience of demonstration, we define a broker with a CBOR string
   //   inline in the program. Normally, you would want to load this from NVM,
@@ -177,12 +311,11 @@ void app_main() {
     delete broker;
   }
 
-
   // Write our boot log to the UART.
   console.printToLog(&ptc);
 
   // Spawn worker thread for C3P's use.
-  xTaskCreate(c3p_task, "_c3p", 32768, NULL, (tskIDLE_PRIORITY), NULL);
+  xTaskCreate(c3p_task, "_c3p", 16384, NULL, (tskIDLE_PRIORITY), NULL);
 
   // Note the time it took to do setup, and allow THIS thread to gracefully terminate.
   config_time = millis();
