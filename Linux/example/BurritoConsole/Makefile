@@ -6,7 +6,7 @@
 ###########################################################################
 
 FIRMWARE_NAME = BurritoConsole
-CXX_STANDARD = gnu++11
+CXX_STANDARD = gnu++17
 CC	         = g++
 
 export BUILD_ROOT    = $(shell pwd)
@@ -21,10 +21,17 @@ LIBS	    = -L$(OUTPUT_PATH) -L$(BUILD_ROOT)/lib -lstdc++ -lm -lpthread
 
 SRCS    = main.cpp
 SRCS   += ../CppPotpourri/src/*.cpp
+SRCS   += ../CppPotpourri/src/TimerTools/*.cpp
+SRCS   += ../CppPotpourri/src/cbor-cpp/*.cpp
+SRCS   += ../CppPotpourri/src/C3PValue/*.cpp
+SRCS   += ../CppPotpourri/src/Pipes/TripleAxisPipe/*.cpp
+SRCS   += ../CppPotpourri/src/Pipes/BufferAccepter/*.cpp
+SRCS   += ../CppPotpourri/src/Console/*.cpp
 SRCS   += ../CppPotpourri/src/Identity/*.cpp
 SRCS   += ../CppPotpourri/src/cbor-cpp/*.cpp
 SRCS   += ../CppPotpourri/src/CryptoBurrito/*.cpp
 SRCS   += ../CppPotpourri/src/CryptoBurrito/Providers/*.cpp
+SRCS   += ../CppPotpourri/src/C3PRandom/*.cpp
 SRCS   += ../../src/Linux.cpp
 SRCS   += ../../src/LinuxStdIO.cpp
 
@@ -37,14 +44,17 @@ INCLUDES    += -I$(BUILD_ROOT)/lib/mbedtls/include/
 CRYPTO_LIBS += -lmbedtls
 CRYPTO_LIBS += -lmbedx509
 CRYPTO_LIBS += -lmbedcrypto
-CXXFLAGS    += -DWITH_MBEDTLS
+CXXFLAGS    += -DWITH_MBEDTLS -DCONFIG_C3P_MBEDTLS
+CXXFLAGS    += -DCONFIG_C3P_CBOR
 # mbedTLS will require this in order to use our chosen options.
 BURRITO_OPTIONS += -DMBEDTLS_CONFIG_FILE='<mbedTLS_conf.h>'
 LIBS_TO_BUILD  += mbedtls.a
 #endif
 
-
-# TODO: OpenSSL
+#ifeq ($(CRYPTO),OPENSSL)
+#CRYPTO_LIBS += -lcrypto
+#CXXFLAGS    += -DCONFIG_C3P_OPENSSL
+#endif
 
 # TODO: TinyDTLS
 
@@ -52,6 +62,7 @@ LIBS_TO_BUILD  += mbedtls.a
 
 LIBS     += $(CRYPTO_LIBS)
 CXXFLAGS += -std=$(CXX_STANDARD)
+CXXFLAGS += -DCONFIG_C3P_CBOR
 CXXFLAGS += $(INCLUDES)
 
 OBJS  = $(C_SRCS:.c=.o) $(CXX_SRCS:.cpp=.o)

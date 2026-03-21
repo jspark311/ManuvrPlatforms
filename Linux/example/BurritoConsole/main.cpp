@@ -25,7 +25,7 @@ This is a demonstration program, and was meant to be compiled for a
 /* CppPotpourri */
 #include <StringBuilder.h>
 #include <CppPotpourri.h>
-#include <ParsingConsole.h>
+#include <Console/C3PConsole.h>
 #include <CryptoBurrito/CryptoBurrito.h>
 
 
@@ -39,6 +39,24 @@ This is a demonstration program, and was meant to be compiled for a
 #define PROGRAM_VERSION        "0.0.4"    // Program version.
 #define MAX_COMMAND_LENGTH         512    // The maximum size of user input.
 
+// class CryptoLogShunt : public CryptOpCallback {
+//   public:
+//     CryptoLogShunt() {};
+//     ~CryptoLogShunt() {};
+
+//     /* Mandatory overrides from the CryptOpCallback interface... */
+//     int8_t op_callahead(CryptOp* op) {
+//       return JOB_Q_CALLBACK_NOMINAL;
+//     };
+
+//     int8_t op_callback(CryptOp* op) {
+//       StringBuilder output;
+//       op->printOp(&output);
+//       c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, &output);
+//       return JOB_Q_CALLBACK_NOMINAL;
+//     };
+// };
+
 
 /*******************************************************************************
 * Globals                                                                      *
@@ -46,7 +64,7 @@ This is a demonstration program, and was meant to be compiled for a
 using namespace std;
 
 const char* program_name;
-int   continue_running  = 1;
+int   continue_running = 1;
 
 /* Console support... */
 ParsingConsole console(MAX_COMMAND_LENGTH);
@@ -66,13 +84,12 @@ int callback_console_tools(StringBuilder* text_return, StringBuilder* args) {
   return console.console_handler_conf(text_return, args);
 }
 
+int callback_crypt_console(StringBuilder* text_return, StringBuilder* args) {
+  return crypto_queue.console_handler(text_return, args);
+}
 
-int callback_pf_crypt_info(StringBuilder* text_return, StringBuilder* args) {
-  int ret = 0;
-  char* cmd = args->position_trimmed(0);
-  platform.printDebug(text_return);
-  crypto_queue.printDebug(text_return);
-  return ret;
+int callback_pf_info(StringBuilder* text_return, StringBuilder* args) {
+  return callback_platform_info(text_return, args);
 }
 
 
@@ -102,13 +119,13 @@ int main(int argc, const char* argv[]) {
   /*
   * At this point, we should configure our console and define commands.
   */
-  console.setTXTerminator(LineTerm::LF);
+  //console.setTXTerminator(LineTerm::LF);
   console.setRXTerminator(LineTerm::LF);
   console.localEcho(false);   // This happens naturaly to STDIO.
 
   // Mutually connect the console class to STDIO.
   console_adapter.readCallback(&console);
-  console.setOutputTarget(&console_adapter);
+  console.setEfferant(&console_adapter);
 
   // We want to have a nice prompt string. Note that the console does not make
   //   a copy of the string we provide it. So we need to keep its pointer
@@ -125,7 +142,8 @@ int main(int argc, const char* argv[]) {
   // Define the commands for the application. Usually, these are some basics.
   console.defineCommand("help",     '?',  "Prints help to console.", "", 0, callback_help);
   console.defineCommand("console",  '\0', "Console conf", "[history|rxterm|txterm|echo|prompt]", 0, callback_console_tools);
-  console.defineCommand("info",     'i',  "Cryptographic and platform info.", "", 0, callback_pf_crypt_info);
+  console.defineCommand("info",     'i',  "Platform info.", "", 0, callback_pf_info);
+  console.defineCommand("crypto",   'c',  "CryptoProcessor tools.", "", 0, callback_crypt_console);
   console.defineCommand("quit",     'Q',  "Commit sudoku.", "", 0, callback_program_quit);
 
   // The platform itself comes with a convenient set of console functions.
