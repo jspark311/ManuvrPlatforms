@@ -1,10 +1,9 @@
 ################################################################################
-# Makefile for ImageAPI
+# Makefile for WorldCrafter
 # Author: J. Ian Lindsay
-# Date:   2025.06.26
 #
 #
-FIRMWARE_NAME      = ImageAPI
+FIRMWARE_NAME      = WorldCrafter
 CXX_STANDARD       = gnu++17
 OPTIMIZATION       = -O2
 

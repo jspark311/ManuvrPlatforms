@@ -14,7 +14,10 @@
 #include <fstream>
 #include <iostream>
 
-#include "ImageAPI.h"
+#include "C3POnX11.h"
+#include "C3PLinux.h"
+#include "WorldCrafter.h"
+
 
 extern void* gui_thread_handler(void*);
 int callback_gui_tools(StringBuilder*, StringBuilder*);
@@ -64,7 +67,7 @@ int main(int argc, const char *argv[]) {
   //   the complicated cleanup to happen before it flushes its output buffer,
   //   and slams the door on the process.
   {
-    MainGuiWindow c3p_root_window(0, 0, 1600, 1024, argv[0]);
+    MainGuiWindow c3p_root_window(0, 0, 1600, 1080, argv[0]);
     if (0 == c3p_root_window.createWindow()) {
       // The window thread is running.
       StringBuilder output(program_name);

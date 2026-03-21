@@ -17,7 +17,6 @@
 
 
 extern bool continue_running;         // TODO: (rolled up newspaper) Bad...
-extern ParsingConsole console;
 
 ImgPerlinNoise* noise_gen = nullptr;
 
@@ -366,14 +365,46 @@ GfxNTSCEffect* ntsc_filter = nullptr;
 GlobeRender*   globe_render = nullptr;
 Vector3Render* vector_render = nullptr;
 GfxCRTBloomEffect* crt_effect = nullptr;
+IcosphereGfxUI<uint32_t>* icosphere_render = nullptr;
+
+const uint32_t ICO_FREQ = 24;
+const float    ICO_AREA = 0.01f;
+
+
+C3PIcosphere<uint32_t> icomesh(ICO_FREQ, ICO_AREA);
+C3PIcosphere<float>    icomesh_noise_0(ICO_FREQ, ICO_AREA);
+C3PIcosphere<float>    icomesh_noise_1(ICO_FREQ, ICO_AREA);
+C3PIcosphere<float>    icomesh_noise_2(ICO_FREQ, ICO_AREA);
+
+IcosphereNoise iconoise_0(&icomesh_noise_0, 0.15, 3, 0.13);
+IcosphereNoise iconoise_1(&icomesh_noise_1, 0.8,  2, 0.23);
+IcosphereNoise iconoise_2(&icomesh_noise_2, 0.5,  1, 0.56);
 
 // TODO: Unfastidiousness elsewhere causes me to write this fxn to avoid repeating myself.
 void rerender_perlin_noise() {
-  if (_button_freerun.pressed()) {
-    if (nullptr != noise_gen) {
-      noise_gen->reshuffle();
-      noise_gen->apply();
-    }
+  if (nullptr != noise_gen) {
+    noise_gen->reshuffle();
+    noise_gen->apply();
+  }
+
+  if (icomesh_noise_0.initialized()) {
+    iconoise_0.reshuffle();
+    iconoise_0.apply();
+  }
+  if (icomesh_noise_1.initialized()) {
+    iconoise_1.reshuffle();
+    iconoise_1.apply();
+  }
+  if (icomesh_noise_2.initialized()) {
+    iconoise_2.reshuffle();
+    iconoise_2.apply();
+  }
+
+  for (uint32_t i = 0; i < icomesh.FACE_COUNT; i++) {
+    // if () {
+      icomesh.facetById(i)->content = 0xFF000000 | \
+        (uint32_t)(0xFF * icomesh_noise_0.facetById(i)->content) | ((uint32_t)(0xFF * icomesh_noise_1.facetById(i)->content) << 8) | ((uint32_t)(0xFF * icomesh_noise_2.facetById(i)->content) << 16);
+    // }
   }
 }
 
@@ -387,20 +418,24 @@ C3PScheduledLambda schedule_ts_update(
   []() {
     rotation_counter += 0.1f;
 
-    vector_render->setVector(
-      _slider_scale.value(),
-      _slider_fade.value(),
-      _slider_freq.value()
-    );
-    vector_render->setOrientation(
-      slider_x.value(),
-      slider_z.value()
-    );
+    //vector_render->setVector(
+    //  _slider_scale.value(),
+    //  _slider_fade.value(),
+    //  _slider_freq.value()
+    //);
+    //vector_render->setOrientation(
+    //  slider_x.value(),
+    //  slider_z.value()
+    //);
     //vector_render->drawAnchorLines(_button_v_anchor_lines.pressed());
     //vector_render->drawValue(_button_v_value.pressed());
     //vector_render->render();
 
-    rerender_perlin_noise();
+    icosphere_render->setOrientation(rotation_counter, icosphere_render->pitch());
+
+    if (_button_freerun.pressed()) {
+      reapply_noise = true;
+    }
     return 0;
   }
 );
@@ -412,6 +447,13 @@ void ui_value_change_callback(GfxUIElement* element) {
   if (&_slider_ntsc_noise == element) {
     ntsc_filter->noiseFactor(_slider_ntsc_noise.value());
   }
+  else if (&_button_v_anchor_lines == element) {
+    icosphere_render->renderFacet(_button_v_anchor_lines.pressed());
+  }
+  else if (&_button_v_value == element) {
+    icosphere_render->renderWireframe(_button_v_value.pressed());
+  }
+
   // else if (&_button_v_anchor_lines == element) {
   //   globe_render->renderWithMarker(
   //     _slider_freq.value(),
@@ -427,7 +469,7 @@ void ui_value_change_callback(GfxUIElement* element) {
       _slider_fade.value(),
       ((_slider_freq.value() * 10) + 1.0f)
     );
-    reapply_noise = true;
+    //reapply_noise = true;
   }
 }
 
@@ -510,7 +552,37 @@ int8_t MainGuiWindow::createWindow() {
       ),
       300, 300
     );
-
+    if (0 == icomesh_noise_0.init()) {
+      iconoise_0.init();
+    }
+    if (0 == icomesh_noise_1.init()) {
+      iconoise_1.init();
+    }
+    if (0 == icomesh_noise_2.init()) {
+      iconoise_2.init();
+    }
+    if (0 == icomesh.init()) {
+      icosphere_render = new IcosphereGfxUI<uint32_t>(
+        &icomesh,
+        GfxUILayout(
+          _button_v_anchor_lines.elementPosX(), (_button_v_anchor_lines.elementPosY() + _button_v_anchor_lines.elementHeight() + 5),
+          300, 300,
+          0, ELEMENT_MARGIN, 0, ELEMENT_MARGIN,
+          0, 0, 0, 0               // Border_px(t, b, l, r)
+        ),
+        GfxUIStyle(0, // bg
+          0xFFFFFF,   // border
+          0xFFFFFF,   // header
+          0x9932CC,   // active
+          0xA0A0A0,   // inactive
+          0xFFFFFF,   // selected
+          0x202020,   // unselected
+          1           // t_size
+        ),
+        (0)
+      );
+      root.add_child(icosphere_render);
+    }
     vector_render = new Vector3Render(&_fb);
     vector_render->setSourceFrame(
       PixAddr(
@@ -567,10 +639,10 @@ int8_t MainGuiWindow::render_overlay() {
       slider_x.value() + sinf(rotation_counter),
       slider_y.value()
     );
-    globe_render->renderWithMarker(
-      37.624f,
-      -72.644f
-    );
+    //globe_render->renderWithMarker(
+    //  37.624f,
+    //  -72.644f
+    //);
 
   // If the pointer is within the window, we note its location and
   //   annotate the overlay.
@@ -693,7 +765,7 @@ int8_t MainGuiWindow::poll() {
                   // Is the mouse click in-bounds? Perhaps the worst line of code I've ever written.
                   if ((mouse_x >= NOISE_X_LOCATION) && (mouse_x < (NOISE_X_LOCATION + NOISE_WIDTH)) && (mouse_y >= NOISE_Y_LOCATION) && (mouse_y < (NOISE_Y_LOCATION + NOISE_HEIGHT))) {
                     noise_gen->setOffset(mouse_x, mouse_y);
-                    reapply_noise = true;
+                    //reapply_noise = true;
                   }
                 }
                 else {
@@ -739,24 +811,59 @@ int8_t MainGuiWindow::poll() {
           char buf[128] = {0, };
           KeySym keysym;
           int ret_local = XLookupString(&e.xkey, buf, sizeof(buf), &keysym, nullptr);
-          if (keysym == XK_Escape) {
-            _keep_polling = false;
-          }
-          else if (keysym == XK_Return) {
-          }
-          else if ((keysym == XK_Control_L) | (keysym == XK_Control_R)) {
-            _modifiers.set(RHOM_GUI_MOD_CTRL_HELD);
-          }
-          else if ((keysym == XK_Alt_L) | (keysym == XK_Alt_R)) {
-            _modifiers.set(RHOM_GUI_MOD_ALT_HELD);
-          }
-          else if (1 == ret_local) {
-            StringBuilder _tmp_sbldr;
-            _tmp_sbldr.concat(buf[0]);
-            console.pushBuffer(&_tmp_sbldr);
-          }
-          else {
-            c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "Key press: %s (%s)", buf, XKeysymToString(keysym));
+          switch (keysym) {
+            case XK_Escape:
+              _keep_polling = false;
+              break;
+            case XK_Return:
+              break;
+            case XK_Alt_R:
+            case XK_Alt_L:
+              _modifiers.set(RHOM_GUI_MOD_ALT_HELD);
+              break;
+            case XK_Control_R:
+            case XK_Control_L:
+              _modifiers.set(RHOM_GUI_MOD_CTRL_HELD);
+              break;
+
+            case XK_s:   // CTRL+S will screencap with datetime.
+            case XK_S:
+              if (_modifiers.value(RHOM_GUI_MOD_CTRL_HELD)) {
+                StringBuilder outfile_sb("screencap-");
+                currentDateTime(&outfile_sb);
+                outfile_sb.concat(".png");
+                ImageWriter w(gfx.img(), (char*) outfile_sb.string());
+                if (w.writePNG()) {
+                  ret = 0;
+                }
+                else {
+                  printf("Failed to write PNG: %s\n", outfile_sb.string());
+                }
+              }
+              break;
+
+            case XK_c:   // CTRL+C will copy the working Image to the clipboard.
+            case XK_C:
+              if (_modifiers.value(RHOM_GUI_MOD_CTRL_HELD)) {
+              }
+              break;
+
+            case XK_v:   // CTRL+V will paste from the clipboard.
+            case XK_V:
+              if (_modifiers.value(RHOM_GUI_MOD_CTRL_HELD)) {
+              }
+              break;
+
+            default:
+              //if (1 == ret_local) {
+              //  StringBuilder _tmp_sbldr;
+              //  _tmp_sbldr.concat(buf[0]);
+              //  console_adapter.pushBuffer(&_tmp_sbldr);
+              //}
+              //else {
+                c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "Key press: %s (%s)", buf, XKeysymToString(keysym));
+              //}
+              break;
           }
         }
         break;

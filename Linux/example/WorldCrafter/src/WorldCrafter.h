@@ -1,5 +1,5 @@
 /*
-* File:   ImageAPI.h
+* File:   WorldCrafter.h
 * Author: J. Ian Lindsay
 *
 */
@@ -11,8 +11,6 @@
 #include "ElementPool.h"
 #include "Console/C3PConsole.h"
 #include "Pipes/BufferAccepter/GPSWrapper/GPSWrapper.h"
-#include "BusQueue/UARTAdapter.h"
-#include "BusQueue/I2CAdapter.h"
 #include "C3PValue/KeyValuePair.h"
 #include "TimeSeries/TimeSeries.h"
 #include "TimeSeries/SensorFilter.h"
@@ -25,23 +23,44 @@
 #include "Image/GfxUI.h"
 #include "Identity/Identity.h"
 #include "Identity/IdentityUUID.h"
-#include "M2MLink/M2MLink.h"
 #include "C3PSpace/C3PIcosphere.h"
-#include "CryptoBurrito/CryptoBurrito.h"
 #include "C3POnX11.h"
-#include <Linux.h>
+#include "C3PLinux.h"
 
-#ifndef __IMGAPI_DEMO_HEADER_H__
-#define __IMGAPI_DEMO_HEADER_H__
+#ifndef __WORLDCRAFTER_HEADER_H__
+#define __WORLDCRAFTER_HEADER_H__
 
 
-#define PROGRAM_VERSION    "0.0.4"    // Program version.
+#define PROGRAM_VERSION    "0.0.0"    // Program version.
 
-#define RHOM_GUI_MOD_CTRL_HELD           0x00000001   //
-#define RHOM_GUI_MOD_ALT_HELD            0x00000002   //
-#define RHOM_GUI_MOD_META_HELD           0x00000004   //
-#define RHOM_GUI_HOTKEYS_SHOWN           0x00000008   //
+#define GUI_MOD_CTRL_HELD           0x00000001   //
+#define GUI_MOD_ALT_HELD            0x00000002   //
+#define GUI_MOD_META_HELD           0x00000004   //
+#define GUI_HOTKEYS_SHOWN           0x00000008   //
 
+
+/*
+* This class forms a GUI window onto the sphere.
+*/
+class NoiseControlGfxUI : public GfxUIElement {
+  public:
+    NoiseControlGfxUI(IcosphereNoise*, const GfxUILayout lay, const GfxUIStyle sty, uint32_t f = 0);
+    ~NoiseControlGfxUI() {};
+
+
+    /* Implementation of GfxUIElement. */
+    virtual int  _render(UIGfxWrapper* ui_gfx);
+    virtual bool _notify(const GfxUIEvent GFX_EVNT, PixUInt x, PixUInt y, PriorityQueue<GfxUIElement*>* change_log);
+
+  private:
+    GfxUINamedSlider _slider_scale;
+    GfxUINamedSlider _slider_octaves;
+    GfxUINamedSlider _slider_fade;
+    GfxUINamedSlider _slider_freq;
+    GfxUITextButton  _button_reapply;
+    GfxUITextButton  _button_reshuffle;
+    IcosphereNoise*  _noise_obj;
+};
 
 
 class MainGuiWindow : public C3Px11Window {
@@ -78,4 +97,4 @@ class MainGuiWindow : public C3Px11Window {
     GfxUIElement*   _paste_target;
 };
 
-#endif  // __IMGAPI_DEMO_HEADER_H__
+#endif  // __WORLDCRAFTER_HEADER_H__
