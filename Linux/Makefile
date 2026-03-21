@@ -8,7 +8,7 @@
 ###########################################################################
 
 C_STANDARD         = gnu99
-CXX_STANDARD       = gnu++11
+CXX_STANDARD       = gnu++17
 
 # Includes
 INCLUDES = -I../ -iquote.
@@ -24,6 +24,7 @@ CPP_SRCS    = src/Linux.cpp
 CPP_SRCS   += src/LinuxStdIO.cpp
 CPP_SRCS   += src/C3PLinuxFile.cpp
 CPP_SRCS   += src/LinuxSocketPipe.cpp
+CPP_SRCS   += src/ImagePNG_IO.cpp
 CPP_SRCS   += src/LinuxUART.cpp
 #CPP_SRCS   += src/LinuxStorage.cpp
 #CPP_SRCS   += src/I2CAdapter.cpp

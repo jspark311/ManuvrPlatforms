@@ -28,10 +28,12 @@ This file forms the catch-all for linux platforms that have no specific support.
 #include <signal.h>
 #include <syslog.h>
 #include <sys/utsname.h>
-#if defined(CONFIG_C3P_STORAGE)
-  #include <fcntl.h>      // Needed for integrity checks.
-  #include <sys/stat.h>   // Needed for integrity checks.
-#endif
+#include <fcntl.h>      // Needed for integrity checks.
+#include <sys/stat.h>   // Needed for integrity checks.
+#include <sys/types.h>
+#include <linux/if_alg.h>
+#include <poll.h>
+#include <errno.h>
 
 
 #ifndef CONFIG_C3P_INTERVAL_PERIOD_MS
@@ -39,25 +41,20 @@ This file forms the catch-all for linux platforms that have no specific support.
   #define CONFIG_C3P_INTERVAL_PERIOD_MS  10
 #endif
 
-#ifndef CONFIG_C3P_CRYPTO_QUEUE_MAX_DEPTH
-  // Unless otherwise specified, the cryptographic processing queue depth is 32.
-  #define CONFIG_C3P_CRYPTO_QUEUE_MAX_DEPTH  32
-#endif
-
 #ifndef PLATFORM_RNG_CARRY_CAPACITY
   #define PLATFORM_RNG_CARRY_CAPACITY  1024
 #endif
 
 
+#define C3P_INIT_STATE_UNINITIALIZED   0
+#define C3P_INIT_STATE_RESERVED_0      1
+#define C3P_INIT_STATE_PREINIT         2
+#define C3P_INIT_STATE_KERNEL_BOOTING  3
+#define C3P_INIT_STATE_POST_INIT       4
+#define C3P_INIT_STATE_NOMINAL         5
+#define C3P_INIT_STATE_SHUTDOWN        6
+#define C3P_INIT_STATE_HALTED          7
 
-#define MANUVR_INIT_STATE_UNINITIALIZED   0
-#define MANUVR_INIT_STATE_RESERVED_0      1
-#define MANUVR_INIT_STATE_PREINIT         2
-#define MANUVR_INIT_STATE_KERNEL_BOOTING  3
-#define MANUVR_INIT_STATE_POST_INIT       4
-#define MANUVR_INIT_STATE_NOMINAL         5
-#define MANUVR_INIT_STATE_SHUTDOWN        6
-#define MANUVR_INIT_STATE_HALTED          7
 
 
 /*******************************************************************************
@@ -72,16 +69,17 @@ AbstractPlatform* platformObj() {   return (AbstractPlatform*) &platform;   }
 *   and will not be available elsewhere.
 *******************************************************************************/
 
+
 #if defined(__HAS_CRYPT_WRAPPER)
-  uint8_t _binary_hash[32];
-  long unsigned int crypto_thread_id = 0;
+long unsigned int crypto_thread_id = 0;
 #endif
 
 struct itimerval _interval              = {0};
 struct sigaction _signal_action_SIGALRM = {0};
 
-char* _binary_name = nullptr;
-static int   _main_pid    = 0;
+char _binary_path[256];
+uint8_t _binary_hash[32];
+static int _main_pid = 0;
 
 
 
@@ -222,7 +220,7 @@ static void* dev_urandom_reader(void*) {
   unsigned int needed_count = 0;
 
   if (ur_file) {
-    while (platform.platformState() <= MANUVR_INIT_STATE_NOMINAL) {
+    while (platform.platformState() <= C3P_INIT_STATE_NOMINAL) {
       rng_level = _random_pool_w_ptr - _random_pool_r_ptr;
       if (rng_level == PLATFORM_RNG_CARRY_CAPACITY) {
         // We have filled our entropy pool. Sleep.
@@ -402,21 +400,19 @@ void LinuxPlatform::printDebug(StringBuilder* output) {
     output->concat("\tFailed to get detailed kernel info.\n");
   }
 
-  #if defined(__HAS_CRYPT_WRAPPER)
-    output->concatf("-- Binary hash         %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
-      _binary_hash[0],  _binary_hash[1],  _binary_hash[2],  _binary_hash[3],
-      _binary_hash[4],  _binary_hash[5],  _binary_hash[6],  _binary_hash[7],
-      _binary_hash[8],  _binary_hash[9],  _binary_hash[10], _binary_hash[11],
-      _binary_hash[12], _binary_hash[13], _binary_hash[14], _binary_hash[15]
-    );
-    output->concatf("%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n",
-      _binary_hash[16], _binary_hash[17], _binary_hash[18], _binary_hash[19],
-      _binary_hash[20], _binary_hash[21], _binary_hash[22], _binary_hash[23],
-      _binary_hash[24], _binary_hash[25], _binary_hash[26], _binary_hash[27],
-      _binary_hash[28], _binary_hash[29], _binary_hash[30], _binary_hash[31]
-    );
-    randomArt(_binary_hash, 32, "SHA256", output);
-  #endif
+  output->concatf("-- Binary hash         %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
+    _binary_hash[0],  _binary_hash[1],  _binary_hash[2],  _binary_hash[3],
+    _binary_hash[4],  _binary_hash[5],  _binary_hash[6],  _binary_hash[7],
+    _binary_hash[8],  _binary_hash[9],  _binary_hash[10], _binary_hash[11],
+    _binary_hash[12], _binary_hash[13], _binary_hash[14], _binary_hash[15]
+  );
+  output->concatf("%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n",
+    _binary_hash[16], _binary_hash[17], _binary_hash[18], _binary_hash[19],
+    _binary_hash[20], _binary_hash[21], _binary_hash[22], _binary_hash[23],
+    _binary_hash[24], _binary_hash[25], _binary_hash[26], _binary_hash[27],
+    _binary_hash[28], _binary_hash[29], _binary_hash[30], _binary_hash[31]
+  );
+  randomArt(_binary_hash, 32, "SHA256", output);
 }
 
 
@@ -630,7 +626,7 @@ int LinuxPlatform::wakeThread(unsigned long _thread_id) {
 *******************************************************************************/
 void LinuxPlatform::_close_open_threads() {
   unset_linux_interval_timer();   // Stop the periodic alarm.
-  //_set_init_state(MANUVR_INIT_STATE_HALTED);
+  //_set_init_state(C3P_INIT_STATE_HALTED);
   if (rng_thread_id) {
     if (0 == deleteThread(&rng_thread_id)) {
     }
@@ -690,8 +686,149 @@ void LinuxPlatform::firmware_shutdown(uint8_t reason) {
 /*******************************************************************************
 * Cryptographic                                                                *
 *******************************************************************************/
-#if defined(__HAS_CRYPT_WRAPPER)
 
+long hashFileByPath(char* path, uint8_t* h_buf) {
+  const long BUF_SZ = 8192;
+  long ret = -1;
+  long total_hashed = 0;
+  int sfd = socket(AF_ALG, SOCK_SEQPACKET, 0);
+  int op_fd = -1;
+  if (sfd >= 0) {    // EAFNOSUPPORT / EPROTONOSUPPORT => kernel doesn’t support AF_ALG
+    ret--;
+    struct sockaddr_alg sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.salg_family = AF_ALG;
+    strncpy((char*)sa.salg_type, "hash", sizeof(sa.salg_type) - 1);
+    strncpy((char*)sa.salg_name, "sha256", sizeof(sa.salg_name) - 1);
+    if (0 <= bind(sfd, (struct sockaddr*)&sa, sizeof(sa))) {
+      ret--;
+      op_fd = accept(sfd, nullptr, 0);
+    }
+    else {
+      c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Kernel doesn’t support sha256.");
+    }
+    close(sfd);
+  }
+  else {
+    c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Kernel doesn’t support AF_ALG.");
+  }
+
+  if (0 <= op_fd) {
+    int fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (0 <= fd) {
+      ret--;
+      uint8_t buf[BUF_SZ];
+      do {
+        ssize_t rr = read(fd, buf, sizeof(buf));
+        if (0 < rr) {
+          size_t off = 0;
+          while (off < rr) {
+            ssize_t w = send(op_fd, buf + off, rr - off, 0);
+            if (w > 0) {
+              off += (size_t) w;
+            }
+            else if ((w < 0) && (errno == EINTR)) {
+              close(fd);
+              close(op_fd);
+              c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "send() failed during sha256.");
+              return ret;   // Mid-loop abort.
+            }
+          }
+          total_hashed += rr;
+        }
+        else if (0 == rr) {
+          ret = 0;  // EOF
+        }
+        else {
+          int e = errno;
+          c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Failed to red %s: %s (errno=%d)", path, strerror(e), e);
+          close(fd);
+          close(op_fd);
+          return ret;
+        }
+      } while (0 != ret);
+      close(fd);
+
+      if (0 == ret) {
+        size_t off = 0;
+        while (off < 32) {
+          ssize_t r = recv(op_fd, h_buf + off, 32 - off, 0);
+          if (r > 0) {
+            off += (size_t)r;
+          }
+          else if (r < 0 && errno == EINTR) {
+            int e = errno;
+            c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "recv(digest) failed: %s (errno=%d)", strerror(e), e);
+            close(op_fd);
+            return -10;
+          }
+        }
+        ret = total_hashed;
+      }
+    }
+    else {
+      int e = errno;
+      c3p_log(LOG_LEV_ERROR, __PRETTY_FUNCTION__, "Failed to open %s: %s (errno=%d)", path, strerror(e), e);
+    }
+    close(op_fd);
+  }
+  return ret;
+}
+
+int8_t LinuxPlatform::internal_integrity_check(uint8_t* test_buf, int test_len) {
+  if ((nullptr != test_buf) && (0 < test_len)) {
+    for (int i = 0; i < test_len; i++) {
+      if (*(test_buf+i) != _binary_hash[i]) {
+        printf("Hashing %s yields a different value than expected. Exiting...\n", _binary_path);
+        return -1;
+      }
+    }
+    return 0;
+  }
+  else {
+    // We have no idea what to expect. First boot?
+  }
+  return -1;
+}
+
+
+const char* LinuxPlatform::selfPath() {
+  return _binary_path;
+}
+
+
+/**
+* Look in the mirror and find our executable's full path.
+* Then, read the full contents and hash them. Store the result in
+*   local private member _binary_hash.
+*
+* @return 0 on success.
+*/
+int8_t LinuxPlatform::_hash_self() {
+  memset(_binary_path, 0x00, sizeof(_binary_path));
+  int exe_path_len = readlink("/proc/self/exe", _binary_path, sizeof(_binary_path));
+  if (!(exe_path_len > 0)) {
+    printf("%s was unable to read its own path from /proc/self/exe. You may be running it on an unsupported operating system, or be running an old kernel. Please discover the cause and retry. Exiting...\n", _binary_path);
+    return -1;
+  }
+  printf("This binary's path is %s\n", _binary_path);
+  memset(_binary_hash, 0x00, 32);
+  int ret = hashFileByPath(_binary_path, _binary_hash);
+  if (0 < ret) {
+    printf("Binary is %ld bytes\n", ret);
+    return 0;
+  }
+  else {
+    printf("Failed to hash file: %s\n", _binary_path);
+  }
+  return -1;
+}
+
+#if defined(CONFIG_C3P_CRYPTO_LINUX)
+#endif
+
+
+#if defined(__HAS_CRYPT_WRAPPER)
 /**
 * This is a thread to keep the randomness pool flush.
 */
@@ -705,52 +842,6 @@ static void* crypto_processor_thread(void*) {
   crypto_thread_id = 0;
   return nullptr;
 }
-
-
-int8_t LinuxPlatform::internal_integrity_check(uint8_t* test_buf, int test_len) {
-  if ((nullptr != test_buf) && (0 < test_len)) {
-    for (int i = 0; i < test_len; i++) {
-      if (*(test_buf+i) != _binary_hash[i]) {
-        printf("Hashing %s yields a different value than expected. Exiting...\n", _binary_name);
-        return -1;
-      }
-    }
-    return 0;
-  }
-  else {
-    // We have no idea what to expect. First boot?
-  }
-  return -1;
-}
-
-
-/**
-* Look in the mirror and find our executable's full path.
-* Then, read the full contents and hash them. Store the result in
-*   local private member _binary_hash.
-*
-* @return 0 on success.
-*/
-int8_t LinuxPlatform::_hash_self() {
-  char *exe_path = (char *) alloca(300);   // 300 bytes ought to be enough for our path info...
-  memset(exe_path, 0x00, 300);
-  int exe_path_len = readlink("/proc/self/exe", exe_path, 300);
-  if (!(exe_path_len > 0)) {
-    printf("%s was unable to read its own path from /proc/self/exe. You may be running it on an unsupported operating system, or be running an old kernel. Please discover the cause and retry. Exiting...\n", _binary_name);
-    return -1;
-  }
-  printf("This binary's path is %s\n", exe_path);
-  memset(_binary_hash, 0x00, 32);
-  int ret = 1; //hashFileByPath(exe_path, _binary_hash);
-  if (0 < ret) {
-    return 0;
-  }
-  else {
-    printf("Failed to hash file: %s\n", exe_path);
-  }
-  return -1;
-}
-
 
 #endif  // __HAS_CRYPT_WRAPPER
 
@@ -783,6 +874,9 @@ int8_t LinuxPlatform::init() {
     return -1;
   }
 
+  _hash_self();
+  //internal_integrity_check(nullptr, 0);
+
   uint32_t default_flags = DEFAULT_PLATFORM_FLAGS;
   _main_pid = getpid();  // Our PID.
   _alter_flags(true, default_flags);
@@ -807,8 +901,6 @@ int8_t LinuxPlatform::init() {
         printf("Failed to create crypto thread.\n");
         return -4;
       }
-      _hash_self();
-      //internal_integrity_check(nullptr, 0);
     }
     else {
       return -2;

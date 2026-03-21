@@ -44,6 +44,11 @@ This file forms the catch-all for linux platforms that have no support.
   typedef unsigned long pthread_t;
 #endif
 
+#if defined(AF_ALG) && defined(SOL_ALG)
+  // If we have cryptographic support via the kernel, use it for SHA256.
+  #define C3P_USE_KERNEL_SHA256
+#endif
+
 
 int8_t _load_config();       // Called during boot to load configuration.
 
@@ -204,20 +209,70 @@ class LinuxPlatform : public AbstractPlatform {
     inline int  yieldThread() {    return sched_yield();     };
     inline void suspendThread() {  sleep_ms(100);            };   // TODO
 
+    const char* selfPath();
+
 
   private:
     void   _close_open_threads();
     void   _init_rng();
-    #if defined(__HAS_CRYPT_WRAPPER)
-      // Additional ratchet-straps (if we were built with CryptoBurrito).
-      int8_t internal_integrity_check(uint8_t* test_buf, int test_len);
-      int8_t _hash_self();
-    #endif
+
+    int8_t internal_integrity_check(uint8_t* test_buf, int test_len);
+    int8_t _hash_self();
 };
 
 
 // Any source file that needs platform member functions should be able to access
 //   them this way.
 extern LinuxPlatform platform;
+
+
+
+/*******************************************************************************
+* On Linux, we have a few kinds of objects that represent shims to 3rd-party
+*   libraries. Over time, these objects might be promoted to C3P.
+*******************************************************************************/
+
+#if defined(CONFIG_C3P_WITH_LIBPNG)
+class ImageWriter {
+  public:
+    ImageWriter(Image* img, const char* filename);
+    ~ImageWriter();
+
+    /* Returns true on success. */
+    bool writePNG();
+
+  private:
+    Image*      _img;
+    const char* _filename;
+
+    /* No copying. */
+    ImageWriter(const ImageWriter&) = delete;
+    ImageWriter& operator=(const ImageWriter&) = delete;
+
+    bool _write_png_rgb888();
+
+    void _convert_row_to_rgb888(uint8_t* dst_row, uint32_t y);
+};
+
+
+class ImageReader {
+  public:
+    ImageReader(Image* img, const char* filename);
+    ~ImageReader();
+
+    /* Returns true on success. */
+    bool readPNG();
+
+  private:
+    Image*      _img;
+    const char* _filename;
+
+    /* No copying. */
+    ImageReader(const ImageReader&) = delete;
+    ImageReader& operator=(const ImageReader&) = delete;
+};
+#endif  //  CONFIG_C3P_WITH_LIBPNG
+
+
 
 #endif  // __PLATFORM_VANILLA_LINUX_H__
