@@ -31,16 +31,16 @@ C3P_PATH  = $(BUILD_ROOT)/../CppPotpourri
 ###########################################################################
 INCLUDES  = -I../CppPotpourri/src -I../../ -Isrc
 
-CXX_SRCS  = src/*.cpp
-CXX_SRCS += ../../src/GUI/X11/*.cpp
+CXX_SRCS  = $(wildcard src/*.cpp)
+CXX_SRCS += $(wildcard ../../src/GUI/X11/*.cpp)
 CXX_SRCS += ../../src/Linux.cpp
 CXX_SRCS += ../../src/LinuxStdIO.cpp
 CXX_SRCS += ../../src/ImagePNG_IO.cpp
 
-
 # Libraries to link against.
 LIBS	= -L$(OUTPUT_PATH) -lc3p_64 -lstdc++ -lm -lpthread -lX11 -lpng -lz
-LIBS += -lbz2
+#LIBS += -lbz2
+
 
 ###########################################################################
 # Paramter packaging and error-checking...
@@ -60,23 +60,25 @@ OBJS = $(C_SRCS:.c=.o) $(CXX_SRCS:.cpp=.o)
 # Rules for building the firmware follow...
 ###########################################################################
 
-default:	$(FIRMWARE_NAME)
+%.o : %.cpp
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c -o $@ $^
 
-debug:  $(FIRMWARE_NAME).o
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -ggdb -g -pg -o $(FIRMWARE_NAME) *.o $(LIBS)
+%.o : %.c
+	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $^
+
+
+default:	$(FIRMWARE_NAME)
 
 libc3p:
 	@echo "\033[1;37m=== libc3p ==========================================\033[0m"
 	$(MAKE) lib -C $(C3P_PATH)
 
-$(FIRMWARE_NAME).o:
-	$(CXX) $(CXXFLAGS) $(CFLAGS) $(INCLUDES) -c $(CXX_SRCS) -fno-exceptions
-
-$(FIRMWARE_NAME):	$(FIRMWARE_NAME).o libc3p
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $(FIRMWARE_NAME) *.o $(LIBS)
+$(FIRMWARE_NAME):	libc3p $(OBJS)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $(FIRMWARE_NAME) $(OBJS) $(LIBS)
 
 clean:
-	rm -f *.o $(FIRMWARE_NAME) *.png
+	rm -f *.d *.o *.su *~ $(OBJS) $(DEP_FILES) $(FIRMWARE_NAME) *.png
 
 fullclean: clean
 	rm -f $(OUTPUT_PATH)/*.a
+	$(MAKE) clean -C $(C3P_PATH)

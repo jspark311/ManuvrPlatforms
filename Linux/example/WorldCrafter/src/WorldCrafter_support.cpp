@@ -1,13 +1,8 @@
 #include "WorldCrafter.h"
-#include "Image/Image.h"
-#include "Image/ImageUtils.h"
-#include "Image/GfxUI.h"
-
 
 /*******************************************************************************
 * GfxUIElement functions
 *******************************************************************************/
-#if 0
 
 NoiseControlGfxUI::NoiseControlGfxUI(IcosphereNoise* noise, const GfxUILayout lay, const GfxUIStyle sty, uint32_t f) :
   GfxUIElement(lay, sty, f),
@@ -129,6 +124,15 @@ NoiseControlGfxUI::NoiseControlGfxUI(IcosphereNoise* noise, const GfxUILayout la
   ),
   _noise_obj(noise)
 {
+  _slider_scale.setText(  "Scale  ");
+  _slider_octaves.setText("Octaves");
+  _slider_fade.setText(   "Fade   ");
+  _slider_freq.setText(   "Freq   ");
+  _slider_scale.value(0.5);
+  _slider_octaves.value(0.15);
+  _slider_fade.value(0.3);
+  _slider_freq.value(0.1);
+
   _add_child(&_slider_scale);
   _add_child(&_slider_octaves);
   _add_child(&_slider_fade);
@@ -136,4 +140,55 @@ NoiseControlGfxUI::NoiseControlGfxUI(IcosphereNoise* noise, const GfxUILayout la
   _add_child(&_button_reapply);
   _add_child(&_button_reshuffle);
 }
-#endif
+
+
+
+void NoiseControlGfxUI::applyValues() {
+  if (nullptr != _noise_obj) {
+    _noise_obj->setParameters(
+      ((_slider_scale.value() * 149) + 1.0f),
+      ((_slider_octaves.value() * 15) + 1),
+      _slider_fade.value(),
+      ((_slider_freq.value() * 10) + 1.0f)
+    );
+    _noise_obj->apply();
+    _reapply_noise = false;
+  }
+}
+
+
+bool NoiseControlGfxUI::valuesChanged() {
+  bool ret = false;
+  return ret;
+}
+
+
+int NoiseControlGfxUI::_render(UIGfxWrapper* ui_gfx) {
+  int ret = 0;
+  return ret;
+}
+
+
+bool NoiseControlGfxUI::_notify(const GfxUIEvent GFX_EVNT, PixUInt x, PixUInt y, PriorityQueue<GfxUIElement*>* change_log) {
+  bool ret = false;
+  switch (GFX_EVNT) {
+    case GfxUIEvent::TOUCH:
+      if (_button_reapply.underPointer()) {
+        _reapply_noise = true;
+        ret = true;
+      }
+      else if (_button_reshuffle.underPointer()) {
+        applyValues();
+        _noise_obj->reshuffle();
+        ret = true;
+      }
+      break;
+    default:
+      break;
+  }
+
+  if (ret) {
+    _need_redraw(true);
+  }
+  return ret;
+}

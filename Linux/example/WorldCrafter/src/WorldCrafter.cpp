@@ -22,8 +22,6 @@
 extern void* gui_thread_handler(void*);
 int callback_gui_tools(StringBuilder*, StringBuilder*);
 
-using namespace std;
-
 
 /*******************************************************************************
 * Globals

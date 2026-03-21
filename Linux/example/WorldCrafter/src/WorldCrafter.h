@@ -47,10 +47,13 @@ class NoiseControlGfxUI : public GfxUIElement {
     NoiseControlGfxUI(IcosphereNoise*, const GfxUILayout lay, const GfxUIStyle sty, uint32_t f = 0);
     ~NoiseControlGfxUI() {};
 
+    void applyValues();
+    bool valuesChanged();
 
     /* Implementation of GfxUIElement. */
-    virtual int  _render(UIGfxWrapper* ui_gfx);
-    virtual bool _notify(const GfxUIEvent GFX_EVNT, PixUInt x, PixUInt y, PriorityQueue<GfxUIElement*>* change_log);
+    int  _render(UIGfxWrapper* ui_gfx);
+    bool _notify(const GfxUIEvent GFX_EVNT, PixUInt x, PixUInt y, PriorityQueue<GfxUIElement*>* change_log);
+
 
   private:
     GfxUINamedSlider _slider_scale;
@@ -60,6 +63,7 @@ class NoiseControlGfxUI : public GfxUIElement {
     GfxUITextButton  _button_reapply;
     GfxUITextButton  _button_reshuffle;
     IcosphereNoise*  _noise_obj;
+    bool _reapply_noise = false;
 };
 
 
