@@ -810,10 +810,10 @@ int8_t MainGuiWindow::render_overlay() {
   //   annotate the overlay.
   ui_magnifier.pointerLocation(_pointer_x, _pointer_y);
   ui_magnifier.render(&gfx_overlay);
-  if (nullptr != icosphere_render) {
-    icosphere_render->renderWireframe(_button_wireframe.pressed());
-    icosphere_render->renderFacet(_button_facets.pressed());
-  }
+  // if (nullptr != icosphere_render) {
+  //   icosphere_render->renderWireframe(_button_wireframe.pressed());
+  //   icosphere_render->renderFacet(_button_facets.pressed());
+  // }
   return 0;
 }
 
@@ -930,10 +930,12 @@ int8_t MainGuiWindow::poll() {
               case 4:
               case 5:
                 // Unhandled scroll events adjust the magnifier scale.
-                ui_magnifier._notify(
-                  ((btn_id == 5) ? GfxUIEvent::MOVE_DOWN : GfxUIEvent::MOVE_UP),
-                  ui_magnifier.elementPosX(), ui_magnifier.elementPosY(), nullptr
-                );
+                if (_modifiers.value(GUI_MOD_CTRL_HELD)) {
+                  ui_magnifier._notify(
+                    ((btn_id == 5) ? GfxUIEvent::MOVE_DOWN : GfxUIEvent::MOVE_UP),
+                    ui_magnifier.elementPosX(), ui_magnifier.elementPosY(), nullptr
+                  );
+                }
                 break;
 
               default:
@@ -1009,9 +1011,6 @@ int8_t MainGuiWindow::poll() {
 
             default:
               //if (1 == ret_local) {
-              //  StringBuilder _tmp_sbldr;
-              //  _tmp_sbldr.concat(buf[0]);
-              //  console_adapter.pushBuffer(&_tmp_sbldr);
               //}
               //else {
                 c3p_log(LOG_LEV_DEBUG, __PRETTY_FUNCTION__, "Key press: %s (%s)", buf, XKeysymToString(keysym));
@@ -1045,7 +1044,7 @@ int8_t MainGuiWindow::poll() {
 
   if (_keep_polling) {
     // Offer to render the UI elements...
-    rerender_perlin_noise();
+    //rerender_perlin_noise();
     if (1 == _redraw_window()) {
       // If a redraw happened...
     }

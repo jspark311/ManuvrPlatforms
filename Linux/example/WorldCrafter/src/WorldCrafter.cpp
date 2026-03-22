@@ -18,9 +18,7 @@
 #include "C3PLinux.h"
 #include "WorldCrafter.h"
 
-
-extern void* gui_thread_handler(void*);
-int callback_gui_tools(StringBuilder*, StringBuilder*);
+using namespace std;
 
 
 /*******************************************************************************
@@ -30,8 +28,6 @@ const char*   program_name;
 bool          continue_running  = true;
 
 MainGuiWindow* c3p_root_window   = nullptr;
-
-LinuxStdIO console_adapter;
 C3PScheduler* scheduler = nullptr;
 
 /*******************************************************************************
@@ -72,8 +68,6 @@ int main(int argc, const char *argv[]) {
       output.concatf(" v%s initialized\n\n", PROGRAM_VERSION);
       c3p_log(LOG_LEV_INFO, __PRETTY_FUNCTION__, &output);
       do {   // The main loop. Run until told to stop.
-        console_adapter.poll();
-
         scheduler->serviceSchedules();
       } while (continue_running);   // GUI thread handles the heavy-lifting.
     }
@@ -83,7 +77,6 @@ int main(int argc, const char *argv[]) {
   }
 
   // Clean up any allocated stuff. It should already be hung up.
-  console_adapter.poll();   // Final chance for output to make it to the user.
   platform.firmware_shutdown(0);     // Clean up the platform.
   exit(0);  // Should never execute.
 }
