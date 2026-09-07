@@ -34,7 +34,7 @@
 #include "Image/Image.h"
 #include "Image/ImageUtils.h"
 #include "Image/GfxUI.h"
-#include "Linux.h"
+#include "C3PLinux.h"
 
 #ifndef __C3PX11_HEADER_H__
 #define __C3PX11_HEADER_H__

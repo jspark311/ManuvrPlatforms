@@ -5,7 +5,7 @@
 */
 
 #include "C3POnX11.h"
-#include "Linux.h"
+#include "C3PLinux.h"
 
 const char* const LOG_TAG = "C3Px11Window";
 

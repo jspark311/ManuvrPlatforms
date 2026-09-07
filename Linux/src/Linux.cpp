@@ -21,7 +21,7 @@ limitations under the License.
 This file forms the catch-all for linux platforms that have no specific support.
 */
 
-#include "../Linux.h"
+#include "../C3PLinux.h"
 
 #include <sys/time.h>
 #include <unistd.h>
@@ -499,7 +499,7 @@ bool getTimeAndDate(uint16_t* y, uint8_t* m, uint8_t* d, uint8_t* h, uint8_t* mi
 */
 uint64_t epochTime() {
   struct timeval tv;
-  return (0 == gettimeofday(&tv, nullptr)) ? 0 : tv.tv_sec;
+  return (0 == gettimeofday(&tv, nullptr)) ? tv.tv_sec : 0;
 }
 
 
